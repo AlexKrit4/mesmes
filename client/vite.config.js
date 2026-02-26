@@ -14,6 +14,7 @@ export default defineConfig({
         description: 'Приватный мессенджер',
         theme_color: '#1a1a2e',
         background_color: '#1a1a2e',
+        id: '/',
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
