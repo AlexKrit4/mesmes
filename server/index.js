@@ -98,9 +98,10 @@ io.on('connection', (socket) => {
 
     if (!areFriends) return socket.emit('error', { msg: 'Вы не друзья' });
 
+    const now = new Date().toISOString();
     const result = db.prepare(
-      'INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)'
-    ).run(uid, to, content.trim());
+      'INSERT INTO messages (sender_id, receiver_id, content, created_at) VALUES (?, ?, ?, ?)'
+    ).run(uid, to, content.trim(), now);
 
     const sender = db.prepare('SELECT username FROM users WHERE id = ?').get(uid);
 
@@ -109,7 +110,7 @@ io.on('connection', (socket) => {
       sender_id: uid,
       receiver_id: to,
       content: content.trim(),
-      created_at: new Date().toISOString(),
+      created_at: now,
       read_at: null,
       sender_username: sender.username,
     };
@@ -152,18 +153,34 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── Прочитано ──────────────────────────────────────────────────────────
+  socket.on('mark_read', ({ friendId }) => {
+    if (!friendId) return;
+    const now = new Date().toISOString();
+    const updated = db.prepare(
+      'UPDATE messages SET read_at = ? WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL'
+    ).run(now, friendId, uid);
+    // Notify the sender that their messages were read
+    if (updated.changes > 0 && onlineUsers.has(friendId)) {
+      onlineUsers.get(friendId).forEach((sid) => {
+        io.to(sid).emit('messages_read', { by: uid, at: now });
+      });
+    }
+  });
+
   // ── Пользователь заходил ────────────────────────────────────────────────
   socket.on('disconnect', () => {
     onlineUsers.get(uid)?.delete(socket.id);
     if (onlineUsers.get(uid)?.size === 0) {
       onlineUsers.delete(uid);
-      db.prepare('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?').run(uid);
-      broadcastPresence(uid, false);
+      const now = new Date().toISOString();
+      db.prepare('UPDATE users SET last_seen = ? WHERE id = ?').run(now, uid);
+      broadcastPresence(uid, false, now);
     }
   });
 });
 
-function broadcastPresence(userId, online) {
+function broadcastPresence(userId, online, lastSeen) {
   // Get all friends of this user
   const friends = db.prepare(`
     SELECT CASE WHEN user_id = ? THEN friend_id ELSE user_id END as friend_id
@@ -173,7 +190,7 @@ function broadcastPresence(userId, online) {
   friends.forEach(({ friend_id }) => {
     if (onlineUsers.has(friend_id)) {
       onlineUsers.get(friend_id).forEach((sid) =>
-        io.to(sid).emit('presence', { userId, online })
+        io.to(sid).emit('presence', { userId, online, lastSeen })
       );
     }
   });

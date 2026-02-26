@@ -5,7 +5,9 @@ import { connectSocket, disconnectSocket, getSocket } from '../socket.js';
 
 function timeSince(dateStr) {
   if (!dateStr) return '';
-  const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+  // Ensure UTC interpretation — append Z if missing
+  const s = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
+  const diff = (Date.now() - new Date(s).getTime()) / 1000;
   if (diff < 60) return 'только что';
   if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
@@ -66,8 +68,13 @@ export default function Home() {
     const socket = connectSocket();
     if (!socket) return;
 
-    socket.on('presence', ({ userId, online: isOnline }) => {
+    socket.on('presence', ({ userId, online: isOnline, lastSeen }) => {
       setOnline((prev) => ({ ...prev, [userId]: isOnline }));
+      if (!isOnline && lastSeen) {
+        setFriends((prev) =>
+          prev.map((f) => (f.id === userId ? { ...f, last_seen: lastSeen } : f))
+        );
+      }
     });
 
     // Real-time: incoming friend request

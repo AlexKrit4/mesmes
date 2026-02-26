@@ -194,10 +194,17 @@ router.get('/messages/:friendId', auth, (req, res) => {
     LIMIT 200
   `).all(req.userId, friendId, friendId, req.userId);
 
-  // Mark as read
-  db.prepare(
-    'UPDATE messages SET read_at = CURRENT_TIMESTAMP WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL'
-  ).run(friendId, req.userId);
+  // Mark as read and notify sender in real-time
+  const now = new Date().toISOString();
+  const updated = db.prepare(
+    'UPDATE messages SET read_at = ? WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL'
+  ).run(now, friendId, req.userId);
+
+  if (updated.changes > 0 && req.io && req.onlineUsers?.has(friendId)) {
+    req.onlineUsers.get(friendId).forEach((sid) => {
+      req.io.to(sid).emit('messages_read', { by: req.userId, at: now });
+    });
+  }
 
   res.json(messages);
 });

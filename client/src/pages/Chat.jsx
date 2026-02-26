@@ -3,14 +3,21 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, getSocket } from '../socket.js';
 
+function parseUTC(dateStr) {
+  if (!dateStr) return null;
+  // Ensure UTC interpretation — append Z if missing
+  const s = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
+  return new Date(s);
+}
+
 function formatTime(dateStr) {
   if (!dateStr) return '';
-  return new Date(dateStr).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return parseUTC(dateStr).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
 function timeSince(dateStr) {
   if (!dateStr) return '';
-  const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+  const diff = (Date.now() - parseUTC(dateStr).getTime()) / 1000;
   if (diff < 60) return 'только что';
   if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
@@ -78,6 +85,9 @@ export default function Chat() {
         const f = friends.find((x) => x.id === friendIdNum);
         setFriend(f || { id: friendIdNum, username: '?', public_id: '?' });
         setMessages(msgsRes.data);
+        // Mark friend's messages as read now that we opened the chat
+        const socket = getSocket();
+        if (socket) socket.emit('mark_read', { friendId: friendIdNum });
       } catch (e) {
         console.error(e);
       } finally {
@@ -111,6 +121,10 @@ export default function Chat() {
           if (prev.find((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
         });
+        // If the message is from the friend, mark it as read immediately
+        if (msg.sender_id === friendIdNum) {
+          socket.emit('mark_read', { friendId: friendIdNum });
+        }
       }
     };
 
@@ -129,8 +143,23 @@ export default function Chat() {
       if (from === friendIdNum) setIsTyping(false);
     };
 
-    const onPresence = ({ userId, online }) => {
-      if (userId === friendIdNum) setIsOnline(online);
+    const onPresence = ({ userId, online, lastSeen }) => {
+      if (userId === friendIdNum) {
+        setIsOnline(online);
+        if (!online && lastSeen) {
+          setFriend((prev) => prev ? { ...prev, last_seen: lastSeen } : prev);
+        }
+      }
+    };
+
+    const onMessagesRead = ({ by, at }) => {
+      if (by === friendIdNum) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.sender_id === me.id && !m.read_at ? { ...m, read_at: at } : m
+          )
+        );
+      }
     };
 
     const onMessageDeleted = ({ messageId }) => {
@@ -143,6 +172,7 @@ export default function Chat() {
     socket.on('user_stop_typing', onStopTyping);
     socket.on('presence', onPresence);
     socket.on('message_deleted', onMessageDeleted);
+    socket.on('messages_read', onMessagesRead);
 
     return () => {
       socket.off('new_message', onNewMsg);
@@ -151,6 +181,7 @@ export default function Chat() {
       socket.off('user_stop_typing', onStopTyping);
       socket.off('presence', onPresence);
       socket.off('message_deleted', onMessageDeleted);
+      socket.off('messages_read', onMessagesRead);
     };
   }, [friendIdNum, me.id]);
 
