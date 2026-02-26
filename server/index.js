@@ -56,7 +56,7 @@ app.get('/.well-known/assetlinks.json', (req, res) => {
       namespace: 'android_app',
       package_name: 'ru.mesmes.twa',
       sha256_cert_fingerprints: [
-        '99:6C:F2:1F:B1:68:AC:A1:9B:69:35:13:44:A4:36:DD:67:38:54:C1:49:64:E0:AB:47:13:C8:32:95:D0:BC:AE',
+        'C0:F7:65:5A:87:6A:D0:E8:EE:84:F2:EE:A3:71:E9:8B:46:EB:BD:FC:BE:55:C7:C0:13:EC:8B:33:68:75:B3:A0',
       ],
     },
   }]);

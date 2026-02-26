@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "ru.mesmes.twa",
+        "sha256_cert_fingerprints": ["C0:F7:65:5A:87:6A:D0:E8:EE:84:F2:EE:A3:71:E9:8B:46:EB:BD:FC:BE:55:C7:C0:13:EC:8B:33:68:75:B3:A0"]
+      }
+    }]
