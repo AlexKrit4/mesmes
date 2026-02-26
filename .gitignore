@@ -3,6 +3,9 @@ server/node_modules/
 client/node_modules/
 client/dist/
 server/messenger.db
+server/messenger.db-wal
+server/messenger.db-shm
+server/uploads/
 server/.env
 *.log
 .DS_Store

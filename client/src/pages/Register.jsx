@@ -4,7 +4,7 @@ import api from '../api.js';
 
 export default function Register() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ username: '', public_id: '', password: '', confirm: '' });
+  const [form, setForm] = useState({ display_name: '', public_id: '', password: '', confirm: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -17,7 +17,7 @@ export default function Register() {
     setLoading(true);
     try {
       const { data } = await api.post('/auth/register', {
-        username: form.username,
+        display_name: form.display_name,
         public_id: form.public_id,
         password: form.password,
       });
@@ -34,33 +34,33 @@ export default function Register() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>МесМес 💬</h1>
-        <p className="subtitle">Создайте аккаунт</p>
+        <div className="auth-logo">M</div>
+        <h1>Создать аккаунт</h1>
+        <p className="subtitle">Придумайте себе уникальный ID — по нему вас найдут друзья</p>
 
         {error && <div className="error-box">{error}</div>}
 
         <form onSubmit={submit}>
           <div className="form-group">
-            <label>Имя пользователя (для входа)</label>
+            <label>Ваше имя (видят все)</label>
             <input
-              name="username"
-              placeholder="ИванИванов"
-              autoComplete="username"
-              value={form.username}
+              name="display_name"
+              placeholder="Иван"
+              value={form.display_name}
               onChange={handle}
               required
             />
           </div>
           <div className="form-group">
-            <label>Ваш публичный ID</label>
+            <label>Ваш уникальный ID (для входа и поиска)</label>
             <input
               name="public_id"
-              placeholder="ivan_2025"
+              placeholder="ivan_2026"
               value={form.public_id}
               onChange={handle}
               required
             />
-            <p className="hint">Только латиница, цифры и _ (3–30 символов). По этому ID вас найдут друзья.</p>
+            <p className="hint">Латиница, цифры и _ (3–30 символов). Это ваш логин.</p>
           </div>
           <div className="form-group">
             <label>Пароль</label>
@@ -87,7 +87,7 @@ export default function Register() {
             />
           </div>
           <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? 'Создаём...' : 'Зарегистрироваться'}
+            {loading ? 'Создаём...' : 'Создать аккаунт'}
           </button>
         </form>
 

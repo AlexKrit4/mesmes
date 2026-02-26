@@ -46,3 +46,10 @@ db.exec(`
 `);
 
 module.exports = db;
+
+// Migration: add avatar column if missing (for existing databases)
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT NULL`);
+} catch (e) {
+  // Column already exists — ignore
+}

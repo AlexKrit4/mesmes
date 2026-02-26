@@ -30,6 +30,12 @@ const io = new Server(server, {
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
 app.use(express.json());
 
+// Serve uploaded avatars
+const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
+const fs = require('fs');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+app.use('/uploads', express.static(uploadDir));
+
 // Health check
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
@@ -113,7 +119,19 @@ io.on('connection', (socket) => {
 
     socket.emit('message_sent', message);
   });
-
+  // ── Удаление сообщения ──────────────────────────────────────────────────────────
+  socket.on('delete_message', ({ messageId }) => {
+    const msg = db.prepare('SELECT * FROM messages WHERE id = ? AND sender_id = ?').get(messageId, uid);
+    if (!msg) return;
+    db.prepare('DELETE FROM messages WHERE id = ?').run(messageId);
+    const target = msg.receiver_id;
+    // Уведомить получателя
+    if (onlineUsers.has(target)) {
+      onlineUsers.get(target).forEach((sid) => io.to(sid).emit('message_deleted', { messageId }));
+    }
+    // Уведомить себя (другие вкладки)
+    onlineUsers.get(uid)?.forEach((sid) => io.to(sid).emit('message_deleted', { messageId }));
+  });
   // ── Печатает ────────────────────────────────────────────────────────────
   socket.on('typing', ({ to }) => {
     if (onlineUsers.has(to)) {

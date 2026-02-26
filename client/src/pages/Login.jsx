@@ -4,7 +4,7 @@ import api from '../api.js';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ username: '', password: '' });
+  const [form, setForm] = useState({ public_id: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -29,19 +29,20 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>МесМес 💬</h1>
-        <p className="subtitle">Войдите в свой аккаунт</p>
+        <div className="auth-logo">M</div>
+        <h1>Вход в МесМес</h1>
+        <p className="subtitle">Используйте ваш уникальный ID для входа</p>
 
         {error && <div className="error-box">{error}</div>}
 
         <form onSubmit={submit}>
           <div className="form-group">
-            <label>Логин или ваш ID</label>
+            <label>Ваш ID</label>
             <input
-              name="username"
-              placeholder="username или ваш_id"
+              name="public_id"
+              placeholder="my_unique_id"
               autoComplete="username"
-              value={form.username}
+              value={form.public_id}
               onChange={handle}
               required
             />
@@ -64,7 +65,7 @@ export default function Login() {
         </form>
 
         <p className="auth-footer">
-          Нет аккаунта? <Link to="/register">Зарегистрироваться</Link>
+          Нет аккаунта? <Link to="/register">Создать</Link>
         </p>
       </div>
     </div>

@@ -21,10 +21,12 @@ npm run dev
 Откройте http://localhost:5173
 
 ### Тест с мобильного телефона (в одной Wi-Fi сети):
+
 ```bash
 cd client
 npm run dev -- --host
 ```
+
 Откройте IP-адрес компьютера на порту 5173, например: `http://192.168.1.10:5173`
 
 ---
@@ -32,30 +34,36 @@ npm run dev -- --host
 ## Деплой на VPS (Ubuntu/Debian)
 
 ### 1. Установите Node.js 22+
+
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
 ### 2. Скопируйте проект
+
 ```bash
 git clone <ваш-репозиторий> /var/www/mes
 cd /var/www/mes
 ```
 
 ### 3. Установите зависимости и соберите клиент
+
 ```bash
 cd server && npm install
 cd ../client && npm install && npm run build
 ```
 
 ### 4. Настройте переменные окружения
+
 ```bash
 cd /var/www/mes/server
 cp .env .env.production
 nano .env.production
 ```
+
 Измените:
+
 ```
 PORT=3001
 JWT_SECRET=ваш_длинный_случайный_секрет_минимум_32_символа
@@ -64,6 +72,7 @@ NODE_ENV=production
 ```
 
 ### 5. Запустите с PM2
+
 ```bash
 npm install -g pm2
 cd /var/www/mes/server
@@ -73,6 +82,7 @@ pm2 startup
 ```
 
 ### 6. Nginx конфиг
+
 ```nginx
 server {
     listen 80;
@@ -90,6 +100,7 @@ server {
 ```
 
 ### 7. SSL (HTTPS — обязательно для PWA!)
+
 ```bash
 sudo apt install certbot python3-certbot-nginx
 sudo certbot --nginx -d ваш-домен.ru

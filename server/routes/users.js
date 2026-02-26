@@ -1,9 +1,32 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const db = require('../database');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret_in_production';
+
+// Avatar upload setup
+const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `avatar_${req.userId}_${Date.now()}${ext}`);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
+  fileFilter: (req, file, cb) => {
+    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Только изображения (jpg, png, webp, gif)'));
+  },
+});
 
 // Middleware: require auth
 function auth(req, res, next) {
@@ -21,9 +44,28 @@ function auth(req, res, next) {
 
 // GET /api/users/me
 router.get('/me', auth, (req, res) => {
-  const user = db.prepare('SELECT id, username, public_id, last_seen FROM users WHERE id = ?').get(req.userId);
+  const user = db.prepare('SELECT id, username, public_id, avatar, last_seen FROM users WHERE id = ?').get(req.userId);
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
   res.json(user);
+});
+
+// POST /api/users/avatar
+router.post('/avatar', auth, (req, res, next) => {
+  upload.single('avatar')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
+    if (!req.file) return res.status(400).json({ error: 'Выберите изображение' });
+
+    // Delete old avatar file
+    const old = db.prepare('SELECT avatar FROM users WHERE id = ?').get(req.userId);
+    if (old?.avatar) {
+      const oldPath = path.join(uploadDir, path.basename(old.avatar));
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    }
+
+    const avatarUrl = `/uploads/${req.file.filename}`;
+    db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatarUrl, req.userId);
+    res.json({ avatar: avatarUrl });
+  });
 });
 
 // GET /api/users/search?q=ID
@@ -31,7 +73,7 @@ router.get('/search', auth, (req, res) => {
   const q = (req.query.q || '').trim();
   if (!q) return res.json([]);
   const users = db.prepare(
-    'SELECT id, username, public_id, last_seen FROM users WHERE public_id LIKE ? AND id != ? LIMIT 10'
+    'SELECT id, username, public_id, avatar, last_seen FROM users WHERE public_id LIKE ? AND id != ? LIMIT 10'
   ).all(`%${q}%`, req.userId);
   res.json(users);
 });
@@ -39,7 +81,7 @@ router.get('/search', auth, (req, res) => {
 // GET /api/users/friends
 router.get('/friends', auth, (req, res) => {
   const friends = db.prepare(`
-    SELECT u.id, u.username, u.public_id, u.last_seen, f.status
+    SELECT u.id, u.username, u.public_id, u.avatar, u.last_seen, f.status
     FROM friends f
     JOIN users u ON (
       CASE WHEN f.user_id = ? THEN f.friend_id ELSE f.user_id END = u.id
@@ -53,7 +95,7 @@ router.get('/friends', auth, (req, res) => {
 // GET /api/users/requests — входящие заявки
 router.get('/requests', auth, (req, res) => {
   const requests = db.prepare(`
-    SELECT u.id, u.username, u.public_id, f.id as request_id
+    SELECT u.id, u.username, u.public_id, u.avatar, f.id as request_id
     FROM friends f
     JOIN users u ON f.user_id = u.id
     WHERE f.friend_id = ? AND f.status = 'pending'
@@ -113,6 +155,16 @@ router.get('/messages/:friendId', auth, (req, res) => {
   ).run(friendId, req.userId);
 
   res.json(messages);
+});
+
+// DELETE /api/users/messages/:messageId
+router.delete('/messages/:messageId', auth, (req, res) => {
+  const msgId = parseInt(req.params.messageId);
+  const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(msgId);
+  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
+  if (msg.sender_id !== req.userId) return res.status(403).json({ error: 'Можно удалять только свои сообщения' });
+  db.prepare('DELETE FROM messages WHERE id = ?').run(msgId);
+  res.json({ success: true, deletedId: msgId, receiverId: msg.receiver_id });
 });
 
 module.exports = { router, auth };
