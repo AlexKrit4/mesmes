@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "npm --prefix client install && npm --prefix client run build && npm --prefix server install",
-    "start": "node --no-warnings server/index.js"
+    "start": "node --experimental-sqlite --no-warnings server/index.js"
   },
   "engines": {
     "node": ">=22.0.0"

@@ -3,6 +3,6 @@ builder = "nixpacks"
 buildCommand = "npm run build"
 
 [deploy]
-startCommand = "node --no-warnings server/index.js"
+startCommand = "node --experimental-sqlite --no-warnings server/index.js"
 healthcheckPath = "/api/health"
 restartPolicyType = "on_failure"
