@@ -74,6 +74,40 @@ router.post('/push-subscribe', auth, (req, res) => {
   }
 });
 
+// PATCH /api/users/me — update username and/or public_id
+router.patch('/me', auth, (req, res) => {
+  const { username, public_id } = req.body;
+  if (!username && !public_id) return res.status(400).json({ error: 'Нет данных для обновления' });
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
+  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  const newUsername = username ? username.trim() : user.username;
+  const newPublicId = public_id ? public_id.trim().toLowerCase() : user.public_id;
+
+  if (newPublicId !== user.public_id) {
+    const exists = db.prepare('SELECT id FROM users WHERE public_id = ? AND id != ?').get(newPublicId, req.userId);
+    if (exists) return res.status(400).json({ error: 'Этот ID уже занят' });
+    if (!/^[a-z0-9_]{3,24}$/.test(newPublicId)) return res.status(400).json({ error: 'ID: только a-z, 0-9, _ (3-24 символа)' });
+  }
+  if (newUsername.length < 2 || newUsername.length > 32) {
+    return res.status(400).json({ error: 'Имя: от 2 до 32 символов' });
+  }
+
+  db.prepare('UPDATE users SET username = ?, public_id = ? WHERE id = ?').run(newUsername, newPublicId, req.userId);
+  res.json({ username: newUsername, public_id: newPublicId });
+});
+
+// DELETE /api/users/me — delete account
+router.delete('/me', auth, (req, res) => {
+  const uid = req.userId;
+  db.prepare('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?').run(uid, uid);
+  db.prepare('DELETE FROM friends WHERE user_id = ? OR friend_id = ?').run(uid, uid);
+  db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(uid);
+  db.prepare('DELETE FROM users WHERE id = ?').run(uid);
+  res.json({ success: true });
+});
+
 // GET /api/users/me
 router.get('/me', auth, (req, res) => {
   const user = db.prepare('SELECT id, username, public_id, avatar, last_seen FROM users WHERE id = ?').get(req.userId);
