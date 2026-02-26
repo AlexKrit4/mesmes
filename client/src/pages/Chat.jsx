@@ -35,10 +35,37 @@ export default function Chat() {
   const bottomRef = useRef(null);
   const typingTimeout = useRef(null);
   const messagesRef = useRef(null);
+  const chatPageRef = useRef(null);
+  const inputBarRef = useRef(null);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
+
+  // Handle mobile keyboard: resize layout using visualViewport API
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const handleResize = () => {
+      const el = chatPageRef.current;
+      if (!el) return;
+      // Set height to actual visible viewport (accounts for keyboard)
+      el.style.height = `${vv.height}px`;
+      // Scroll to bottom when keyboard opens
+      setTimeout(scrollToBottom, 50);
+    };
+
+    vv.addEventListener('resize', handleResize);
+    vv.addEventListener('scroll', handleResize);
+    // Set initial height
+    handleResize();
+
+    return () => {
+      vv.removeEventListener('resize', handleResize);
+      vv.removeEventListener('scroll', handleResize);
+    };
+  }, [scrollToBottom]);
 
   useEffect(() => {
     (async () => {
@@ -197,14 +224,14 @@ export default function Chat() {
 
   if (loading) {
     return (
-      <div className="chat-page">
+      <div className="chat-page" ref={chatPageRef}>
         <div className="spinner" />
       </div>
     );
   }
 
   return (
-    <div className="chat-page">
+    <div className="chat-page" ref={chatPageRef}>
       {/* Top bar */}
       <div className="topbar chat-topbar">
         <button className="topbar-back" onClick={() => navigate('/')}>
@@ -290,6 +317,7 @@ export default function Chat() {
           value={text}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
+          onFocus={() => setTimeout(scrollToBottom, 300)}
           rows={1}
         />
         <button

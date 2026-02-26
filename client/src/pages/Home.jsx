@@ -24,6 +24,7 @@ export default function Home() {
   const navigate = useNavigate();
   const me = JSON.parse(localStorage.getItem('me') || '{}');
   const fileInputRef = useRef(null);
+  const layoutRef = useRef(null);
 
   const [tab, setTab] = useState('chats');
   const [friends, setFriends] = useState([]);
@@ -35,6 +36,18 @@ export default function Home() {
   const [online, setOnline] = useState({});
   const [myAvatar, setMyAvatar] = useState(me.avatar || null);
   const [showProfile, setShowProfile] = useState(false);
+
+  // Handle mobile viewport resize (keyboard etc.)
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const handleResize = () => {
+      if (layoutRef.current) layoutRef.current.style.height = `${vv.height}px`;
+    };
+    vv.addEventListener('resize', handleResize);
+    handleResize();
+    return () => vv.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchFriends = useCallback(async () => {
     const { data } = await api.get('/users/friends');
@@ -152,7 +165,7 @@ export default function Home() {
   };
 
   return (
-    <div className="app-layout">
+    <div className="app-layout" ref={layoutRef}>
       {/* Top bar */}
       <div className="topbar">
         <div className="topbar-left" onClick={() => setShowProfile(!showProfile)}>
