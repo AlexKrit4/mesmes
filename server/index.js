@@ -151,7 +151,7 @@ io.on('connection', (socket) => {
             title: `МесМес: ${senderName}`,
             body: content.trim().length > 80 ? content.trim().slice(0, 80) + '…' : content.trim(),
             tag: `chat-${uid}`,
-            url: `/chat/${uid}`,
+            url: `https://mesmes.ru/chat/${uid}`,
           });
           webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },

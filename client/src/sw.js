@@ -22,13 +22,15 @@ self.addEventListener('push', (event) => {
 // Click on notification — open app
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || '/';
+  const path = event.notification.data?.url || '/';
+  // Must be absolute URL so Android routes to TWA instead of Chrome
+  const url = path.startsWith('http') ? path : 'https://mesmes.ru' + path;
   event.waitUntil(
     clients
       .matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
         for (const client of clientList) {
-          if (client.url.includes(self.location.origin) && 'focus' in client) {
+          if ('focus' in client) {
             client.navigate(url);
             return client.focus();
           }
