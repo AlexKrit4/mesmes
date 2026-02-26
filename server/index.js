@@ -39,6 +39,21 @@ app.use('/uploads', express.static(uploadDir));
 // Health check
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
+// TWA Digital Asset Links — required for fullscreen (no browser bar)
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.json([{
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: {
+      namespace: 'android_app',
+      package_name: 'ru.mesmes.twa',
+      sha256_cert_fingerprints: [
+        '99:6C:F2:1F:B1:68:AC:A1:9B:69:35:13:44:A4:36:DD:67:38:54:C1:49:64:E0:AB:47:13:C8:32:95:D0:BC:AE',
+      ],
+    },
+  }]);
+});
+
 // Make io & onlineUsers available to routes
 app.use((req, res, next) => {
   req.io = io;
