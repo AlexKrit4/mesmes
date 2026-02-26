@@ -141,31 +141,34 @@ io.on('connection', (socket) => {
     // Send to recipient if online
     if (onlineUsers.has(to)) {
       onlineUsers.get(to).forEach((sid) => io.to(sid).emit('new_message', message));
-    } else {
-      // Recipient is offline — send push notification
-      try {
-        const subs = db.prepare('SELECT * FROM push_subscriptions WHERE user_id = ?').all(to);
+    }
+
+    // Always send push notification if subscription exists
+    // (handles background/closed app — push shows even if socket is alive)
+    try {
+      const subs = db.prepare('SELECT * FROM push_subscriptions WHERE user_id = ?').all(to);
+      if (subs.length > 0) {
         const senderName = sender.username;
+        const pushPayload = JSON.stringify({
+          title: `МесМес: ${senderName}`,
+          body: content.trim().length > 80 ? content.trim().slice(0, 80) + '\u2026' : content.trim(),
+          tag: `chat-${uid}`,
+          url: `https://mesmes.ru/chat/${uid}`,
+        });
         for (const sub of subs) {
-          const pushPayload = JSON.stringify({
-            title: `МесМес: ${senderName}`,
-            body: content.trim().length > 80 ? content.trim().slice(0, 80) + '…' : content.trim(),
-            tag: `chat-${uid}`,
-            url: `https://mesmes.ru/chat/${uid}`,
-          });
           webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
             pushPayload
           ).catch((err) => {
-            // Remove invalid subscription
+            console.error('Push send error:', err.statusCode, err.message);
             if (err.statusCode === 410 || err.statusCode === 404) {
               db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(sub.endpoint);
             }
           });
         }
-      } catch (pushErr) {
-        console.error('Push error:', pushErr.message);
       }
+    } catch (pushErr) {
+      console.error('Push error:', pushErr.message);
     }
 
     // Echo back to sender (in case multiple tabs)

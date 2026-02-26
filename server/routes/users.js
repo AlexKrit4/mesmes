@@ -50,6 +50,12 @@ router.get('/vapid-public-key', (req, res) => {
   });
 });
 
+// GET /api/users/push-debug (check subscriptions for current user)
+router.get('/push-debug', auth, (req, res) => {
+  const subs = db.prepare('SELECT id, endpoint, created_at FROM push_subscriptions WHERE user_id = ?').all(req.userId);
+  res.json({ userId: req.userId, subscriptions: subs });
+});
+
 // POST /api/users/push-subscribe
 router.post('/push-subscribe', auth, (req, res) => {
   const { endpoint, keys } = req.body;
