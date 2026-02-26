@@ -39,6 +39,13 @@ app.use('/uploads', express.static(uploadDir));
 // Health check
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
+// Make io & onlineUsers available to routes
+app.use((req, res, next) => {
+  req.io = io;
+  req.onlineUsers = onlineUsers;
+  next();
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRouter);

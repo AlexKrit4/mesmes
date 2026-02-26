@@ -116,6 +116,22 @@ router.post('/friend-request', auth, (req, res) => {
   if (exists) return res.status(409).json({ error: 'Заявка уже существует или уже друзья' });
 
   db.prepare('INSERT INTO friends (user_id, friend_id, status) VALUES (?, ?, ?)').run(req.userId, target.id, 'pending');
+
+  // Real-time: notify target about new friend request
+  const sender = db.prepare('SELECT id, username, public_id, avatar FROM users WHERE id = ?').get(req.userId);
+  const lastRow = db.prepare('SELECT last_insert_rowid() as id').get();
+  if (req.io && req.onlineUsers?.has(target.id)) {
+    req.onlineUsers.get(target.id).forEach((sid) => {
+      req.io.to(sid).emit('friend_request_received', {
+        request_id: Number(lastRow.id),
+        id: sender.id,
+        username: sender.username,
+        public_id: sender.public_id,
+        avatar: sender.avatar,
+      });
+    });
+  }
+
   res.json({ success: true });
 });
 
@@ -125,13 +141,42 @@ router.post('/accept-request', auth, (req, res) => {
   const request = db.prepare('SELECT * FROM friends WHERE id = ? AND friend_id = ?').get(request_id, req.userId);
   if (!request) return res.status(404).json({ error: 'Заявка не найдена' });
   db.prepare('UPDATE friends SET status = ? WHERE id = ?').run('accepted', request_id);
+
+  // Real-time: notify both users about new friendship
+  const myInfo = db.prepare('SELECT id, username, public_id, avatar, last_seen FROM users WHERE id = ?').get(req.userId);
+  const theirInfo = db.prepare('SELECT id, username, public_id, avatar, last_seen FROM users WHERE id = ?').get(request.user_id);
+
+  if (req.io) {
+    // Notify the person who sent the request
+    if (req.onlineUsers?.has(request.user_id)) {
+      req.onlineUsers.get(request.user_id).forEach((sid) => {
+        req.io.to(sid).emit('friend_request_accepted', { friend: myInfo });
+      });
+    }
+    // Notify myself (other tabs)
+    if (req.onlineUsers?.has(req.userId)) {
+      req.onlineUsers.get(req.userId).forEach((sid) => {
+        req.io.to(sid).emit('friend_request_accepted', { friend: theirInfo });
+      });
+    }
+  }
+
   res.json({ success: true });
 });
 
 // POST /api/users/reject-request
 router.post('/reject-request', auth, (req, res) => {
   const { request_id } = req.body;
+  const request = db.prepare('SELECT * FROM friends WHERE id = ? AND friend_id = ?').get(request_id, req.userId);
   db.prepare('DELETE FROM friends WHERE id = ? AND friend_id = ?').run(request_id, req.userId);
+
+  // Real-time: notify sender that their request was rejected
+  if (request && req.io && req.onlineUsers?.has(request.user_id)) {
+    req.onlineUsers.get(request.user_id).forEach((sid) => {
+      req.io.to(sid).emit('friend_request_rejected', { by: req.userId });
+    });
+  }
+
   res.json({ success: true });
 });
 

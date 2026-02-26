@@ -8,6 +8,15 @@ function formatTime(dateStr) {
   return new Date(dateStr).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
+function timeSince(dateStr) {
+  if (!dateStr) return '';
+  const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+  if (diff < 60) return 'только что';
+  if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
+  return `${Math.floor(diff / 86400)} дн назад`;
+}
+
 export default function Chat() {
   const { friendId } = useParams();
   const friendIdNum = parseInt(friendId);
@@ -21,6 +30,7 @@ export default function Chat() {
   const [isOnline, setIsOnline] = useState(false);
   const [loading, setLoading] = useState(true);
   const [contextMenu, setContextMenu] = useState(null); // { msgId, x, y }
+  const [showFriendProfile, setShowFriendProfile] = useState(false);
 
   const bottomRef = useRef(null);
   const typingTimeout = useRef(null);
@@ -200,7 +210,7 @@ export default function Chat() {
         <button className="topbar-back" onClick={() => navigate('/')}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
-        <div className="chat-topbar-info">
+        <div className="chat-topbar-info" onClick={() => setShowFriendProfile(true)} style={{ cursor: 'pointer' }}>
           {friend?.avatar ? (
             <img className="avatar avatar-topbar" src={friend.avatar} alt="" />
           ) : (
@@ -291,6 +301,28 @@ export default function Chat() {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
       </div>
+
+      {/* Friend profile modal */}
+      {showFriendProfile && friend && (
+        <div className="modal-overlay" onClick={() => setShowFriendProfile(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowFriendProfile(false)}>✕</button>
+            <div className="modal-avatar-wrap">
+              {friend.avatar ? (
+                <img className="avatar avatar-xl" src={friend.avatar} alt="" />
+              ) : (
+                <div className="avatar avatar-xl">{(friend.username || '?')[0].toUpperCase()}</div>
+              )}
+              <div className={`modal-status-dot ${isOnline ? 'online' : ''}`} />
+            </div>
+            <div className="modal-name">{friend.username}</div>
+            <div className="modal-id">@{friend.public_id}</div>
+            <div className="modal-status-text">
+              {isOnline ? '🟢 В сети' : `Был(а) ${timeSince(friend.last_seen) || 'недавно'}`}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

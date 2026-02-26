@@ -57,7 +57,42 @@ export default function Home() {
       setOnline((prev) => ({ ...prev, [userId]: isOnline }));
     });
 
-    return () => { socket.off('presence'); };
+    // Real-time: incoming friend request
+    socket.on('friend_request_received', (data) => {
+      setRequests((prev) => {
+        if (prev.find((r) => r.request_id === data.request_id)) return prev;
+        return [...prev, data];
+      });
+    });
+
+    // Real-time: friend request accepted — new friend appears
+    socket.on('friend_request_accepted', ({ friend }) => {
+      setFriends((prev) => {
+        if (prev.find((f) => f.id === friend.id)) return prev;
+        return [...prev, friend];
+      });
+      // Remove from requests if it was there
+      setRequests((prev) => prev.filter((r) => r.id !== friend.id));
+    });
+
+    // Real-time: friend request rejected
+    socket.on('friend_request_rejected', () => {
+      // Could show a notification; for now just silently handled
+    });
+
+    // Real-time: new message updates last message preview (optional refresh)
+    socket.on('new_message', () => {
+      // Re-fetch friends to get updated order/preview if needed
+      fetchFriends();
+    });
+
+    return () => {
+      socket.off('presence');
+      socket.off('friend_request_received');
+      socket.off('friend_request_accepted');
+      socket.off('friend_request_rejected');
+      socket.off('new_message');
+    };
   }, [fetchFriends, fetchRequests]);
 
   // Search users by public_id
