@@ -30,6 +30,9 @@ const io = new Server(server, {
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
 app.use(express.json());
 
+// Health check
+app.get('/api/health', (req, res) => res.json({ ok: true }));
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRouter);
