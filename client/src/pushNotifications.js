@@ -14,22 +14,27 @@ export async function subscribeToPush() {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return;
 
-    const reg = await navigator.serviceWorker.ready;
+    // Wait for SW to be active (up to 10 sec)
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('SW timeout')), 10000)),
+    ]);
 
-    // Get VAPID public key from server
-    const { data } = await api.get('/users/vapid-public-key');
-    const applicationServerKey = urlBase64ToUint8Array(data.publicKey);
+    // Check for existing subscription first
+    let subscription = await reg.pushManager.getSubscription();
 
-    // Subscribe
-    const subscription = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey,
-    });
+    if (!subscription) {
+      const { data } = await api.get('/users/vapid-public-key');
+      const applicationServerKey = urlBase64ToUint8Array(data.publicKey);
+      subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+    }
 
-    // Send subscription to server
+    // Always send to server (keeps it updated)
     await api.post('/users/push-subscribe', subscription.toJSON());
   } catch (err) {
-    // Notifications not supported or denied — silently ignore
     console.warn('Push subscription failed:', err.message);
   }
 }

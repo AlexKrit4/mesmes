@@ -27,15 +27,6 @@ export default defineConfig({
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
       },
-      workbox: {
-        runtimeCaching: [
-          {
-            urlPattern: /^https?.*\/api\/.*/,
-            handler: 'NetworkFirst',
-            options: { cacheName: 'api-cache' },
-          },
-        ],
-      },
     }),
   ],
   server: {
