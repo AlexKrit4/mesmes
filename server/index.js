@@ -5,6 +5,14 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const webpush = require('web-push');
+
+// Configure VAPID
+webpush.setVapidDetails(
+  process.env.VAPID_EMAIL || 'mailto:admin@mesmes.ru',
+  process.env.VAPID_PUBLIC_KEY || 'BJlNwVA-s2DA1Xy-yFB3Pyi1J1lCWv8cQpRSyTCKT_OONE0XHmJewsLGHcjysdz1H0v6Ju-epgIU0FBjXlcUkZg',
+  process.env.VAPID_PRIVATE_KEY || '69EkioB7lm-KUvvuOmGoeVD0rLgMLzrD1DNhpwiacpI'
+);
 
 const db = require('./database');
 const authRoutes = require('./routes/auth');
@@ -133,6 +141,31 @@ io.on('connection', (socket) => {
     // Send to recipient if online
     if (onlineUsers.has(to)) {
       onlineUsers.get(to).forEach((sid) => io.to(sid).emit('new_message', message));
+    } else {
+      // Recipient is offline — send push notification
+      try {
+        const subs = db.prepare('SELECT * FROM push_subscriptions WHERE user_id = ?').all(to);
+        const senderName = sender.username;
+        for (const sub of subs) {
+          const pushPayload = JSON.stringify({
+            title: `МесМес: ${senderName}`,
+            body: content.trim().length > 80 ? content.trim().slice(0, 80) + '…' : content.trim(),
+            tag: `chat-${uid}`,
+            url: `/chat/${uid}`,
+          });
+          webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            pushPayload
+          ).catch((err) => {
+            // Remove invalid subscription
+            if (err.statusCode === 410 || err.statusCode === 404) {
+              db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(sub.endpoint);
+            }
+          });
+        }
+      } catch (pushErr) {
+        console.error('Push error:', pushErr.message);
+      }
     }
 
     // Echo back to sender (in case multiple tabs)

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, disconnectSocket, getSocket } from '../socket.js';
+import { subscribeToPush } from '../pushNotifications.js';
 
 function timeSince(dateStr) {
   if (!dateStr) return '';
@@ -54,6 +55,11 @@ export default function Home() {
   const fetchFriends = useCallback(async () => {
     const { data } = await api.get('/users/friends');
     setFriends(data);
+  }, []);
+
+  // Request push permission and subscribe
+  useEffect(() => {
+    subscribeToPush();
   }, []);
 
   const fetchRequests = useCallback(async () => {

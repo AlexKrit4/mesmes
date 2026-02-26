@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const db = require('../database');
+const webpush = require('web-push');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret_in_production';
@@ -41,6 +42,31 @@ function auth(req, res, next) {
     return res.status(401).json({ error: 'Недействительный токен' });
   }
 }
+
+// GET /api/users/vapid-public-key
+router.get('/vapid-public-key', (req, res) => {
+  res.json({
+    publicKey: process.env.VAPID_PUBLIC_KEY || 'BJlNwVA-s2DA1Xy-yFB3Pyi1J1lCWv8cQpRSyTCKT_OONE0XHmJewsLGHcjysdz1H0v6Ju-epgIU0FBjXlcUkZg',
+  });
+});
+
+// POST /api/users/push-subscribe
+router.post('/push-subscribe', auth, (req, res) => {
+  const { endpoint, keys } = req.body;
+  if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    return res.status(400).json({ error: 'Invalid subscription' });
+  }
+  try {
+    db.prepare(`
+      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth
+    `).run(req.userId, endpoint, keys.p256dh, keys.auth);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/users/me
 router.get('/me', auth, (req, res) => {
