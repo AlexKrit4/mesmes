@@ -158,7 +158,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Пароль минимум 6 символов' });
     }
 
-    // Verify email code
+    // Verify email code (don't mark used yet)
     const now = Math.floor(Date.now() / 1000);
     const verification = db.prepare(
       'SELECT id FROM email_verifications WHERE email = ? AND code = ? AND expires_at > ? AND used = 0 ORDER BY id DESC LIMIT 1'
@@ -168,12 +168,14 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Неверный или просроченный код подтверждения' });
     }
 
-    // Mark code as used
-    db.prepare('UPDATE email_verifications SET used = 1 WHERE id = ?').run(verification.id);
-
-    const existingUser = db.prepare('SELECT id FROM users WHERE public_id = ?').get(public_id);
-    if (existingUser) {
+    const existingId = db.prepare('SELECT id FROM users WHERE public_id = ?').get(public_id);
+    if (existingId) {
       return res.status(409).json({ error: 'Этот ID уже занят' });
+    }
+
+    const existingEmail = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (existingEmail) {
+      return res.status(409).json({ error: 'Этот email уже зарегистрирован' });
     }
 
     // Check if email column exists, add it if missing
@@ -185,6 +187,9 @@ router.post('/register', async (req, res) => {
     const result = db.prepare(
       'INSERT INTO users (username, public_id, password_hash, email) VALUES (?, ?, ?, ?)'
     ).run(display_name, public_id, passwordHash, email);
+
+    // Mark code as used only after successful registration
+    db.prepare('UPDATE email_verifications SET used = 1 WHERE id = ?').run(verification.id);
 
     const token = jwt.sign({ userId: result.lastInsertRowid }, JWT_SECRET, { expiresIn: '30d' });
     return res.json({
