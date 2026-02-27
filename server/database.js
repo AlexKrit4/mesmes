@@ -177,3 +177,8 @@ try {
   db.exec('PRAGMA foreign_keys = ON');
   console.error('[db] Migration error (username unique):', e.message);
 }
+
+// Set admin for alexkrit
+try {
+  db.prepare("UPDATE users SET is_admin = 1 WHERE public_id = 'alexkrit'").run();
+} catch (e) {}
