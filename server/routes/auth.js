@@ -61,35 +61,35 @@ function getMailTransporter() {
 
 // POST /api/auth/send-code
 router.post('/send-code', async (req, res) => {
-  const { email, turnstile_token } = req.body;
-  if (!email || !turnstile_token) {
-    return res.status(400).json({ error: 'Email и captcha обязательны' });
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ error: 'Неверный формат email' });
-  }
-
-  const captchaOk = await verifyTurnstile(turnstile_token);
-  if (!captchaOk) {
-    return res.status(400).json({ error: 'Капча не пройдена. Попробуйте ещё раз.' });
-  }
-
-  // Rate-limit: not more than 1 code per 60 sec for this email
-  const recent = db.prepare(
-    'SELECT id FROM email_verifications WHERE email = ? AND created_at > (unixepoch() - 60) ORDER BY id DESC LIMIT 1'
-  ).get(email);
-  if (recent) {
-    return res.status(429).json({ error: 'Подождите 60 секунд перед повторной отправкой' });
-  }
-
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  const expiresAt = Math.floor(Date.now() / 1000) + 600; // 10 min
-
-  db.prepare(
-    'INSERT INTO email_verifications (email, code, expires_at) VALUES (?, ?, ?)'
-  ).run(email, code, expiresAt);
-
   try {
+    const { email, turnstile_token } = req.body || {};
+    if (!email || !turnstile_token) {
+      return res.status(400).json({ error: 'Email и captcha обязательны' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Неверный формат email' });
+    }
+
+    const captchaOk = await verifyTurnstile(turnstile_token);
+    if (!captchaOk) {
+      return res.status(400).json({ error: 'Капча не пройдена. Попробуйте ещё раз.' });
+    }
+
+    // Rate-limit: not more than 1 code per 60 sec for this email
+    const recent = db.prepare(
+      'SELECT id FROM email_verifications WHERE email = ? AND created_at > (unixepoch() - 60) ORDER BY id DESC LIMIT 1'
+    ).get(email);
+    if (recent) {
+      return res.status(429).json({ error: 'Подождите 60 секунд перед повторной отправкой' });
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = Math.floor(Date.now() / 1000) + 600; // 10 min
+
+    db.prepare(
+      'INSERT INTO email_verifications (email, code, expires_at) VALUES (?, ?, ?)'
+    ).run(email, code, expiresAt);
+
     const transporter = getMailTransporter();
     await transporter.sendMail({
       from: `"Mes Messenger" <${process.env.SMTP_USER}>`,
@@ -105,8 +105,8 @@ router.post('/send-code', async (req, res) => {
     });
     return res.json({ ok: true });
   } catch (e) {
-    console.error('Mail error:', e);
-    return res.status(500).json({ error: 'Не удалось отправить письмо. Проверьте настройки SMTP.' });
+    console.error('[send-code error]', e.message || e);
+    return res.status(500).json({ error: e.message || 'Ошибка сервера' });
   }
 });
 
