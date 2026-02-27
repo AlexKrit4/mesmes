@@ -619,6 +619,7 @@ export default function Chat() {
         />
         <button
           className="send-btn"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={editingMsgId ? saveEdit : sendMessage}
           disabled={editingMsgId ? !editText.trim() : !text.trim()}
           aria-label={editingMsgId ? 'Сохранить' : 'Отправить'}
