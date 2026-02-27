@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { disconnectSocket } from '../socket.js';
+import { subscribeToPush } from '../pushNotifications.js';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -14,6 +15,14 @@ export default function Settings() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [idRateLimitHours, setIdRateLimitHours] = useState(0); // 0 = no limit
+  const [pushPermission, setPushPermission] = useState(() =>
+    'Notification' in window ? Notification.permission : 'unsupported'
+  );
+
+  const enablePushFromSettings = async () => {
+    await subscribeToPush();
+    if ('Notification' in window) setPushPermission(Notification.permission);
+  };
 
   // Fetch user data to check last_public_id_change
   useEffect(() => {
@@ -148,6 +157,24 @@ export default function Settings() {
           </div>
           {idMsg && (
             <p className={`settings-msg ${idMsg.startsWith('✓') ? 'success' : 'error'}`}>{idMsg}</p>
+          )}
+        </div>
+
+        <div className="settings-divider" />
+
+        {/* Notifications */}
+        <div className="settings-section">
+          <div className="settings-section-title">Уведомления</div>
+          {pushPermission === 'granted' && (
+            <p className="settings-msg success">✓ Уведомления включены</p>
+          )}
+          {pushPermission === 'denied' && (
+            <p className="settings-msg error">Уведомления заблокированы. Разрешите в настройках браузера.</p>
+          )}
+          {pushPermission !== 'granted' && pushPermission !== 'denied' && pushPermission !== 'unsupported' && (
+            <button className="btn btn-accent settings-save-btn" onClick={enablePushFromSettings}>
+              Включить уведомления
+            </button>
           )}
         </div>
 

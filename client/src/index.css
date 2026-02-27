@@ -1324,7 +1324,12 @@ img.avatar {
 }
 .modal-actions .btn { flex: 1; }
 
-/* ─── Delete dialog option ─── */
+/* ─── Push prompt ─── */
+.push-prompt-card { text-align: center; }
+.push-prompt-icon { font-size: 48px; margin-bottom: 8px; }
+.push-prompt-text { color: var(--text2); font-size: 14px; margin-top: 6px; line-height: 1.5; }
+
+
 .delete-option {
   display: flex;
   align-items: center;

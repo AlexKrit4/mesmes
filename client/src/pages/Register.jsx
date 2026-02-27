@@ -98,6 +98,7 @@ export default function Register() {
       });
       localStorage.setItem('token', data.token);
       localStorage.setItem('me', JSON.stringify(data.user));
+      localStorage.setItem('newUser', '1');
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Ошибка соединения');

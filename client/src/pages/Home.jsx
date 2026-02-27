@@ -39,6 +39,7 @@ export default function Home() {
   const [online, setOnline] = useState({});
   const [myAvatar, setMyAvatar] = useState(me.avatar || null);
   const [showProfile, setShowProfile] = useState(false);
+  const [showPushPrompt, setShowPushPrompt] = useState(() => localStorage.getItem('newUser') === '1');
 
   // Handle mobile viewport resize (keyboard etc.)
   useEffect(() => {
@@ -195,8 +196,33 @@ export default function Home() {
     navigate('/login');
   };
 
+  const enablePush = async () => {
+    setShowPushPrompt(false);
+    localStorage.removeItem('newUser');
+    await subscribeToPush();
+  };
+
+  const dismissPush = () => {
+    setShowPushPrompt(false);
+    localStorage.removeItem('newUser');
+  };
+
   return (
     <div className="app-layout" ref={layoutRef}>
+      {/* Push notifications prompt for new users */}
+      {showPushPrompt && (
+        <div className="modal-overlay" onClick={dismissPush}>
+          <div className="modal-card push-prompt-card" onClick={(e) => e.stopPropagation()}>
+            <div className="push-prompt-icon">🔔</div>
+            <div className="modal-name">Регистрация успешна!</div>
+            <div className="push-prompt-text">Подключите уведомления, чтобы видеть новые сообщения, даже когда вы не в сети.</div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={dismissPush}>Позже</button>
+              <button className="btn btn-accent" onClick={enablePush}>Включить</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Top bar */}
       <div className="topbar">
         <div className="topbar-left" onClick={() => setShowProfile(!showProfile)}>
