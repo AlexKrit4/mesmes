@@ -17,6 +17,7 @@ webpush.setVapidDetails(
 const db = require('./database');
 const authRoutes = require('./routes/auth');
 const { router: usersRouter, auth } = require('./routes/users');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 const server = http.createServer(app);
@@ -72,6 +73,7 @@ app.use((req, res, next) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRouter);
+app.use('/api/admin', adminRoutes);
 
 // Serve React build in production
 if (process.env.NODE_ENV === 'production') {

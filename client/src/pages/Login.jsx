@@ -2,17 +2,25 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api.js';
 
+function formatBanDate(d) {
+  if (!d) return null;
+  const s = d.endsWith('Z') || d.includes('+') ? d : d + 'Z';
+  return new Date(s).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ public_id: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [banInfo, setBanInfo] = useState(null);
 
   const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const submit = async (e) => {
     e.preventDefault();
     setError('');
+    setBanInfo(null);
     setLoading(true);
     try {
       const { data } = await api.post('/auth/login', form);
@@ -20,11 +28,36 @@ export default function Login() {
       localStorage.setItem('me', JSON.stringify(data.user));
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Ошибка соединения');
+      const d = err.response?.data;
+      if (d?.error === 'banned') {
+        setBanInfo({ reason: d.reason, expires_at: d.expires_at, banned_at: d.banned_at });
+      } else {
+        setError(d?.error || 'Ошибка соединения');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  if (banInfo) {
+    return (
+      <div className="auth-page">
+        <div className="auth-card ban-card">
+          <div className="ban-icon">⛔</div>
+          <h1>Аккаунт заблокирован</h1>
+          <div className="ban-reason-label">Причина:</div>
+          <div className="ban-reason">{banInfo.reason}</div>
+          <div className="ban-dates">
+            <div>Дата бана: {formatBanDate(banInfo.banned_at)}</div>
+            <div>{banInfo.expires_at ? `Действует до: ${formatBanDate(banInfo.expires_at)}` : 'Бан: бессрочный'}</div>
+          </div>
+          <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setBanInfo(null)}>
+            Назад
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-page">

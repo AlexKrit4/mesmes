@@ -143,6 +143,19 @@ router.delete('/me', auth, (req, res) => {
 router.get('/me', auth, (req, res) => {
   const user = db.prepare('SELECT id, username, public_id, avatar, last_seen, last_public_id_change FROM users WHERE id = ?').get(req.userId);
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  // Check active ban
+  const ban = db.prepare(
+    'SELECT id, reason, expires_at, banned_at FROM bans WHERE user_id = ? AND active = 1 ORDER BY id DESC LIMIT 1'
+  ).get(req.userId);
+  if (ban) {
+    if (ban.expires_at && new Date(ban.expires_at) < new Date()) {
+      db.prepare('UPDATE bans SET active = 0 WHERE id = ?').run(ban.id);
+    } else {
+      return res.status(403).json({ error: 'banned', reason: ban.reason, expires_at: ban.expires_at, banned_at: ban.banned_at });
+    }
+  }
+
   res.json(user);
 });
 

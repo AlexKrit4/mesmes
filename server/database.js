@@ -123,6 +123,28 @@ try {
   db.exec(`ALTER TABLE messages ADD COLUMN reply_to_id INTEGER DEFAULT NULL`);
 } catch (e) {}
 
+// Migration: add is_admin to users
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0`);
+} catch (e) {}
+
+// Migration: bans table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      reason TEXT NOT NULL DEFAULT '',
+      banned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME DEFAULT NULL,
+      banned_by INTEGER,
+      active INTEGER DEFAULT 1,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (banned_by) REFERENCES users(id)
+    )
+  `);
+} catch (e) {}
+
 // Migration: remove UNIQUE constraint from username (display name should not be unique)
 // SQLite doesn't support DROP CONSTRAINT, so we recreate the table
 try {

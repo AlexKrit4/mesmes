@@ -220,6 +220,25 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Неверный ID или пароль' });
   }
 
+  // Check active ban
+  const ban = db.prepare(
+    'SELECT id, reason, expires_at, banned_at FROM bans WHERE user_id = ? AND active = 1 ORDER BY id DESC LIMIT 1'
+  ).get(user.id);
+  if (ban) {
+    // If ban has expiry, check if it's still valid
+    if (ban.expires_at && new Date(ban.expires_at) < new Date()) {
+      // Ban expired — deactivate
+      db.prepare('UPDATE bans SET active = 0 WHERE id = ?').run(ban.id);
+    } else {
+      return res.status(403).json({
+        error: 'banned',
+        reason: ban.reason,
+        expires_at: ban.expires_at,
+        banned_at: ban.banned_at,
+      });
+    }
+  }
+
   db.prepare('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
 
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
