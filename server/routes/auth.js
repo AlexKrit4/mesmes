@@ -49,6 +49,17 @@ async function verifyTurnstile(token) {
   }
 }
 
+// Diagnostic: check env vars are set (temporary — remove later)
+router.get('/check-env', (req, res) => {
+  res.json({
+    smtp_user: !!process.env.SMTP_USER,
+    smtp_pass: !!process.env.SMTP_PASS,
+    turnstile_secret: !!process.env.TURNSTILE_SECRET,
+    smtp_user_preview: process.env.SMTP_USER ? process.env.SMTP_USER.slice(0, 4) + '***' : 'NOT SET',
+    node_version: process.version,
+  });
+});
+
 function getMailTransporter() {
   return nodemailer.createTransport({
     service: 'gmail',
@@ -92,12 +103,12 @@ router.post('/send-code', async (req, res) => {
 
     const transporter = getMailTransporter();
     await transporter.sendMail({
-      from: `"Mes Messenger" <${process.env.SMTP_USER}>`,
+      from: `"Mes Mes" <${process.env.SMTP_USER}>`,
       to: email,
-      subject: 'Код подтверждения Mes',
+      subject: 'Код подтверждения Mes Mes',
       text: `Ваш код подтверждения: ${code}\n\nКод действует 10 минут.`,
       html: `<div style="font-family:sans-serif;max-width:400px">
-        <h2 style="color:#6c5ce7">Mes Messenger</h2>
+        <h2 style="color:#6c5ce7">Mes Mes</h2>
         <p>Ваш код подтверждения:</p>
         <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#6c5ce7;margin:20px 0">${code}</div>
         <p style="color:#888">Код действует 10 минут.</p>
