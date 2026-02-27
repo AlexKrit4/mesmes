@@ -714,7 +714,7 @@ img.avatar {
 }
 
 .message {
-  max-width: 78%;
+  max-width: calc(100% - 30px); /* full row width minus gear(22px)+gap(3px)+buffer(5px) */
   padding: 10px 14px;
   border-radius: 18px;
   font-size: 14.5px;
@@ -724,19 +724,20 @@ img.avatar {
   animation: msgIn 0.15s ease-out;
 }
 
-/* message-row wraps gear + bubble */
+/* message-row wraps gear + bubble; always full width so alignment is stable */
 .message-row {
   display: flex;
   align-items: flex-end;
   gap: 3px;
+  width: 100%;
 }
 .message-row.out {
-  align-self: flex-end;
-  flex-direction: row; /* gear | bubble */
+  flex-direction: row;         /* gear | bubble */
+  justify-content: flex-end;
 }
 .message-row.in {
-  align-self: flex-start;
-  flex-direction: row-reverse; /* bubble | gear (visually: bubble left, gear right) */
+  flex-direction: row-reverse; /* gear on right, bubble on left */
+  justify-content: flex-end;
 }
 
 /* Gear button */
@@ -837,9 +838,22 @@ img.avatar {
   30% { transform: translateY(-4px); opacity: 1; }
 }
 
+/* ─── Context menu dimming overlay ─── */
+.msg-ctx-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 99;
+  animation: fadeIn 0.12s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 /* ─── Context menu (delete message) ─── */
 .msg-context-menu {
-  position: absolute;
+  position: fixed; /* overridden inline but set here as fallback */
   z-index: 100;
   min-width: 178px;
   background: var(--bg2);

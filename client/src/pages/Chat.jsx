@@ -310,28 +310,28 @@ export default function Chat() {
     }, 2000);
   };
 
-  // Gear button click — position menu relative to the button
+  // Gear button click — position menu in fixed (viewport) coordinates
   const openContextMenu = (e, msg) => {
     e.stopPropagation();
     const btn = e.currentTarget;
-    const container = messagesRef.current;
     const btnRect = btn.getBoundingClientRect();
-    const cRect = container.getBoundingClientRect();
     const isOut = msg.sender_id === me.id;
     const MENU_H = isOut ? 126 : 88;
     const MENU_W = 178;
+    const VH = window.innerHeight;
+    const VW = window.innerWidth;
 
     // Horizontal: right-align for own msgs, left-align for friend msgs
     const xProp = isOut
-      ? { right: Math.max(0, cRect.right - btnRect.right) }
-      : { left: Math.max(0, Math.min(btnRect.left - cRect.left, cRect.width - MENU_W)) };
+      ? { right: Math.max(0, VW - btnRect.right) }
+      : { left: Math.max(0, Math.min(btnRect.left, VW - MENU_W)) };
 
-    // Vertical: below button or above if overflow
-    const belowY = btnRect.bottom - cRect.top + 4;
-    const aboveY = btnRect.top - cRect.top - MENU_H - 4;
-    const y = belowY + MENU_H <= cRect.height ? belowY : Math.max(0, aboveY);
+    // Vertical: below button or above if not enough space
+    const belowY = btnRect.bottom + 4;
+    const aboveY = btnRect.top - MENU_H - 4;
+    const fixedTop = belowY + MENU_H <= VH ? belowY : Math.max(0, aboveY);
 
-    setContextMenu({ msgId: msg.id, content: msg.content, xProp, y, isOut });
+    setContextMenu({ msgId: msg.id, content: msg.content, xProp, fixedTop, isOut });
   };
 
   if (loading) {
@@ -422,38 +422,41 @@ export default function Chat() {
         )}
 
         <div ref={bottomRef} />
+      </div>
 
-        {/* Context menu */}
-        {contextMenu && (
+      {/* Context menu — rendered at fixed position outside scroll area */}
+      {contextMenu && (
+        <>
+          <div className="msg-ctx-overlay" onClick={() => setContextMenu(null)} />
           <div
             className={`msg-context-menu${contextMenu.isOut ? '' : ' in-side'}`}
-            style={{ ...contextMenu.xProp, top: contextMenu.y }}
+            style={{ position: 'fixed', ...contextMenu.xProp, top: contextMenu.fixedTop }}
             onClick={(e) => e.stopPropagation()}
           >
-              {contextMenu.isOut && (
-                <button className="ctx-btn edit" onClick={() => {
-                  const msg = messages.find((m) => m.id === contextMenu.msgId);
-                  if (msg) startEdit(msg);
-                }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  Редактировать
-                </button>
-              )}
-              <button className="ctx-btn" onClick={() => copyMessage(contextMenu.content)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                Копировать
+            {contextMenu.isOut && (
+              <button className="ctx-btn edit" onClick={() => {
+                const msg = messages.find((m) => m.id === contextMenu.msgId);
+                if (msg) startEdit(msg);
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Редактировать
               </button>
-              <button className="ctx-btn delete" onClick={() =>
-                contextMenu.isOut
-                  ? openDeleteDialog(contextMenu.msgId)
-                  : deleteFriendMessage(contextMenu.msgId)
-              }>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                Удалить
-              </button>
+            )}
+            <button className="ctx-btn" onClick={() => copyMessage(contextMenu.content)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Копировать
+            </button>
+            <button className="ctx-btn delete" onClick={() =>
+              contextMenu.isOut
+                ? openDeleteDialog(contextMenu.msgId)
+                : deleteFriendMessage(contextMenu.msgId)
+            }>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              Удалить
+            </button>
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       {/* Edit bar */}
       {editingMsgId && (
