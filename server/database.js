@@ -14,10 +14,11 @@ db.exec('PRAGMA foreign_keys = ON');
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
+    username TEXT NOT NULL,
     public_id TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     avatar TEXT DEFAULT NULL,
+    email TEXT DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -92,4 +93,37 @@ try {
   `);
 } catch (e) {
   // ignore
+}
+
+// Migration: remove UNIQUE constraint from username (display name should not be unique)
+// SQLite doesn't support DROP CONSTRAINT, so we recreate the table
+try {
+  const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get();
+  // Only migrate if username still has UNIQUE constraint
+  if (tableInfo && /username\s+TEXT\s+UNIQUE/i.test(tableInfo.sql)) {
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec(`
+      CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        public_id TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        avatar TEXT DEFAULT NULL,
+        email TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`
+      INSERT INTO users_new (id, username, public_id, password_hash, avatar, email, created_at, last_seen)
+      SELECT id, username, public_id, password_hash, avatar, email, created_at, last_seen FROM users
+    `);
+    db.exec('DROP TABLE users');
+    db.exec('ALTER TABLE users_new RENAME TO users');
+    db.exec('PRAGMA foreign_keys = ON');
+    console.log('[db] Migration: removed UNIQUE from users.username');
+  }
+} catch (e) {
+  db.exec('PRAGMA foreign_keys = ON');
+  console.error('[db] Migration error (username unique):', e.message);
 }
