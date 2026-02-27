@@ -56,6 +56,7 @@ export default function Chat() {
   const messagesRef = useRef(null);
   const chatPageRef = useRef(null);
   const inputBarRef = useRef(null);
+  const suppressNextClose = useRef(false);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -113,8 +114,13 @@ export default function Chat() {
   }, [messages, scrollToBottom]);
 
   // Close context menu / chat menu on any tap/click outside
+  // suppressClose флаг нужен чтобы игнорировать синтетический click после long-press
   useEffect(() => {
-    const close = () => { setContextMenu(null); setShowChatMenu(false); };
+    const close = () => {
+      if (suppressNextClose.current) { suppressNextClose.current = false; return; }
+      setContextMenu(null);
+      setShowChatMenu(false);
+    };
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, []);
@@ -315,11 +321,14 @@ export default function Chat() {
     e.stopPropagation();
     const container = messagesRef.current;
     const rect = container?.getBoundingClientRect() || { left: 0, top: 0, width: 320, height: 600 };
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    // For touch events, read from changedTouches/touches at call time
+    const touch = e.changedTouches?.[0] || e.touches?.[0];
+    const clientX = touch ? touch.clientX : e.clientX;
+    const clientY = touch ? touch.clientY : e.clientY;
     const x = clientX - rect.left;
     const y = clientY - rect.top;
     const isOut = msg.sender_id === me.id;
+    suppressNextClose.current = true;
     setContextMenu({
       msgId: msg.id,
       content: msg.content,
@@ -331,13 +340,33 @@ export default function Chat() {
     });
   };
 
-  // long press for mobile
+  // long press for mobile — capture coordinates in touchstart, not inside setTimeout
   const longPressTimer = useRef(null);
+  const longPressData = useRef(null);
   const handleTouchStart = (e, msg) => {
-    longPressTimer.current = setTimeout(() => openContextMenu(e, msg), 500);
+    const touch = e.touches[0];
+    longPressData.current = { clientX: touch.clientX, clientY: touch.clientY, msg };
+    longPressTimer.current = setTimeout(() => {
+      const d = longPressData.current;
+      if (!d) return;
+      const container = messagesRef.current;
+      const rect = container?.getBoundingClientRect() || { left: 0, top: 0, width: 320, height: 600 };
+      const isOut = d.msg.sender_id === me.id;
+      suppressNextClose.current = true;
+      setContextMenu({
+        msgId: d.msg.id,
+        content: d.msg.content,
+        x: d.clientX - rect.left,
+        y: d.clientY - rect.top,
+        isOut,
+        containerWidth: rect.width,
+        containerHeight: rect.height,
+      });
+    }, 500);
   };
   const handleTouchEnd = () => {
     clearTimeout(longPressTimer.current);
+    longPressData.current = null;
   };
 
   if (loading) {
