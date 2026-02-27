@@ -804,12 +804,17 @@ img.avatar {
 .msg-context-menu {
   position: absolute;
   z-index: 100;
+  min-width: 178px;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
   overflow: hidden;
   animation: ctxIn 0.12s ease-out;
+  transform-origin: top right;
+}
+.msg-context-menu.in-side {
+  transform-origin: top left;
 }
 
 @keyframes ctxIn {

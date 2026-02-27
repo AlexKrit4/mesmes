@@ -324,10 +324,22 @@ router.patch('/messages/:messageId', auth, (req, res) => {
 // DELETE /api/users/messages/:messageId
 router.delete('/messages/:messageId', auth, (req, res) => {
   const msgId = parseInt(req.params.messageId);
-  const { deleteForBoth } = req.body || {};
+  const { deleteForBoth, deleteForReceiver } = req.body || {};
   const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(msgId);
   if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
-  if (msg.sender_id !== req.userId) return res.status(403).json({ error: 'Можно удалять только свои сообщения' });
+
+  const isSender = msg.sender_id === req.userId;
+  const isReceiver = msg.receiver_id === req.userId;
+
+  if (!isSender && !isReceiver) return res.status(403).json({ error: 'Нет доступа' });
+
+  if (isReceiver && !isSender) {
+    // Recipient deleting from their view only
+    db.prepare('UPDATE messages SET deleted_for_receiver = 1 WHERE id = ?').run(msgId);
+    return res.json({ success: true, deletedId: msgId, deleteForBoth: false });
+  }
+
+  // Sender deleting
   if (deleteForBoth) {
     db.prepare('DELETE FROM messages WHERE id = ?').run(msgId);
   } else {
