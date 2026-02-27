@@ -52,7 +52,7 @@ async function sendEmail({ to, subject, text, html }) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'Mes Messenger <noreply@mesmes.ru>',
+      from: 'MesMes <noreply@mesmes.ru>',
       to: [to],
       subject,
       text,
@@ -104,10 +104,10 @@ router.post('/send-code', async (req, res) => {
 
     await sendEmail({
       to: email,
-      subject: 'Код подтверждения Mes',
+      subject: 'Код подтверждения MesMes',
       text: `Ваш код подтверждения: ${code}\n\nКод действует 10 минут.`,
       html: `<div style="font-family:sans-serif;max-width:400px">
-        <h2 style="color:#6c5ce7">Mes Messenger</h2>
+        <h2 style="color:#6c5ce7">MesMes</h2>
         <p>Ваш код подтверждения:</p>
         <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#6c5ce7;margin:20px 0">${code}</div>
         <p style="color:#888">Код действует 10 минут.</p>
@@ -119,6 +119,22 @@ router.post('/send-code', async (req, res) => {
     console.error('[send-code error]', e.message || e);
     return res.status(500).json({ error: e.message || 'Ошибка сервера' });
   }
+});
+
+// POST /api/auth/verify-code — check code is valid without consuming it
+router.post('/verify-code', (req, res) => {
+  const { email, code } = req.body || {};
+  if (!email || !code) {
+    return res.status(400).json({ error: 'Email и код обязательны' });
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const verification = db.prepare(
+    'SELECT id FROM email_verifications WHERE email = ? AND code = ? AND expires_at > ? AND used = 0 ORDER BY id DESC LIMIT 1'
+  ).get(email, code, now);
+  if (!verification) {
+    return res.status(400).json({ error: 'Неверный или просроченный код' });
+  }
+  return res.json({ ok: true });
 });
 
 // POST /api/auth/register
