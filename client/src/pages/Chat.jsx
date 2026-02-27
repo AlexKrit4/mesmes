@@ -56,7 +56,6 @@ export default function Chat() {
   const messagesRef = useRef(null);
   const chatPageRef = useRef(null);
   const inputBarRef = useRef(null);
-  const suppressNextClose = useRef(false);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -113,14 +112,9 @@ export default function Chat() {
     if (messages.length) setTimeout(scrollToBottom, 50);
   }, [messages, scrollToBottom]);
 
-  // Close context menu / chat menu on any tap/click outside
-  // suppressClose флаг нужен чтобы игнорировать синтетический click после long-press
+  // Close context menu / chat menu on click outside
   useEffect(() => {
-    const close = () => {
-      if (suppressNextClose.current) { suppressNextClose.current = false; return; }
-      setContextMenu(null);
-      setShowChatMenu(false);
-    };
+    const close = () => { setContextMenu(null); setShowChatMenu(false); };
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, []);
@@ -316,57 +310,28 @@ export default function Chat() {
     }, 2000);
   };
 
+  // Gear button click — position menu relative to the button
   const openContextMenu = (e, msg) => {
-    e.preventDefault();
     e.stopPropagation();
+    const btn = e.currentTarget;
     const container = messagesRef.current;
-    const rect = container?.getBoundingClientRect() || { left: 0, top: 0, width: 320, height: 600 };
-    // For touch events, read from changedTouches/touches at call time
-    const touch = e.changedTouches?.[0] || e.touches?.[0];
-    const clientX = touch ? touch.clientX : e.clientX;
-    const clientY = touch ? touch.clientY : e.clientY;
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+    const btnRect = btn.getBoundingClientRect();
+    const cRect = container.getBoundingClientRect();
     const isOut = msg.sender_id === me.id;
-    suppressNextClose.current = true;
-    setContextMenu({
-      msgId: msg.id,
-      content: msg.content,
-      x,
-      y,
-      isOut,
-      containerWidth: rect.width,
-      containerHeight: rect.height,
-    });
-  };
+    const MENU_H = isOut ? 126 : 88;
+    const MENU_W = 178;
 
-  // long press for mobile — capture coordinates in touchstart, not inside setTimeout
-  const longPressTimer = useRef(null);
-  const longPressData = useRef(null);
-  const handleTouchStart = (e, msg) => {
-    const touch = e.touches[0];
-    longPressData.current = { clientX: touch.clientX, clientY: touch.clientY, msg };
-    longPressTimer.current = setTimeout(() => {
-      const d = longPressData.current;
-      if (!d) return;
-      const container = messagesRef.current;
-      const rect = container?.getBoundingClientRect() || { left: 0, top: 0, width: 320, height: 600 };
-      const isOut = d.msg.sender_id === me.id;
-      suppressNextClose.current = true;
-      setContextMenu({
-        msgId: d.msg.id,
-        content: d.msg.content,
-        x: d.clientX - rect.left,
-        y: d.clientY - rect.top,
-        isOut,
-        containerWidth: rect.width,
-        containerHeight: rect.height,
-      });
-    }, 500);
-  };
-  const handleTouchEnd = () => {
-    clearTimeout(longPressTimer.current);
-    longPressData.current = null;
+    // Horizontal: right-align for own msgs, left-align for friend msgs
+    const xProp = isOut
+      ? { right: Math.max(0, cRect.right - btnRect.right) }
+      : { left: Math.max(0, Math.min(btnRect.left - cRect.left, cRect.width - MENU_W)) };
+
+    // Vertical: below button or above if overflow
+    const belowY = btnRect.bottom - cRect.top + 4;
+    const aboveY = btnRect.top - cRect.top - MENU_H - 4;
+    const y = belowY + MENU_H <= cRect.height ? belowY : Math.max(0, aboveY);
+
+    setContextMenu({ msgId: msg.id, content: msg.content, xProp, y, isOut });
   };
 
   if (loading) {
@@ -425,23 +390,25 @@ export default function Chat() {
         {messages.map((msg) => {
           const isOut = msg.sender_id === me.id;
           return (
-            <div
-              key={msg.id}
-              className={`message ${isOut ? 'out' : 'in'}`}
-              onContextMenu={(e) => openContextMenu(e, msg)}
-              onTouchStart={(e) => handleTouchStart(e, msg)}
-              onTouchEnd={handleTouchEnd}
-              onTouchMove={handleTouchEnd}
-            >
-              <div className="message-text">{msg.content}</div>
-              <div className="message-meta">
-                {msg.edited ? <span className="message-edited">ред.</span> : null}
-                <span className="message-time">{formatTime(msg.created_at)}</span>
-                {isOut && (
-                  <span className={`message-check ${msg.read_at ? 'read' : ''}`}>
-                    {msg.read_at ? '✓✓' : '✓'}
-                  </span>
-                )}
+            <div key={msg.id} className={`message-row ${isOut ? 'out' : 'in'}`}>
+              <button
+                className="msg-gear-btn"
+                onClick={(e) => openContextMenu(e, msg)}
+                title="Действия"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.92c.04-.34.07-.69.07-1.08 0-.39-.03-.74-.07-1.08l2.32-1.81c.21-.16.27-.46.13-.7l-2.2-3.81c-.13-.24-.42-.33-.67-.24l-2.73 1.1c-.57-.43-1.18-.8-1.87-1.07L14.5 2.42C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42L9.13 5.29C8.44 5.56 7.83 5.93 7.26 6.36L4.53 5.26c-.25-.09-.54 0-.67.24L1.66 9.31c-.14.24-.08.54.13.7L4.11 11.82C4.07 12.16 4 12.51 4 12.92c0 .39.03.74.07 1.08l-2.32 1.81c-.21.16-.27.46-.13.7l2.2 3.81c.13.24.42.33.67.24l2.73-1.1c.57.43 1.18.8 1.87 1.07l.37 2.87c.04.24.25.42.5.42h4c.25 0 .46-.18.49-.42l.37-2.87c.69-.27 1.3-.64 1.87-1.07l2.73 1.1c.25.09.54 0 .67-.24l2.2-3.81c.14-.24.08-.54-.13-.7l-2.32-1.81z"/></svg>
+              </button>
+              <div className={`message ${isOut ? 'out' : 'in'}`}>
+                <div className="message-text">{msg.content}</div>
+                <div className="message-meta">
+                  {msg.edited ? <span className="message-edited">ред.</span> : null}
+                  <span className="message-time">{formatTime(msg.created_at)}</span>
+                  {isOut && (
+                    <span className={`message-check ${msg.read_at ? 'read' : ''}`}>
+                      {msg.read_at ? '✓✓' : '✓'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -457,19 +424,12 @@ export default function Chat() {
         <div ref={bottomRef} />
 
         {/* Context menu */}
-        {contextMenu && (() => {
-          const MENU_W = 178;
-          const MENU_H = contextMenu.isOut ? 126 : 88;
-          const xPos = contextMenu.isOut
-            ? { right: Math.max(0, contextMenu.containerWidth - contextMenu.x) }
-            : { left: Math.min(contextMenu.x, Math.max(0, contextMenu.containerWidth - MENU_W)) };
-          const topPos = Math.min(contextMenu.y, Math.max(0, contextMenu.containerHeight - MENU_H));
-          return (
-            <div
-              className={`msg-context-menu${contextMenu.isOut ? '' : ' in-side'}`}
-              style={{ ...xPos, top: topPos }}
-              onClick={(e) => e.stopPropagation()}
-            >
+        {contextMenu && (
+          <div
+            className={`msg-context-menu${contextMenu.isOut ? '' : ' in-side'}`}
+            style={{ ...contextMenu.xProp, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
               {contextMenu.isOut && (
                 <button className="ctx-btn edit" onClick={() => {
                   const msg = messages.find((m) => m.id === contextMenu.msgId);
@@ -491,9 +451,8 @@ export default function Chat() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 Удалить
               </button>
-            </div>
-          );
-        })()}
+          </div>
+        )}
       </div>
 
       {/* Edit bar */}

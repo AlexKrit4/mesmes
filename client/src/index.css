@@ -724,19 +724,56 @@ img.avatar {
   animation: msgIn 0.15s ease-out;
 }
 
+/* message-row wraps gear + bubble */
+.message-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+.message-row.out {
+  align-self: flex-end;
+  flex-direction: row; /* gear | bubble */
+}
+.message-row.in {
+  align-self: flex-start;
+  flex-direction: row-reverse; /* bubble | gear (visually: bubble left, gear right) */
+}
+
+/* Gear button */
+.msg-gear-btn {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 50%;
+  color: var(--text2);
+  opacity: 0.25;
+  transition: opacity 0.15s, background 0.15s;
+  padding: 0;
+  margin-bottom: 2px;
+}
+.msg-gear-btn:hover,
+.msg-gear-btn:active {
+  opacity: 0.75;
+  background: var(--bg3);
+}
+
 @keyframes msgIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .message.out {
-  align-self: flex-end;
   background: var(--msg-out);
   border-bottom-right-radius: 6px;
 }
 
 .message.in {
-  align-self: flex-start;
   background: var(--msg-in);
   border: 1px solid var(--border);
   border-bottom-left-radius: 6px;
