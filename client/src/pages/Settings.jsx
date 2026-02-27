@@ -171,7 +171,7 @@ export default function Settings() {
           {pushPermission === 'denied' && (
             <p className="settings-msg error">Уведомления заблокированы. Разрешите в настройках браузера.</p>
           )}
-          {pushPermission !== 'granted' && pushPermission !== 'denied' && pushPermission !== 'unsupported' && (
+          {pushPermission !== 'unsupported' && (
             <button className="btn btn-accent settings-save-btn" onClick={enablePushFromSettings}>
               Включить уведомления
             </button>
