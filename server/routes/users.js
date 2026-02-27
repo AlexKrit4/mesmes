@@ -141,7 +141,7 @@ router.delete('/me', auth, (req, res) => {
 
 // GET /api/users/me
 router.get('/me', auth, (req, res) => {
-  const user = db.prepare('SELECT id, username, public_id, avatar, last_seen, last_public_id_change FROM users WHERE id = ?').get(req.userId);
+  const user = db.prepare('SELECT id, username, public_id, avatar, last_seen, last_public_id_change FROM users WHERE id = ???').get(req.userId);
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
 
   // Check active ban
