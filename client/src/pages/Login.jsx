@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api.js';
 
 function formatBanDate(d) {
@@ -10,10 +10,22 @@ function formatBanDate(d) {
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [form, setForm] = useState({ public_id: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [banInfo, setBanInfo] = useState(null);
+
+  // Show ban screen if redirected from socket ban or from login attempt
+  const [banInfo, setBanInfo] = useState(() => {
+    if (searchParams.get('banned') === '1') {
+      return {
+        reason: searchParams.get('reason') || 'Нарушение правил',
+        expires_at: searchParams.get('expires_at') || null,
+        banned_at: null,
+      };
+    }
+    return null;
+  });
 
   const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 

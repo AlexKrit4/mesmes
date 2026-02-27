@@ -70,6 +70,16 @@ router.post('/ban', auth, requireAdmin, (req, res) => {
     'INSERT INTO bans (user_id, reason, expires_at, banned_by) VALUES (?, ?, ?, ?)'
   ).run(user_id, reason || 'Нарушение правил', expiresAt, req.userId);
 
+  // Kick user in real-time if online
+  if (req.io && req.onlineUsers?.has(user_id)) {
+    req.onlineUsers.get(user_id).forEach((sid) => {
+      req.io.to(sid).emit('you_are_banned', {
+        reason: reason || 'Нарушение правил',
+        expires_at: expiresAt,
+      });
+    });
+  }
+
   res.json({ success: true });
 });
 

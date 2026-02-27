@@ -32,6 +32,16 @@ export function connectSocket() {
   };
   document.addEventListener('visibilitychange', _visHandler);
 
+  // Global: if banned while online, force logout
+  socket.on('you_are_banned', (data) => {
+    localStorage.clear();
+    const reason = data?.reason || 'Нарушение правил';
+    const expires = data?.expires_at;
+    const params = new URLSearchParams({ banned: '1', reason });
+    if (expires) params.set('expires_at', expires);
+    window.location.href = '/login?' + params.toString();
+  });
+
   return socket;
 }
 
