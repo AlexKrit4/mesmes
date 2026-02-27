@@ -1,7 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
 const db = require('../database');
 
 const router = express.Router();
@@ -41,19 +40,31 @@ router.get('/check-env', (req, res) => {
   });
 });
 
-function getMailTransporter() {
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+// Send email via Resend HTTP API (no SMTP needed)
+async function sendEmail({ to, subject, text, html }) {
+  const RESEND_API_KEY = process.env.RESEND_API_KEY;
+  if (!RESEND_API_KEY) throw new Error('RESEND_API_KEY не настроен');
+
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    body: JSON.stringify({
+      from: 'Mes Messenger <onboarding@resend.dev>',
+      to: [to],
+      subject,
+      text,
+      html,
+    }),
   });
+  const data = await resp.json();
+  if (!resp.ok) {
+    console.error('[resend error]', data);
+    throw new Error(data.message || 'Ошибка отправки письма');
+  }
+  return data;
 }
 
 // POST /api/auth/send-code
@@ -89,21 +100,20 @@ router.post('/send-code', async (req, res) => {
     db.prepare(
       'INSERT INTO email_verifications (email, code, expires_at) VALUES (?, ?, ?)'
     ).run(email, code, expiresAt);
-    console.log('[send-code] code saved, sending mail...');
+    console.log('[send-code] code saved, sending via Resend...');
 
-    const transporter = getMailTransporter();
-    await transporter.sendMail({
-      from: `"Mes Mes" <${process.env.SMTP_USER}>`,
+    await sendEmail({
       to: email,
-      subject: 'Код подтверждения Mes Mes',
+      subject: 'Код подтверждения Mes',
       text: `Ваш код подтверждения: ${code}\n\nКод действует 10 минут.`,
       html: `<div style="font-family:sans-serif;max-width:400px">
-        <h2 style="color:#6c5ce7">Mes Mes</h2>
+        <h2 style="color:#6c5ce7">Mes Messenger</h2>
         <p>Ваш код подтверждения:</p>
         <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#6c5ce7;margin:20px 0">${code}</div>
         <p style="color:#888">Код действует 10 минут.</p>
       </div>`,
     });
+    console.log('[send-code] email sent OK');
     return res.json({ ok: true });
   } catch (e) {
     console.error('[send-code error]', e.message || e);
