@@ -51,11 +51,18 @@ export default function Chat() {
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showRemoveFriendConfirm, setShowRemoveFriendConfirm] = useState(false);
 
+  // Image viewer (lightbox)
+  const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [lightboxScale, setLightboxScale] = useState(1);
+  const [fileUploading, setFileUploading] = useState(false);
+
   const bottomRef = useRef(null);
   const typingTimeout = useRef(null);
   const messagesRef = useRef(null);
   const chatPageRef = useRef(null);
   const inputBarRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const pinchDistRef = useRef(null);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -310,6 +317,23 @@ export default function Chat() {
     }, 2000);
   };
 
+  const sendFile = async (file) => {
+    if (!file || fileUploading) return;
+    setFileUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post('/users/messages/file', formData);
+      const { file_url } = res.data;
+      const socket = getSocket();
+      if (socket) socket.emit('send_message', { to: friendIdNum, content: '', file_url });
+    } catch (err) {
+      console.error('File upload error', err);
+    } finally {
+      setFileUploading(false);
+    }
+  };
+
   // Gear button click — position menu in fixed (viewport) coordinates
   const openContextMenu = (e, msg) => {
     e.stopPropagation();
@@ -399,7 +423,15 @@ export default function Chat() {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.92c.04-.34.07-.69.07-1.08 0-.39-.03-.74-.07-1.08l2.32-1.81c.21-.16.27-.46.13-.7l-2.2-3.81c-.13-.24-.42-.33-.67-.24l-2.73 1.1c-.57-.43-1.18-.8-1.87-1.07L14.5 2.42C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42L9.13 5.29C8.44 5.56 7.83 5.93 7.26 6.36L4.53 5.26c-.25-.09-.54 0-.67.24L1.66 9.31c-.14.24-.08.54.13.7L4.11 11.82C4.07 12.16 4 12.51 4 12.92c0 .39.03.74.07 1.08l-2.32 1.81c-.21.16-.27.46-.13.7l2.2 3.81c.13.24.42.33.67.24l2.73-1.1c.57.43 1.18.8 1.87 1.07l.37 2.87c.04.24.25.42.5.42h4c.25 0 .46-.18.49-.42l.37-2.87c.69-.27 1.3-.64 1.87-1.07l2.73 1.1c.25.09.54 0 .67-.24l2.2-3.81c.14-.24.08-.54-.13-.7l-2.32-1.81z"/></svg>
               </button>
               <div className={`message ${isOut ? 'out' : 'in'}`}>
-                <div className="message-text">{msg.content}</div>
+                {msg.file_url && (
+                  <img
+                    src={msg.file_url}
+                    className="msg-image"
+                    alt=""
+                    onClick={(e) => { e.stopPropagation(); setLightboxSrc(msg.file_url); setLightboxScale(1); }}
+                  />
+                )}
+                {msg.content && <div className="message-text">{msg.content}</div>}
                 <div className="message-meta">
                   {msg.edited ? <span className="message-edited">ред.</span> : null}
                   <span className="message-time">{formatTime(msg.created_at)}</span>
@@ -469,6 +501,24 @@ export default function Chat() {
 
       {/* Input bar */}
       <div className="message-input-bar">
+        <input
+          type="file"
+          accept="image/*"
+          ref={fileInputRef}
+          style={{ display: 'none' }}
+          onChange={(e) => { if (e.target.files[0]) sendFile(e.target.files[0]); e.target.value = ''; }}
+        />
+        <button
+          className="attach-btn"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={fileUploading}
+          title="Прикрепить изображение"
+        >
+          {fileUploading
+            ? <span className="attach-spinner" />
+            : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          }
+        </button>
         <textarea
           className="message-input"
           placeholder={editingMsgId ? 'Изменить сообщение...' : 'Сообщение...'}
@@ -551,6 +601,48 @@ export default function Chat() {
               {isOnline ? '🟢 В сети' : `Был(а) ${timeSince(friend.last_seen) || 'недавно'}`}
             </div>
           </div>
+        </div>
+      )}
+      {/* Lightbox image viewer */}
+      {lightboxSrc && (
+        <div
+          className="lightbox-overlay"
+          onClick={() => { setLightboxSrc(null); setLightboxScale(1); }}
+        >
+          <button
+            className="lightbox-close"
+            onClick={(e) => { e.stopPropagation(); setLightboxSrc(null); setLightboxScale(1); }}
+          >✕</button>
+          <img
+            src={lightboxSrc}
+            className="lightbox-img"
+            alt=""
+            style={{ transform: `scale(${lightboxScale})` }}
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => {
+              if (e.touches.length === 2) {
+                pinchDistRef.current = Math.hypot(
+                  e.touches[0].clientX - e.touches[1].clientX,
+                  e.touches[0].clientY - e.touches[1].clientY
+                );
+              }
+            }}
+            onTouchMove={(e) => {
+              if (e.touches.length === 2 && pinchDistRef.current) {
+                const d = Math.hypot(
+                  e.touches[0].clientX - e.touches[1].clientX,
+                  e.touches[0].clientY - e.touches[1].clientY
+                );
+                setLightboxScale(s => Math.min(5, Math.max(0.5, s * (d / pinchDistRef.current))));
+                pinchDistRef.current = d;
+              }
+            }}
+            onTouchEnd={() => { pinchDistRef.current = null; }}
+            onWheel={(e) => {
+              e.preventDefault();
+              setLightboxScale(s => Math.min(5, Math.max(0.5, s - e.deltaY * 0.005)));
+            }}
+          />
         </div>
       )}
     </div>

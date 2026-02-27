@@ -109,8 +109,9 @@ io.on('connection', (socket) => {
   broadcastPresence(uid, true);
 
   // ── Отправка сообщения ──────────────────────────────────────────────────
-  socket.on('send_message', ({ to, content }) => {
-    if (!to || !content || !content.trim()) return;
+  socket.on('send_message', ({ to, content, file_url }) => {
+    const trimContent = (content || '').trim();
+    if (!to || (!trimContent && !file_url)) return;
 
     // Check they are friends
     const areFriends = db.prepare(`
@@ -123,8 +124,8 @@ io.on('connection', (socket) => {
 
     const now = new Date().toISOString();
     const result = db.prepare(
-      'INSERT INTO messages (sender_id, receiver_id, content, created_at) VALUES (?, ?, ?, ?)'
-    ).run(uid, to, content.trim(), now);
+      'INSERT INTO messages (sender_id, receiver_id, content, file_url, created_at) VALUES (?, ?, ?, ?, ?)'
+    ).run(uid, to, trimContent, file_url || null, now);
 
     const sender = db.prepare('SELECT username FROM users WHERE id = ?').get(uid);
 
@@ -132,7 +133,8 @@ io.on('connection', (socket) => {
       id: result.lastInsertRowid,
       sender_id: uid,
       receiver_id: to,
-      content: content.trim(),
+      content: trimContent,
+      file_url: file_url || null,
       created_at: now,
       read_at: null,
       sender_username: sender.username,
@@ -151,7 +153,7 @@ io.on('connection', (socket) => {
         const senderName = sender.username;
         const pushPayload = JSON.stringify({
           title: `МесМес: ${senderName}`,
-          body: content.trim().length > 80 ? content.trim().slice(0, 80) + '\u2026' : content.trim(),
+          body: file_url ? '\ud83d\uddbc\ufe0f Изображение' : (trimContent.length > 80 ? trimContent.slice(0, 80) + '\u2026' : trimContent),
           tag: `chat-${uid}`,
           url: `https://mesmes.ru/chat/${uid}`,
         });

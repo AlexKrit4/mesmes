@@ -29,6 +29,23 @@ const upload = multer({
   },
 });
 
+// Message image upload
+const msgStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `msg_${req.userId}_${Date.now()}${ext}`);
+  },
+});
+const msgUpload = multer({
+  storage: msgStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (req, file, cb) => {
+    if (/^image\/(jpeg|png|webp|gif|heic|heif)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Только изображения'));
+  },
+});
+
 // Middleware: require auth
 function auth(req, res, next) {
   const header = req.headers.authorization;
@@ -282,7 +299,7 @@ router.delete('/friends/:friendId', auth, (req, res) => {
 router.get('/messages/:friendId', auth, (req, res) => {
   const friendId = parseInt(req.params.friendId);
   const messages = db.prepare(`
-    SELECT m.id, m.sender_id, m.receiver_id, m.content, m.created_at, m.read_at,
+    SELECT m.id, m.sender_id, m.receiver_id, m.content, m.file_url, m.created_at, m.read_at,
            m.edited, u.username as sender_username
     FROM messages m
     JOIN users u ON m.sender_id = u.id
@@ -319,6 +336,15 @@ router.patch('/messages/:messageId', auth, (req, res) => {
   const newContent = content.trim();
   db.prepare('UPDATE messages SET content = ?, edited = 1 WHERE id = ?').run(newContent, msgId);
   res.json({ success: true, messageId: msgId, content: newContent, receiverId: msg.receiver_id });
+});
+
+// POST /api/users/messages/file — upload image for message
+router.post('/messages/file', auth, (req, res) => {
+  msgUpload.single('file')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
+    if (!req.file) return res.status(400).json({ error: 'Выберите изображение' });
+    res.json({ file_url: `/uploads/${req.file.filename}` });
+  });
 });
 
 // DELETE /api/users/messages/:messageId

@@ -113,6 +113,11 @@ try {
   db.exec(`ALTER TABLE messages ADD COLUMN deleted_for_receiver INTEGER DEFAULT 0`);
 } catch (e) {}
 
+// Migration: add file_url to messages (for image sharing)
+try {
+  db.exec(`ALTER TABLE messages ADD COLUMN file_url TEXT DEFAULT NULL`);
+} catch (e) {}
+
 // Migration: remove UNIQUE constraint from username (display name should not be unique)
 // SQLite doesn't support DROP CONSTRAINT, so we recreate the table
 try {
