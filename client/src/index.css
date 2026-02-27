@@ -1278,6 +1278,36 @@ img.avatar {
 
 .settings-action-btn:active { transform: scale(0.98); }
 
+/* Settings promo button */
+.settings-promo-btn {
+  display: block;
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.12));
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  text-align: left;
+}
+.settings-promo-btn:hover {
+  background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2));
+  border-color: rgba(99,102,241,0.5);
+}
+.settings-promo-btn:active { transform: scale(0.98); }
+.settings-promo-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+.settings-promo-sub {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
 .settings-action-btn.logout {
   color: var(--text2);
 }
