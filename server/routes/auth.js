@@ -139,45 +139,49 @@ router.post('/verify-code', (req, res) => {
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
-  const { display_name, public_id, password, email, code } = req.body;
-
-  if (!display_name || !public_id || !password || !email || !code) {
-    return res.status(400).json({ error: 'Все поля обязательны' });
-  }
-
-  if (display_name.length < 1 || display_name.length > 40) {
-    return res.status(400).json({ error: 'Имя от 1 до 40 символов' });
-  }
-
-  if (!/^[a-zA-Z0-9_]{3,30}$/.test(public_id)) {
-    return res.status(400).json({ error: 'ID: только буквы, цифры и _, от 3 до 30 символов' });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Пароль минимум 6 символов' });
-  }
-
-  // Verify email code
-  const now = Math.floor(Date.now() / 1000);
-  const verification = db.prepare(
-    'SELECT id FROM email_verifications WHERE email = ? AND code = ? AND expires_at > ? AND used = 0 ORDER BY id DESC LIMIT 1'
-  ).get(email, code, now);
-
-  if (!verification) {
-    return res.status(400).json({ error: 'Неверный или просроченный код подтверждения' });
-  }
-
-  // Mark code as used
-  db.prepare('UPDATE email_verifications SET used = 1 WHERE id = ?').run(verification.id);
-
-  const existingUser = db.prepare('SELECT id FROM users WHERE public_id = ?').get(public_id);
-  if (existingUser) {
-    return res.status(409).json({ error: 'Этот ID уже занят' });
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-
   try {
+    const { display_name, public_id, password, email, code } = req.body;
+
+    if (!display_name || !public_id || !password || !email || !code) {
+      return res.status(400).json({ error: 'Все поля обязательны' });
+    }
+
+    if (display_name.length < 1 || display_name.length > 40) {
+      return res.status(400).json({ error: 'Имя от 1 до 40 символов' });
+    }
+
+    if (!/^[a-zA-Z0-9_]{3,30}$/.test(public_id)) {
+      return res.status(400).json({ error: 'ID: только буквы, цифры и _, от 3 до 30 символов' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Пароль минимум 6 символов' });
+    }
+
+    // Verify email code
+    const now = Math.floor(Date.now() / 1000);
+    const verification = db.prepare(
+      'SELECT id FROM email_verifications WHERE email = ? AND code = ? AND expires_at > ? AND used = 0 ORDER BY id DESC LIMIT 1'
+    ).get(email, code, now);
+
+    if (!verification) {
+      return res.status(400).json({ error: 'Неверный или просроченный код подтверждения' });
+    }
+
+    // Mark code as used
+    db.prepare('UPDATE email_verifications SET used = 1 WHERE id = ?').run(verification.id);
+
+    const existingUser = db.prepare('SELECT id FROM users WHERE public_id = ?').get(public_id);
+    if (existingUser) {
+      return res.status(409).json({ error: 'Этот ID уже занят' });
+    }
+
+    // Check if email column exists, add it if missing
+    try {
+      db.exec('ALTER TABLE users ADD COLUMN email TEXT DEFAULT NULL');
+    } catch { /* already exists */ }
+
+    const passwordHash = await bcrypt.hash(password, 10);
     const result = db.prepare(
       'INSERT INTO users (username, public_id, password_hash, email) VALUES (?, ?, ?, ?)'
     ).run(display_name, public_id, passwordHash, email);
@@ -188,7 +192,8 @@ router.post('/register', async (req, res) => {
       user: { id: result.lastInsertRowid, username: display_name, public_id, avatar: null },
     });
   } catch (e) {
-    return res.status(500).json({ error: 'Ошибка сервера' });
+    console.error('[register error]', e.message, e.stack);
+    return res.status(500).json({ error: e.message || 'Ошибка сервера' });
   }
 });
 
