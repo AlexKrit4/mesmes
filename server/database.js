@@ -229,3 +229,24 @@ try {
     )
   `);
 } catch (e) {}
+
+// Migration: add edited column to channel_messages
+try {
+  db.exec(`ALTER TABLE channel_messages ADD COLUMN edited INTEGER DEFAULT 0`);
+} catch (e) {}
+
+// Migration: channel_reactions table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channel_reactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      emoji TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (message_id) REFERENCES channel_messages(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(message_id, user_id)
+    )
+  `);
+} catch (e) {}

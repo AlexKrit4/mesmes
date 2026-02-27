@@ -38,6 +38,16 @@ export default function ChannelPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [fileUploading, setFileUploading] = useState(false);
 
+  // Edit channel message state
+  const [editingMsgId, setEditingMsgId] = useState(null);
+  const [editMsgText, setEditMsgText] = useState('');
+
+  // Reaction picker
+  const [reactionPickerMsgId, setReactionPickerMsgId] = useState(null);
+
+  // Pending file
+  const [pendingFile, setPendingFile] = useState(null);
+
   // Lightbox
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const [lightboxScale, setLightboxScale] = useState(1);
@@ -117,12 +127,49 @@ export default function ChannelPage() {
     };
 
     socket.on('channel_message', onChannelMsg);
-    return () => socket.off('channel_message', onChannelMsg);
+    const onChannelMsgEdited = ({ channel_id, messageId, content }) => {
+      if (channel_id === channelId) {
+        setMessages((prev) => prev.map((m) => m.id === messageId ? { ...m, content, edited: 1 } : m));
+      }
+    };
+    socket.on('channel_message_edited', onChannelMsgEdited);
+    return () => {
+      socket.off('channel_message', onChannelMsg);
+      socket.off('channel_message_edited', onChannelMsgEdited);
+    };
   }, [channelId]);
+
+  // Close reaction picker on outside click
+  useEffect(() => {
+    if (!reactionPickerMsgId) return;
+    const handler = () => setReactionPickerMsgId(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [reactionPickerMsgId]);
 
   const sendMessage = async () => {
     const content = text.trim();
-    if (!content) return;
+    if (!content && !pendingFile) return;
+
+    if (pendingFile) {
+      const file = pendingFile;
+      setPendingFile(null);
+      setText('');
+      setFileUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await api.post(`/channels/${channelId}/messages/file`, formData);
+        const { file_url } = res.data;
+        await api.post(`/channels/${channelId}/messages`, { content, file_url });
+      } catch (err) {
+        console.error('File upload error', err);
+      } finally {
+        setFileUploading(false);
+      }
+      return;
+    }
+
     try {
       await api.post(`/channels/${channelId}/messages`, { content });
       setText('');
@@ -133,17 +180,38 @@ export default function ChannelPage() {
 
   const sendFile = async (file) => {
     if (!file || fileUploading) return;
-    setFileUploading(true);
+    setPendingFile(file);
+  };
+
+  const startEditMsg = (msg) => {
+    setEditingMsgId(msg.id);
+    setEditMsgText(msg.content || '');
+  };
+
+  const cancelEditMsg = () => {
+    setEditingMsgId(null);
+    setEditMsgText('');
+  };
+
+  const saveEditMsg = async () => {
+    const content = editMsgText.trim();
+    if (!content || !editingMsgId) return;
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await api.post(`/channels/${channelId}/messages/file`, formData);
-      const { file_url } = res.data;
-      await api.post(`/channels/${channelId}/messages`, { content: '', file_url });
+      await api.patch(`/channels/${channelId}/messages/${editingMsgId}`, { content });
+      setMessages((prev) => prev.map((m) => m.id === editingMsgId ? { ...m, content, edited: 1 } : m));
+      cancelEditMsg();
     } catch (err) {
-      console.error('File upload error', err);
-    } finally {
-      setFileUploading(false);
+      console.error('Edit failed', err);
+    }
+  };
+
+  const toggleReaction = async (msgId, emoji) => {
+    setReactionPickerMsgId(null);
+    try {
+      const { data } = await api.post(`/channels/${channelId}/messages/${msgId}/react`, { emoji });
+      setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, reactions: data.reactions } : m));
+    } catch (err) {
+      console.error('Reaction failed', err);
     }
   };
 
@@ -253,6 +321,30 @@ export default function ChannelPage() {
 
         {messages.map((msg) => (
           <div key={msg.id} className="message-row out">
+            {/* Action button: pencil for owner, heart for others */}
+            {isMember && (
+              <div className="msg-action-btns channel-action">
+                {isOwner ? (
+                  <button className="msg-gear-btn" onClick={() => startEditMsg(msg)} title="Редактировать">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </button>
+                ) : (
+                  <button className="msg-gear-btn reaction-btn" onClick={(e) => { e.stopPropagation(); setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id); }} title="Реакция">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                  </button>
+                )}
+              </div>
+            )}
+            {/* Reaction picker popup */}
+            {reactionPickerMsgId === msg.id && (
+              <div className="reaction-picker" onClick={(e) => e.stopPropagation()}>
+                {['❤️', '👍', '👎'].map((emoji) => (
+                  <button key={emoji} className="reaction-picker-btn" onClick={() => toggleReaction(msg.id, emoji)}>
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="message out channel-msg">
               {msg.file_url && (
                 <img
@@ -263,7 +355,23 @@ export default function ChannelPage() {
                 />
               )}
               {msg.content && <div className="message-text"><Linkify>{msg.content}</Linkify></div>}
+              {/* Reactions display */}
+              {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                <div className="reactions-row">
+                  {Object.entries(msg.reactions).map(([emoji, data]) => (
+                    <button
+                      key={emoji}
+                      className={`reaction-chip ${data.me ? 'my' : ''}`}
+                      onClick={() => toggleReaction(msg.id, emoji)}
+                    >
+                      <span>{emoji}</span>
+                      <span className="reaction-count">{data.count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="message-meta">
+                {msg.edited ? <span className="message-edited">ред.</span> : null}
                 <span className="message-time">{formatTime(msg.created_at)}</span>
               </div>
             </div>
@@ -284,49 +392,72 @@ export default function ChannelPage() {
 
       {/* Input bar for owner */}
       {isOwner && (
-        <div className="message-input-bar">
-          <input
-            type="file"
-            accept="image/*"
-            ref={fileInputRef}
-            style={{ display: 'none' }}
-            onChange={(e) => { if (e.target.files[0]) sendFile(e.target.files[0]); e.target.value = ''; }}
-          />
-          <button
-            className="attach-btn"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={fileUploading}
-            title="Прикрепить изображение"
-          >
-            {fileUploading
-              ? <span className="attach-spinner" />
-              : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-            }
-          </button>
-          <textarea
-            className="message-input"
-            placeholder="Написать в канал..."
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-              }
-            }}
-            onFocus={() => setTimeout(scrollToBottom, 300)}
-            rows={1}
-          />
-          <button
-            className="send-btn"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={sendMessage}
-            disabled={!text.trim()}
-            aria-label="Отправить"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-          </button>
-        </div>
+        <>
+          {/* Edit bar */}
+          {editingMsgId && (
+            <div className="edit-bar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <span className="edit-bar-label">Редактирование</span>
+              <button className="edit-bar-cancel" onClick={cancelEditMsg}>✕</button>
+            </div>
+          )}
+          {/* Pending file preview */}
+          {pendingFile && (
+            <div className="file-preview-bar">
+              {pendingFile.type.startsWith('image/') ? (
+                <img src={URL.createObjectURL(pendingFile)} alt="" className="file-preview-thumb" />
+              ) : (
+                <span className="file-preview-name">{pendingFile.name}</span>
+              )}
+              <button className="file-preview-cancel" onClick={() => setPendingFile(null)}>✕</button>
+            </div>
+          )}
+          <div className="message-input-bar">
+            <input
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              onChange={(e) => { if (e.target.files[0]) sendFile(e.target.files[0]); e.target.value = ''; }}
+            />
+            {!editingMsgId && (
+              <button
+                className="attach-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={fileUploading}
+                title="Прикрепить изображение"
+              >
+                {fileUploading
+                  ? <span className="attach-spinner" />
+                  : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                }
+              </button>
+            )}
+            <textarea
+              className="message-input"
+              placeholder={editingMsgId ? 'Редактировать...' : 'Написать в канал...'}
+              value={editingMsgId ? editMsgText : text}
+              onChange={(e) => editingMsgId ? setEditMsgText(e.target.value) : setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  editingMsgId ? saveEditMsg() : sendMessage();
+                }
+              }}
+              onFocus={() => setTimeout(scrollToBottom, 300)}
+              rows={1}
+            />
+            <button
+              className="send-btn"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={editingMsgId ? saveEditMsg : sendMessage}
+              disabled={editingMsgId ? !editMsgText.trim() : (!text.trim() && !pendingFile)}
+              aria-label="Отправить"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+          </div>
+        </>
       )}
 
       {/* Unsubscribe confirm */}

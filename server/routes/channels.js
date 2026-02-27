@@ -176,7 +176,7 @@ router.patch('/:id', auth, (req, res) => {
 router.get('/:id/messages', auth, (req, res) => {
   const chId = parseInt(req.params.id);
   const messages = db.prepare(`
-    SELECT cm.id, cm.channel_id, cm.sender_id, cm.content, cm.file_url, cm.created_at,
+    SELECT cm.id, cm.channel_id, cm.sender_id, cm.content, cm.file_url, cm.created_at, cm.edited,
            u.username as sender_username
     FROM channel_messages cm
     JOIN users u ON cm.sender_id = u.id
@@ -184,6 +184,31 @@ router.get('/:id/messages', auth, (req, res) => {
     ORDER BY cm.created_at ASC
     LIMIT 500
   `).all(chId);
+
+  // Attach reactions to each message
+  const msgIds = messages.map(m => m.id);
+  if (msgIds.length > 0) {
+    const allReactions = db.prepare(
+      `SELECT message_id, emoji, COUNT(*) as count FROM channel_reactions WHERE message_id IN (${msgIds.join(',')}) GROUP BY message_id, emoji`
+    ).all();
+    const myReactions = db.prepare(
+      `SELECT message_id, emoji FROM channel_reactions WHERE message_id IN (${msgIds.join(',')}) AND user_id = ?`
+    ).all(req.userId);
+    const reactMap = {};
+    allReactions.forEach(r => {
+      if (!reactMap[r.message_id]) reactMap[r.message_id] = {};
+      reactMap[r.message_id][r.emoji] = { count: r.count, me: false };
+    });
+    myReactions.forEach(r => {
+      if (reactMap[r.message_id]?.[r.emoji]) reactMap[r.message_id][r.emoji].me = true;
+    });
+    messages.forEach(m => {
+      m.reactions = reactMap[m.id] || {};
+    });
+  } else {
+    messages.forEach(m => { m.reactions = {}; });
+  }
+
   res.json(messages);
 });
 
@@ -242,6 +267,74 @@ router.post('/:id/messages/file', auth, (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Выберите изображение' });
     res.json({ file_url: `/uploads/${req.file.filename}` });
   });
+});
+
+// PATCH /api/channels/:id/messages/:msgId — edit channel message (owner only)
+router.patch('/:id/messages/:msgId', auth, (req, res) => {
+  const chId = parseInt(req.params.id);
+  const msgId = parseInt(req.params.msgId);
+  const ch = db.prepare('SELECT owner_id FROM channels WHERE id = ?').get(chId);
+  if (!ch) return res.status(404).json({ error: 'Канал не найден' });
+  if (ch.owner_id !== req.userId) return res.status(403).json({ error: 'Только владелец' });
+
+  const msg = db.prepare('SELECT * FROM channel_messages WHERE id = ? AND channel_id = ?').get(msgId, chId);
+  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
+
+  const { content } = req.body;
+  if (!content || !content.trim()) return res.status(400).json({ error: 'Пустое сообщение' });
+
+  db.prepare('UPDATE channel_messages SET content = ?, edited = 1 WHERE id = ?').run(content.trim(), msgId);
+
+  // Broadcast edit to online members
+  const members = db.prepare('SELECT user_id FROM channel_members WHERE channel_id = ?').all(chId);
+  if (req.io && req.onlineUsers) {
+    members.forEach(({ user_id }) => {
+      if (req.onlineUsers.has(user_id)) {
+        req.onlineUsers.get(user_id).forEach((sid) => {
+          req.io.to(sid).emit('channel_message_edited', { channel_id: chId, messageId: msgId, content: content.trim() });
+        });
+      }
+    });
+  }
+
+  res.json({ success: true });
+});
+
+// POST /api/channels/:id/messages/:msgId/react — toggle reaction
+router.post('/:id/messages/:msgId/react', auth, (req, res) => {
+  const chId = parseInt(req.params.id);
+  const msgId = parseInt(req.params.msgId);
+  const { emoji } = req.body;
+  const ALLOWED = ['❤️', '👍', '👎'];
+  if (!ALLOWED.includes(emoji)) return res.status(400).json({ error: 'Недопустимая реакция' });
+
+  // Check membership
+  const member = db.prepare('SELECT id FROM channel_members WHERE channel_id = ? AND user_id = ?').get(chId, req.userId);
+  if (!member) return res.status(403).json({ error: 'Вы не участник канала' });
+
+  const existing = db.prepare('SELECT id, emoji as existingEmoji FROM channel_reactions WHERE message_id = ? AND user_id = ?').get(msgId, req.userId);
+
+  if (existing) {
+    if (existing.existingEmoji === emoji) {
+      // Remove reaction (toggle off)
+      db.prepare('DELETE FROM channel_reactions WHERE id = ?').run(existing.id);
+    } else {
+      // Switch emoji
+      db.prepare('UPDATE channel_reactions SET emoji = ? WHERE id = ?').run(emoji, existing.id);
+    }
+  } else {
+    db.prepare('INSERT INTO channel_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)').run(msgId, req.userId, emoji);
+  }
+
+  // Return updated reactions for this message
+  const reactions = db.prepare('SELECT emoji, COUNT(*) as count FROM channel_reactions WHERE message_id = ? GROUP BY emoji').all(msgId);
+  const myReaction = db.prepare('SELECT emoji FROM channel_reactions WHERE message_id = ? AND user_id = ?').get(msgId, req.userId);
+  const result = {};
+  reactions.forEach(r => {
+    result[r.emoji] = { count: r.count, me: myReaction?.emoji === r.emoji };
+  });
+
+  res.json({ reactions: result });
 });
 
 module.exports = router;

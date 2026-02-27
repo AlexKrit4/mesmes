@@ -67,6 +67,9 @@ export default function Chat() {
   const [lightboxScale, setLightboxScale] = useState(1);
   const [fileUploading, setFileUploading] = useState(false);
 
+  // Pending file attachment (preview before send)
+  const [pendingFile, setPendingFile] = useState(null);
+
   // Reply state
   const [replyTo, setReplyTo] = useState(null); // { id, content, sender_id, sender_username, file_url }
 
@@ -253,7 +256,32 @@ export default function Chat() {
 
   const sendMessage = () => {
     const content = text.trim();
-    if (!content) return;
+    if (!content && !pendingFile) return;
+
+    // If there's a pending file, upload it first then send
+    if (pendingFile) {
+      const file = pendingFile;
+      setPendingFile(null);
+      setText('');
+      const currentReplyTo = replyTo;
+      setReplyTo(null);
+      setFileUploading(true);
+      (async () => {
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await api.post('/users/messages/file', formData);
+          const { file_url } = res.data;
+          const socket = getSocket();
+          if (socket) socket.emit('send_message', { to: friendIdNum, content, file_url, reply_to_id: currentReplyTo?.id || null });
+        } catch (err) {
+          console.error('File upload error', err);
+        } finally {
+          setFileUploading(false);
+        }
+      })();
+      return;
+    }
 
     const socket = getSocket();
     if (!socket) return;
@@ -353,20 +381,8 @@ export default function Chat() {
 
   const sendFile = async (file) => {
     if (!file || fileUploading) return;
-    setFileUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await api.post('/users/messages/file', formData);
-      const { file_url } = res.data;
-      const socket = getSocket();
-      if (socket) socket.emit('send_message', { to: friendIdNum, content: '', file_url, reply_to_id: replyTo?.id || null });
-      setReplyTo(null);
-    } catch (err) {
-      console.error('File upload error', err);
-    } finally {
-      setFileUploading(false);
-    }
+    // Instead of sending immediately, set as pending attachment
+    setPendingFile(file);
   };
 
   // Gear button click — position menu in fixed (viewport) coordinates
@@ -590,6 +606,18 @@ export default function Chat() {
         </div>
       )}
 
+      {/* Pending file preview */}
+      {pendingFile && (
+        <div className="file-preview-bar">
+          {pendingFile.type.startsWith('image/') ? (
+            <img src={URL.createObjectURL(pendingFile)} alt="" className="file-preview-thumb" />
+          ) : (
+            <div className="file-preview-name">{pendingFile.name}</div>
+          )}
+          <button className="file-preview-cancel" onClick={() => setPendingFile(null)}>✕</button>
+        </div>
+      )}
+
       {/* Input bar */}
       <div className="message-input-bar">
         <input
@@ -632,7 +660,7 @@ export default function Chat() {
           className="send-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={editingMsgId ? saveEdit : sendMessage}
-          disabled={editingMsgId ? !editText.trim() : !text.trim()}
+          disabled={editingMsgId ? !editText.trim() : (!text.trim() && !pendingFile)}
           aria-label={editingMsgId ? 'Сохранить' : 'Отправить'}
         >
           {editingMsgId ? (
