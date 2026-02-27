@@ -2,7 +2,6 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
-const https = require('https');
 const db = require('../database');
 
 const router = express.Router();
@@ -10,41 +9,23 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret_in_production';
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || '';
 
 // --- helpers ---
-function httpsPost(url, body) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify(body);
-    const urlObj = new URL(url);
-    const options = {
-      hostname: urlObj.hostname,
-      path: urlObj.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data),
-      },
-    };
-    const req = https.request(options, (res) => {
-      let raw = '';
-      res.on('data', (c) => (raw += c));
-      res.on('end', () => {
-        try { resolve(JSON.parse(raw)); } catch { resolve({}); }
-      });
-    });
-    req.on('error', reject);
-    req.write(data);
-    req.end();
-  });
-}
-
 async function verifyTurnstile(token) {
   if (!TURNSTILE_SECRET) return true; // skip in dev if not configured
   try {
-    const data = await httpsPost('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      secret: TURNSTILE_SECRET,
-      response: token,
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: TURNSTILE_SECRET, response: token }),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
+    const data = await resp.json();
+    console.log('[turnstile result]', data);
     return data.success === true;
-  } catch {
+  } catch (e) {
+    console.error('[turnstile error]', e.message);
     return false;
   }
 }
@@ -67,6 +48,9 @@ function getMailTransporter() {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
 }
 
@@ -81,7 +65,10 @@ router.post('/send-code', async (req, res) => {
       return res.status(400).json({ error: 'Неверный формат email' });
     }
 
+    console.log('[send-code] start, email:', email);
+
     const captchaOk = await verifyTurnstile(turnstile_token);
+    console.log('[send-code] turnstile result:', captchaOk);
     if (!captchaOk) {
       return res.status(400).json({ error: 'Капча не пройдена. Попробуйте ещё раз.' });
     }
@@ -100,6 +87,7 @@ router.post('/send-code', async (req, res) => {
     db.prepare(
       'INSERT INTO email_verifications (email, code, expires_at) VALUES (?, ?, ?)'
     ).run(email, code, expiresAt);
+    console.log('[send-code] code saved, sending mail...');
 
     const transporter = getMailTransporter();
     await transporter.sendMail({
