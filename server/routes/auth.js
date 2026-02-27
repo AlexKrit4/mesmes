@@ -52,7 +52,7 @@ async function sendEmail({ to, subject, text, html }) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'Mes Messenger <onboarding@resend.dev>',
+      from: 'Mes Messenger <noreply@mesmes.ru>',
       to: [to],
       subject,
       text,
