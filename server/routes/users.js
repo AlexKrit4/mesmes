@@ -86,15 +86,29 @@ router.patch('/me', auth, (req, res) => {
   const newPublicId = public_id ? public_id.trim().toLowerCase() : user.public_id;
 
   if (newPublicId !== user.public_id) {
+    if (!/^[a-z0-9_]{3,24}$/.test(newPublicId)) return res.status(400).json({ error: 'ID: только a-z, 0-9, _ (3-24 символа)' });
     const exists = db.prepare('SELECT id FROM users WHERE public_id = ? AND id != ?').get(newPublicId, req.userId);
     if (exists) return res.status(400).json({ error: 'Этот ID уже занят' });
-    if (!/^[a-z0-9_]{3,24}$/.test(newPublicId)) return res.status(400).json({ error: 'ID: только a-z, 0-9, _ (3-24 символа)' });
+    // Rate limit: once per day
+    if (user.last_public_id_change) {
+      const diff = Date.now() - new Date(user.last_public_id_change).getTime();
+      if (diff < 24 * 60 * 60 * 1000) {
+        const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - diff) / 3600000);
+        return res.status(429).json({ error: `Менять ID можно раз в сутки. Следующая смена через ${hoursLeft} ч.` });
+      }
+    }
   }
   if (newUsername.length < 2 || newUsername.length > 32) {
     return res.status(400).json({ error: 'Имя: от 2 до 32 символов' });
   }
 
-  db.prepare('UPDATE users SET username = ?, public_id = ? WHERE id = ?').run(newUsername, newPublicId, req.userId);
+  const changedId = newPublicId !== user.public_id;
+  if (changedId) {
+    db.prepare('UPDATE users SET username = ?, public_id = ?, last_public_id_change = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(newUsername, newPublicId, req.userId);
+  } else {
+    db.prepare('UPDATE users SET username = ? WHERE id = ?').run(newUsername, req.userId);
+  }
   res.json({ username: newUsername, public_id: newPublicId });
 });
 
@@ -110,7 +124,7 @@ router.delete('/me', auth, (req, res) => {
 
 // GET /api/users/me
 router.get('/me', auth, (req, res) => {
-  const user = db.prepare('SELECT id, username, public_id, avatar, last_seen FROM users WHERE id = ?').get(req.userId);
+  const user = db.prepare('SELECT id, username, public_id, avatar, last_seen, last_public_id_change FROM users WHERE id = ?').get(req.userId);
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
   res.json(user);
 });
@@ -147,14 +161,17 @@ router.get('/search', auth, (req, res) => {
 // GET /api/users/friends
 router.get('/friends', auth, (req, res) => {
   const friends = db.prepare(`
-    SELECT u.id, u.username, u.public_id, u.avatar, u.last_seen, f.status
+    SELECT u.id, u.username, u.public_id, u.avatar, u.last_seen, f.status,
+      (SELECT COUNT(*) FROM messages
+         WHERE sender_id = u.id AND receiver_id = ? AND read_at IS NULL
+           AND deleted_for_receiver = 0) as unread_count
     FROM friends f
     JOIN users u ON (
       CASE WHEN f.user_id = ? THEN f.friend_id ELSE f.user_id END = u.id
     )
     WHERE (f.user_id = ? OR f.friend_id = ?)
     AND f.status = 'accepted'
-  `).all(req.userId, req.userId, req.userId);
+  `).all(req.userId, req.userId, req.userId, req.userId);
   res.json(friends);
 });
 
@@ -246,19 +263,35 @@ router.post('/reject-request', auth, (req, res) => {
   res.json({ success: true });
 });
 
+// DELETE /api/users/friends/:friendId — remove friend
+router.delete('/friends/:friendId', auth, (req, res) => {
+  const friendId = parseInt(req.params.friendId);
+  db.prepare(
+    'DELETE FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)'
+  ).run(req.userId, friendId, friendId, req.userId);
+  // Notify friend in realtime
+  if (req.io && req.onlineUsers?.has(friendId)) {
+    req.onlineUsers.get(friendId).forEach((sid) => {
+      req.io.to(sid).emit('friend_removed', { by: req.userId });
+    });
+  }
+  res.json({ success: true });
+});
+
 // GET /api/users/messages/:friendId
 router.get('/messages/:friendId', auth, (req, res) => {
   const friendId = parseInt(req.params.friendId);
   const messages = db.prepare(`
     SELECT m.id, m.sender_id, m.receiver_id, m.content, m.created_at, m.read_at,
-           u.username as sender_username
+           m.edited, u.username as sender_username
     FROM messages m
     JOIN users u ON m.sender_id = u.id
-    WHERE (m.sender_id = ? AND m.receiver_id = ?)
-       OR (m.sender_id = ? AND m.receiver_id = ?)
+    WHERE ((m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?))
+      AND NOT (m.sender_id = ? AND m.deleted_for_sender = 1)
+      AND NOT (m.receiver_id = ? AND m.deleted_for_receiver = 1)
     ORDER BY m.created_at ASC
     LIMIT 200
-  `).all(req.userId, friendId, friendId, req.userId);
+  `).all(req.userId, friendId, friendId, req.userId, req.userId, req.userId);
 
   // Mark as read and notify sender in real-time
   const now = new Date().toISOString();
@@ -275,14 +308,32 @@ router.get('/messages/:friendId', auth, (req, res) => {
   res.json(messages);
 });
 
+// PATCH /api/users/messages/:messageId — edit message
+router.patch('/messages/:messageId', auth, (req, res) => {
+  const msgId = parseInt(req.params.messageId);
+  const { content } = req.body;
+  if (!content || !content.trim()) return res.status(400).json({ error: 'Пустое сообщение' });
+  const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(msgId);
+  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
+  if (msg.sender_id !== req.userId) return res.status(403).json({ error: 'Можно редактировать только свои сообщения' });
+  const newContent = content.trim();
+  db.prepare('UPDATE messages SET content = ?, edited = 1 WHERE id = ?').run(newContent, msgId);
+  res.json({ success: true, messageId: msgId, content: newContent, receiverId: msg.receiver_id });
+});
+
 // DELETE /api/users/messages/:messageId
 router.delete('/messages/:messageId', auth, (req, res) => {
   const msgId = parseInt(req.params.messageId);
+  const { deleteForBoth } = req.body || {};
   const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(msgId);
   if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
   if (msg.sender_id !== req.userId) return res.status(403).json({ error: 'Можно удалять только свои сообщения' });
-  db.prepare('DELETE FROM messages WHERE id = ?').run(msgId);
-  res.json({ success: true, deletedId: msgId, receiverId: msg.receiver_id });
+  if (deleteForBoth) {
+    db.prepare('DELETE FROM messages WHERE id = ?').run(msgId);
+  } else {
+    db.prepare('UPDATE messages SET deleted_for_sender = 1 WHERE id = ?').run(msgId);
+  }
+  res.json({ success: true, deletedId: msgId, receiverId: msg.receiver_id, deleteForBoth: !!deleteForBoth });
 });
 
 module.exports = { router, auth };

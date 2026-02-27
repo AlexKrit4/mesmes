@@ -39,6 +39,18 @@ export default function Chat() {
   const [contextMenu, setContextMenu] = useState(null); // { msgId, x, y }
   const [showFriendProfile, setShowFriendProfile] = useState(false);
 
+  // Edit state
+  const [editingMsgId, setEditingMsgId] = useState(null);
+  const [editText, setEditText] = useState('');
+
+  // Delete confirm dialog
+  const [deleteDialog, setDeleteDialog] = useState(null); // msgId or null
+  const [deleteForBoth, setDeleteForBoth] = useState(true);
+
+  // Three-dots menu + remove friend
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const [showRemoveFriendConfirm, setShowRemoveFriendConfirm] = useState(false);
+
   const bottomRef = useRef(null);
   const typingTimeout = useRef(null);
   const messagesRef = useRef(null);
@@ -100,9 +112,9 @@ export default function Chat() {
     if (messages.length) setTimeout(scrollToBottom, 50);
   }, [messages, scrollToBottom]);
 
-  // Close context menu on any tap/click outside
+  // Close context menu / chat menu on any tap/click outside
   useEffect(() => {
-    const close = () => setContextMenu(null);
+    const close = () => { setContextMenu(null); setShowChatMenu(false); };
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, []);
@@ -166,6 +178,16 @@ export default function Chat() {
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
     };
 
+    const onMessageEdited = ({ messageId, content }) => {
+      setMessages((prev) =>
+        prev.map((m) => m.id === messageId ? { ...m, content, edited: 1 } : m)
+      );
+    };
+
+    const onFriendRemoved = ({ by }) => {
+      if (by === friendIdNum) navigate('/');
+    };
+
     socket.on('new_message', onNewMsg);
     socket.on('message_sent', onSent);
     socket.on('user_typing', onTyping);
@@ -173,6 +195,8 @@ export default function Chat() {
     socket.on('presence', onPresence);
     socket.on('message_deleted', onMessageDeleted);
     socket.on('messages_read', onMessagesRead);
+    socket.on('message_edited', onMessageEdited);
+    socket.on('friend_removed', onFriendRemoved);
 
     return () => {
       socket.off('new_message', onNewMsg);
@@ -182,6 +206,8 @@ export default function Chat() {
       socket.off('presence', onPresence);
       socket.off('message_deleted', onMessageDeleted);
       socket.off('messages_read', onMessagesRead);
+      socket.off('message_edited', onMessageEdited);
+      socket.off('friend_removed', onFriendRemoved);
     };
   }, [friendIdNum, me.id]);
 
@@ -199,24 +225,61 @@ export default function Chat() {
     clearTimeout(typingTimeout.current);
   };
 
-  const deleteMessage = async (msgId) => {
+  const openDeleteDialog = (msgId) => {
+    setDeleteDialog(msgId);
+    setDeleteForBoth(true);
+    setContextMenu(null);
+  };
+
+  const confirmDelete = async () => {
+    const msgId = deleteDialog;
+    setDeleteDialog(null);
     try {
-      await api.delete(`/users/messages/${msgId}`);
+      await api.delete(`/users/messages/${msgId}`, { data: { deleteForBoth } });
       const socket = getSocket();
-      if (socket) {
-        socket.emit('delete_message', { messageId: msgId, friendId: friendIdNum });
+      if (socket && deleteForBoth) {
+        socket.emit('delete_message', { messageId: msgId, friendId: friendIdNum, deleteForBoth: true });
       }
       setMessages((prev) => prev.filter((m) => m.id !== msgId));
     } catch (err) {
       console.error('Delete failed', err);
     }
+  };
+
+  const startEdit = (msg) => {
+    setEditingMsgId(msg.id);
+    setEditText(msg.content);
     setContextMenu(null);
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
+  const cancelEdit = () => {
+    setEditingMsgId(null);
+    setEditText('');
+  };
+
+  const saveEdit = async () => {
+    const content = editText.trim();
+    if (!content || !editingMsgId) return;
+    try {
+      await api.patch(`/users/messages/${editingMsgId}`, { content });
+      const socket = getSocket();
+      if (socket) socket.emit('edit_message', { messageId: editingMsgId, content, friendId: friendIdNum });
+      setMessages((prev) =>
+        prev.map((m) => m.id === editingMsgId ? { ...m, content, edited: 1 } : m)
+      );
+      cancelEdit();
+    } catch (err) {
+      console.error('Edit failed', err);
+    }
+  };
+
+  const removeFriend = async () => {
+    setShowRemoveFriendConfirm(false);
+    try {
+      await api.delete(`/users/friends/${friendIdNum}`);
+      navigate('/');
+    } catch (err) {
+      console.error('Remove friend failed', err);
     }
   };
 
@@ -281,6 +344,20 @@ export default function Chat() {
             </div>
           </div>
         </div>
+        {/* Three-dots menu */}
+        <div className="chat-menu-wrap">
+          <button className="topbar-btn" onClick={(e) => { e.stopPropagation(); setShowChatMenu((v) => !v); }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </button>
+          {showChatMenu && (
+            <div className="chat-dropdown" onClick={(e) => e.stopPropagation()}>
+              <button className="chat-dropdown-item danger" onClick={() => { setShowChatMenu(false); setShowRemoveFriendConfirm(true); }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                Удалить из друзей
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Messages */}
@@ -305,6 +382,7 @@ export default function Chat() {
             >
               <div className="message-text">{msg.content}</div>
               <div className="message-meta">
+                {msg.edited ? <span className="message-edited">ред.</span> : null}
                 <span className="message-time">{formatTime(msg.created_at)}</span>
                 {isOut && (
                   <span className={`message-check ${msg.read_at ? 'read' : ''}`}>
@@ -325,14 +403,21 @@ export default function Chat() {
 
         <div ref={bottomRef} />
 
-        {/* Context menu for message deletion */}
+        {/* Context menu for own messages */}
         {contextMenu && (
           <div
             className="msg-context-menu"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button className="ctx-btn delete" onClick={() => deleteMessage(contextMenu.msgId)}>
+            <button className="ctx-btn edit" onClick={() => {
+              const msg = messages.find((m) => m.id === contextMenu.msgId);
+              if (msg) startEdit(msg);
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Редактировать
+            </button>
+            <button className="ctx-btn delete" onClick={() => openDeleteDialog(contextMenu.msgId)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               Удалить
             </button>
@@ -340,26 +425,79 @@ export default function Chat() {
         )}
       </div>
 
+      {/* Edit bar */}
+      {editingMsgId && (
+        <div className="edit-bar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <div className="edit-bar-text">Редактирование</div>
+          <button className="edit-bar-cancel" onClick={cancelEdit}>✕</button>
+        </div>
+      )}
+
       {/* Input bar */}
       <div className="message-input-bar">
         <textarea
           className="message-input"
-          placeholder="Сообщение..."
-          value={text}
-          onChange={handleInput}
-          onKeyDown={handleKeyDown}
+          placeholder={editingMsgId ? 'Изменить сообщение...' : 'Сообщение...'}
+          value={editingMsgId ? editText : text}
+          onChange={editingMsgId
+            ? (e) => setEditText(e.target.value)
+            : handleInput
+          }
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              editingMsgId ? saveEdit() : sendMessage();
+            }
+            if (e.key === 'Escape' && editingMsgId) cancelEdit();
+          }}
           onFocus={() => setTimeout(scrollToBottom, 300)}
           rows={1}
         />
         <button
           className="send-btn"
-          onClick={sendMessage}
-          disabled={!text.trim()}
-          aria-label="Отправить"
+          onClick={editingMsgId ? saveEdit : sendMessage}
+          disabled={editingMsgId ? !editText.trim() : !text.trim()}
+          aria-label={editingMsgId ? 'Сохранить' : 'Отправить'}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          {editingMsgId ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          )}
         </button>
       </div>
+
+      {/* Delete message confirm dialog */}
+      {deleteDialog && (
+        <div className="modal-overlay" onClick={() => setDeleteDialog(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-name" style={{ fontSize: '1rem', marginBottom: 8 }}>Удалить сообщение?</div>
+            <label className="delete-option">
+              <input type="checkbox" checked={deleteForBoth} onChange={(e) => setDeleteForBoth(e.target.checked)} />
+              <span>Удалить у собеседника</span>
+            </label>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setDeleteDialog(null)}>Отмена</button>
+              <button className="btn btn-danger" onClick={confirmDelete}>Удалить</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove friend confirm dialog */}
+      {showRemoveFriendConfirm && (
+        <div className="modal-overlay" onClick={() => setShowRemoveFriendConfirm(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-name" style={{ fontSize: '1rem', marginBottom: 8 }}>Удалить из друзей?</div>
+            <div className="modal-status-text">Вы больше не сможете переписываться с {friend?.username}</div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setShowRemoveFriendConfirm(false)}>Отмена</button>
+              <button className="btn btn-danger" onClick={removeFriend}>Удалить</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Friend profile modal */}
       {showFriendProfile && friend && (

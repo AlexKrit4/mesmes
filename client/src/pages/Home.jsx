@@ -106,11 +106,26 @@ export default function Home() {
       // Could show a notification; for now just silently handled
     });
 
-    // Real-time: new message updates last message preview (optional refresh)
+    // Real-time: new message — re-fetch to update unread counts
     socket.on('new_message', () => {
-      // Re-fetch friends to get updated order/preview if needed
       fetchFriends();
     });
+
+    // Real-time: messages read by us or the other side — update unread counts
+    socket.on('messages_read', () => {
+      fetchFriends();
+    });
+
+    // Real-time: we were removed as a friend
+    socket.on('friend_removed', ({ by }) => {
+      setFriends((prev) => prev.filter((f) => f.id !== by));
+    });
+
+    // Re-fetch when tab becomes visible (e.g., returning from chat)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchFriends();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       socket.off('presence');
@@ -118,6 +133,9 @@ export default function Home() {
       socket.off('friend_request_accepted');
       socket.off('friend_request_rejected');
       socket.off('new_message');
+      socket.off('messages_read');
+      socket.off('friend_removed');
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [fetchFriends, fetchRequests]);
 
@@ -252,7 +270,11 @@ export default function Home() {
                       {online[f.id] ? 'онлайн' : timeSince(f.last_seen)}
                     </div>
                   </div>
-                  <svg className="friend-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  {f.unread_count > 0 ? (
+                    <span className="unread-badge">{f.unread_count > 99 ? '99+' : f.unread_count}</span>
+                  ) : (
+                    <svg className="friend-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  )}
                 </div>
               ))
             )}

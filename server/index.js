@@ -179,17 +179,36 @@ io.on('connection', (socket) => {
     socket.emit('message_sent', message);
   });
   // ── Удаление сообщения ──────────────────────────────────────────────────────────
-  socket.on('delete_message', ({ messageId }) => {
+  // DB deletion is handled by REST API; socket just propagates the event
+  socket.on('delete_message', ({ messageId, friendId, deleteForBoth }) => {
+    if (deleteForBoth) {
+      // Notify recipient
+      if (onlineUsers.has(friendId)) {
+        onlineUsers.get(friendId).forEach((sid) => io.to(sid).emit('message_deleted', { messageId }));
+      }
+    }
+    // Always notify own other tabs
+    onlineUsers.get(uid)?.forEach((sid) => {
+      if (sid !== socket.id) io.to(sid).emit('message_deleted', { messageId });
+    });
+  });
+
+  // ── Редактирование сообщения ────────────────────────────────────────────────────
+  socket.on('edit_message', ({ messageId, content, friendId }) => {
+    if (!content || !content.trim()) return;
     const msg = db.prepare('SELECT * FROM messages WHERE id = ? AND sender_id = ?').get(messageId, uid);
     if (!msg) return;
-    db.prepare('DELETE FROM messages WHERE id = ?').run(messageId);
-    const target = msg.receiver_id;
-    // Уведомить получателя
-    if (onlineUsers.has(target)) {
-      onlineUsers.get(target).forEach((sid) => io.to(sid).emit('message_deleted', { messageId }));
+    const newContent = content.trim();
+    db.prepare('UPDATE messages SET content = ?, edited = 1 WHERE id = ?').run(newContent, messageId);
+    const payload = { messageId, content: newContent };
+    // Notify recipient
+    if (onlineUsers.has(friendId)) {
+      onlineUsers.get(friendId).forEach((sid) => io.to(sid).emit('message_edited', payload));
     }
-    // Уведомить себя (другие вкладки)
-    onlineUsers.get(uid)?.forEach((sid) => io.to(sid).emit('message_deleted', { messageId }));
+    // Notify own other tabs
+    onlineUsers.get(uid)?.forEach((sid) => {
+      if (sid !== socket.id) io.to(sid).emit('message_edited', payload);
+    });
   });
   // ── Печатает ────────────────────────────────────────────────────────────
   socket.on('typing', ({ to }) => {

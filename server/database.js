@@ -95,6 +95,24 @@ try {
   // ignore
 }
 
+// Migration: add last_public_id_change to users
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN last_public_id_change DATETIME DEFAULT NULL`);
+} catch (e) {}
+
+// Migration: add edited flag to messages
+try {
+  db.exec(`ALTER TABLE messages ADD COLUMN edited INTEGER DEFAULT 0`);
+} catch (e) {}
+
+// Migration: add soft-delete flags to messages
+try {
+  db.exec(`ALTER TABLE messages ADD COLUMN deleted_for_sender INTEGER DEFAULT 0`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE messages ADD COLUMN deleted_for_receiver INTEGER DEFAULT 0`);
+} catch (e) {}
+
 // Migration: remove UNIQUE constraint from username (display name should not be unique)
 // SQLite doesn't support DROP CONSTRAINT, so we recreate the table
 try {

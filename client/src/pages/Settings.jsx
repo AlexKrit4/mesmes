@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { disconnectSocket } from '../socket.js';
@@ -13,6 +13,21 @@ export default function Settings() {
   const [idMsg, setIdMsg] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [idRateLimitHours, setIdRateLimitHours] = useState(0); // 0 = no limit
+
+  // Fetch user data to check last_public_id_change
+  useEffect(() => {
+    api.get('/users/me').then(({ data }) => {
+      if (data.last_public_id_change) {
+        const diff = Date.now() - new Date(
+          data.last_public_id_change.endsWith('Z') ? data.last_public_id_change : data.last_public_id_change + 'Z'
+        ).getTime();
+        if (diff < 24 * 60 * 60 * 1000) {
+          setIdRateLimitHours(Math.ceil((24 * 60 * 60 * 1000 - diff) / 3600000));
+        }
+      }
+    }).catch(() => {});
+  }, []);
 
   const saveName = async () => {
     if (!username.trim() || username.trim() === me.username) return;
@@ -41,6 +56,7 @@ export default function Settings() {
       meData.public_id = data.public_id;
       localStorage.setItem('me', JSON.stringify(meData));
       setIdMsg('✓ ID обновлён');
+      setIdRateLimitHours(24);
     } catch (err) {
       setIdMsg(err.response?.data?.error || 'Ошибка');
     } finally {
@@ -110,6 +126,9 @@ export default function Settings() {
         <div className="settings-section">
           <div className="settings-section-title">Публичный ID</div>
           <div className="settings-hint">По этому ID вас находят друзья</div>
+          {idRateLimitHours > 0 && (
+            <p className="settings-msg error">ID можно менять раз в сутки. Следующая смена через {idRateLimitHours} ч.</p>
+          )}
           <div className="settings-row">
             <input
               className="settings-input"
@@ -117,11 +136,12 @@ export default function Settings() {
               onChange={(e) => { setPublicId(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')); setIdMsg(''); }}
               placeholder="your_id"
               maxLength={24}
+              disabled={idRateLimitHours > 0}
             />
             <button
               className="btn btn-accent settings-save-btn"
               onClick={saveId}
-              disabled={loading || !publicId.trim() || publicId.trim() === me.public_id}
+              disabled={loading || !publicId.trim() || publicId.trim() === me.public_id || idRateLimitHours > 0}
             >
               Сохранить
             </button>
