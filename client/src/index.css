@@ -191,6 +191,27 @@ a { color: var(--accent); text-decoration: none; }
   margin-bottom: 16px;
 }
 
+.info-box {
+  background: rgba(108, 92, 231, 0.1);
+  border: 1px solid rgba(108, 92, 231, 0.3);
+  color: var(--accent2);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent2);
+  cursor: pointer;
+  font-size: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+.link-btn:hover { color: var(--accent); }
+
 .auth-footer {
   text-align: center;
   margin-top: 22px;

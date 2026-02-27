@@ -70,3 +70,26 @@ try {
 } catch (e) {
   // ignore
 }
+
+// Migration: add email column to users
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN email TEXT DEFAULT NULL`);
+} catch (e) {
+  // ignore
+}
+
+// Migration: email verifications table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_verifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      code TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at INTEGER DEFAULT (unixepoch())
+    )
+  `);
+} catch (e) {
+  // ignore
+}

@@ -1,16 +1,95 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const db = require('../database');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret_in_production';
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || '';
+
+// --- helpers ---
+async function verifyTurnstile(token) {
+  if (!TURNSTILE_SECRET) return true; // skip in dev if not configured
+  try {
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: TURNSTILE_SECRET, response: token }),
+    });
+    const data = await resp.json();
+    return data.success === true;
+  } catch {
+    return false;
+  }
+}
+
+function getMailTransporter() {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
+
+// POST /api/auth/send-code
+router.post('/send-code', async (req, res) => {
+  const { email, turnstile_token } = req.body;
+  if (!email || !turnstile_token) {
+    return res.status(400).json({ error: 'Email и captcha обязательны' });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Неверный формат email' });
+  }
+
+  const captchaOk = await verifyTurnstile(turnstile_token);
+  if (!captchaOk) {
+    return res.status(400).json({ error: 'Капча не пройдена. Попробуйте ещё раз.' });
+  }
+
+  // Rate-limit: not more than 1 code per 60 sec for this email
+  const recent = db.prepare(
+    'SELECT id FROM email_verifications WHERE email = ? AND created_at > (unixepoch() - 60) ORDER BY id DESC LIMIT 1'
+  ).get(email);
+  if (recent) {
+    return res.status(429).json({ error: 'Подождите 60 секунд перед повторной отправкой' });
+  }
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = Math.floor(Date.now() / 1000) + 600; // 10 min
+
+  db.prepare(
+    'INSERT INTO email_verifications (email, code, expires_at) VALUES (?, ?, ?)'
+  ).run(email, code, expiresAt);
+
+  try {
+    const transporter = getMailTransporter();
+    await transporter.sendMail({
+      from: `"Mes Messenger" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: 'Код подтверждения Mes',
+      text: `Ваш код подтверждения: ${code}\n\nКод действует 10 минут.`,
+      html: `<div style="font-family:sans-serif;max-width:400px">
+        <h2 style="color:#6c5ce7">Mes Messenger</h2>
+        <p>Ваш код подтверждения:</p>
+        <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#6c5ce7;margin:20px 0">${code}</div>
+        <p style="color:#888">Код действует 10 минут.</p>
+      </div>`,
+    });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('Mail error:', e);
+    return res.status(500).json({ error: 'Не удалось отправить письмо. Проверьте настройки SMTP.' });
+  }
+});
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
-  const { display_name, public_id, password } = req.body;
+  const { display_name, public_id, password, email, code } = req.body;
 
-  if (!display_name || !public_id || !password) {
+  if (!display_name || !public_id || !password || !email || !code) {
     return res.status(400).json({ error: 'Все поля обязательны' });
   }
 
@@ -26,6 +105,19 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: 'Пароль минимум 6 символов' });
   }
 
+  // Verify email code
+  const now = Math.floor(Date.now() / 1000);
+  const verification = db.prepare(
+    'SELECT id FROM email_verifications WHERE email = ? AND code = ? AND expires_at > ? AND used = 0 ORDER BY id DESC LIMIT 1'
+  ).get(email, code, now);
+
+  if (!verification) {
+    return res.status(400).json({ error: 'Неверный или просроченный код подтверждения' });
+  }
+
+  // Mark code as used
+  db.prepare('UPDATE email_verifications SET used = 1 WHERE id = ?').run(verification.id);
+
   const existingUser = db.prepare('SELECT id FROM users WHERE public_id = ?').get(public_id);
   if (existingUser) {
     return res.status(409).json({ error: 'Этот ID уже занят' });
@@ -35,8 +127,8 @@ router.post('/register', async (req, res) => {
 
   try {
     const result = db.prepare(
-      'INSERT INTO users (username, public_id, password_hash) VALUES (?, ?, ?)'
-    ).run(display_name, public_id, passwordHash);
+      'INSERT INTO users (username, public_id, password_hash, email) VALUES (?, ?, ?, ?)'
+    ).run(display_name, public_id, passwordHash, email);
 
     const token = jwt.sign({ userId: result.lastInsertRowid }, JWT_SECRET, { expiresIn: '30d' });
     return res.json({
