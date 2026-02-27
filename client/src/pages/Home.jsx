@@ -42,6 +42,7 @@ export default function Home() {
   const [showProfile, setShowProfile] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(() => localStorage.getItem('newUser') === '1');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showRequests, setShowRequests] = useState(false);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [chName, setChName] = useState('');
@@ -148,6 +149,11 @@ export default function Home() {
       setFriends((prev) => prev.filter((f) => f.id !== by));
     });
 
+    // Real-time: new channel message — re-fetch channels for ordering
+    socket.on('channel_message', () => {
+      fetchChannels();
+    });
+
     // Re-fetch when tab becomes visible (e.g., returning from chat)
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') { fetchFriends(); fetchChannels(); }
@@ -162,6 +168,7 @@ export default function Home() {
       socket.off('new_message');
       socket.off('messages_read');
       socket.off('friend_removed');
+      socket.off('channel_message');
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [fetchFriends, fetchRequests, fetchChannels]);
@@ -288,6 +295,10 @@ export default function Home() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             </button>
           )}
+          <button className="topbar-btn" onClick={() => setShowRequests(true)} title="Заявки" style={{ position: 'relative' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+            {requests.length > 0 && <span className="topbar-badge">{requests.length}</span>}
+          </button>
           <button className="topbar-btn" onClick={() => navigate('/settings')} title="Настройки">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
@@ -318,9 +329,9 @@ export default function Home() {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           Чаты
         </button>
-        <button className={`tab ${tab === 'requests' ? 'active' : ''}`} onClick={() => setTab('requests')}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-          {requests.length > 0 && <span className="badge">{requests.length}</span>}
+        <button className={`tab ${tab === 'channels' ? 'active' : ''}`} onClick={() => setTab('channels')}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Каналы
         </button>
       </div>
 
@@ -329,50 +340,37 @@ export default function Home() {
         {/* ── Chats ── */}
         {tab === 'chats' && (
           <>
-            {friends.length === 0 && channels.length === 0 ? (
+            {friends.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon">💬</div>
                 <div className="empty-title">Пока нет чатов</div>
                 <div className="empty-text">Нажмите + чтобы найти друзей или создать канал</div>
               </div>
             ) : (
-              <>
-                {friends.map((f) => (
-                  <div key={`f-${f.id}`} className="friend-item" onClick={() => navigate(`/chat/${f.id}`)}>
-                    <div className="avatar-wrap">
-                      <Avatar user={f} size={46} />
-                      <div className={`status-dot ${online[f.id] ? 'online' : ''}`} />
-                    </div>
-                    <div className="friend-info">
-                      <div className="friend-name">{f.username}</div>
-                      <div className="friend-status">
-                        {online[f.id] ? 'онлайн' : timeSince(f.last_seen)}
-                      </div>
-                    </div>
-                    {f.unread_count > 0 ? (
-                      <span className="unread-badge">{f.unread_count > 99 ? '99+' : f.unread_count}</span>
-                    ) : (
-                      <svg className="friend-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-                    )}
+              friends.map((f) => (
+                <div key={`f-${f.id}`} className="friend-item" onClick={() => navigate(`/chat/${f.id}`)}>
+                  <div className="avatar-wrap">
+                    <Avatar user={f} size={46} />
+                    <div className={`status-dot ${online[f.id] ? 'online' : ''}`} />
                   </div>
-                ))}
-                {channels.map((ch) => (
-                  <div key={`ch-${ch.id}`} className="friend-item" onClick={() => navigate(`/channel/${ch.id}`)}>
-                    <div className="avatar-wrap">
-                      {ch.avatar ? (
-                        <img className="avatar" src={ch.avatar} alt="" style={{ width: 46, height: 46 }} />
-                      ) : (
-                        <div className="avatar" style={{ width: 46, height: 46 }}>📢</div>
-                      )}
+                  <div className="friend-info">
+                    <div className="friend-name">{f.username}</div>
+                    <div className="friend-status friend-last-msg">
+                      {f.last_message
+                        ? (f.last_message_sender_id === me.id ? 'Вы: ' : '') + f.last_message.slice(0, 40)
+                        : f.last_message_file
+                          ? (f.last_message_sender_id === me.id ? 'Вы: ' : '') + '🖼️ Фото'
+                          : online[f.id] ? 'онлайн' : timeSince(f.last_seen)
+                      }
                     </div>
-                    <div className="friend-info">
-                      <div className="friend-name">{ch.name}</div>
-                      <div className="friend-status">канал</div>
-                    </div>
+                  </div>
+                  {f.unread_count > 0 ? (
+                    <span className="unread-badge">{f.unread_count > 99 ? '99+' : f.unread_count}</span>
+                  ) : (
                     <svg className="friend-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-                  </div>
-                ))}
-              </>
+                  )}
+                </div>
+              ))
             )}
 
             {/* FAB */}
@@ -382,9 +380,58 @@ export default function Home() {
           </>
         )}
 
-        {/* ── Requests ── */}
-        {tab === 'requests' && (
+        {/* ── Channels ── */}
+        {tab === 'channels' && (
           <>
+            {channels.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">📢</div>
+                <div className="empty-title">Нет каналов</div>
+                <div className="empty-text">Нажмите + чтобы создать канал или присоединитесь по ссылке</div>
+              </div>
+            ) : (
+              channels.map((ch) => (
+                <div key={`ch-${ch.id}`} className="friend-item" onClick={() => navigate(`/channel/${ch.id}`)}>
+                  <div className="avatar-wrap">
+                    {ch.avatar ? (
+                      <img className="avatar" src={ch.avatar} alt="" style={{ width: 46, height: 46 }} />
+                    ) : (
+                      <div className="avatar" style={{ width: 46, height: 46 }}>📢</div>
+                    )}
+                  </div>
+                  <div className="friend-info">
+                    <div className="friend-name">{ch.name}</div>
+                    <div className="friend-status friend-last-msg">
+                      {ch.last_message
+                        ? ch.last_message.slice(0, 40)
+                        : ch.last_message_file
+                          ? '🖼️ Фото'
+                          : 'канал'
+                      }
+                    </div>
+                  </div>
+                  <svg className="friend-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              ))
+            )}
+
+            {/* FAB */}
+            <button className="fab" onClick={() => setShowAddPanel(true)} title="Добавить">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </>
+        )}
+
+      </div>
+
+      {/* ── Requests overlay ── */}
+      {showRequests && (
+        <div className="modal-overlay" onClick={() => setShowRequests(false)}>
+          <div className="add-panel-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="add-panel-header">
+              <h2>Заявки в друзья</h2>
+              <button className="modal-close" onClick={() => setShowRequests(false)}>✕</button>
+            </div>
             {requests.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon">🤝</div>
@@ -406,10 +453,9 @@ export default function Home() {
                 </div>
               ))
             )}
-          </>
-        )}
-
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Add panel overlay (search + create channel) ── */}
       {showAddPanel && (

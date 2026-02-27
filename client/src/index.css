@@ -270,6 +270,24 @@ a { color: var(--accent); text-decoration: none; }
 }
 .topbar-btn:hover { background: var(--bg3); color: var(--text); }
 
+.topbar-badge {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  line-height: 1;
+}
+
 .topbar-back {
   background: none;
   border: none;
@@ -1850,6 +1868,22 @@ img.avatar {
   font-size: 13px;
   color: var(--text2);
   line-height: 1.7;
+}
+
+/* ─── Clickable links in messages ─── */
+.msg-link {
+  color: var(--accent);
+  text-decoration: underline;
+  word-break: break-all;
+}
+.msg-link:hover { opacity: 0.8; }
+
+/* ─── Last message preview in chat list ─── */
+.friend-last-msg {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
 }
 
 /* ─── FAB (Floating Action Button) ─── */

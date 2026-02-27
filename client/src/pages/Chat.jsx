@@ -3,6 +3,17 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, getSocket } from '../socket.js';
 
+const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
+function Linkify({ children }) {
+  if (!children || typeof children !== 'string') return children;
+  const parts = children.split(URL_REGEX);
+  return parts.map((part, i) =>
+    URL_REGEX.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="msg-link" onClick={e => e.stopPropagation()}>{part}</a>
+      : part
+  );
+}
+
 function parseUTC(dateStr) {
   if (!dateStr) return null;
   // Ensure UTC interpretation — append Z if missing
@@ -499,7 +510,7 @@ export default function Chat() {
                     onClick={(e) => { e.stopPropagation(); setLightboxSrc(msg.file_url); setLightboxScale(1); }}
                   />
                 )}
-                {msg.content && <div className="message-text">{msg.content}</div>}
+                {msg.content && <div className="message-text"><Linkify>{msg.content}</Linkify></div>}
                 <div className="message-meta">
                   {msg.edited ? <span className="message-edited">ред.</span> : null}
                   <span className="message-time">{formatTime(msg.created_at)}</span>

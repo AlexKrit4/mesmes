@@ -96,11 +96,19 @@ router.post('/:id/avatar', auth, (req, res) => {
 // GET /api/channels/my — list channels I'm a member of
 router.get('/my', auth, (req, res) => {
   const channels = db.prepare(`
-    SELECT c.id, c.name, c.description, c.avatar, c.owner_id, c.invite_code, c.created_at
+    SELECT c.id, c.name, c.description, c.avatar, c.owner_id, c.invite_code, c.created_at,
+      lm.content as last_message,
+      lm.file_url as last_message_file,
+      lm.created_at as last_message_at
     FROM channels c
     JOIN channel_members cm ON cm.channel_id = c.id
+    LEFT JOIN channel_messages lm ON lm.id = (
+      SELECT cm2.id FROM channel_messages cm2
+      WHERE cm2.channel_id = c.id
+      ORDER BY cm2.created_at DESC LIMIT 1
+    )
     WHERE cm.user_id = ?
-    ORDER BY c.created_at DESC
+    ORDER BY COALESCE(lm.created_at, c.created_at) DESC
   `).all(req.userId);
   res.json(channels);
 });

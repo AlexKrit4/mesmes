@@ -194,14 +194,25 @@ router.get('/friends', auth, (req, res) => {
     SELECT u.id, u.username, u.public_id, u.avatar, u.last_seen, f.status,
       (SELECT COUNT(*) FROM messages
          WHERE sender_id = u.id AND receiver_id = ? AND read_at IS NULL
-           AND deleted_for_receiver = 0) as unread_count
+           AND deleted_for_receiver = 0) as unread_count,
+      lm.content as last_message,
+      lm.file_url as last_message_file,
+      lm.sender_id as last_message_sender_id,
+      lm.created_at as last_message_at
     FROM friends f
     JOIN users u ON (
       CASE WHEN f.user_id = ? THEN f.friend_id ELSE f.user_id END = u.id
     )
+    LEFT JOIN messages lm ON lm.id = (
+      SELECT m.id FROM messages m
+      WHERE ((m.sender_id = ? AND m.receiver_id = u.id) OR (m.sender_id = u.id AND m.receiver_id = ?))
+        AND m.deleted_for_receiver = 0
+      ORDER BY m.created_at DESC LIMIT 1
+    )
     WHERE (f.user_id = ? OR f.friend_id = ?)
     AND f.status = 'accepted'
-  `).all(req.userId, req.userId, req.userId, req.userId);
+    ORDER BY COALESCE(lm.created_at, '1970-01-01') DESC
+  `).all(req.userId, req.userId, req.userId, req.userId, req.userId, req.userId);
   res.json(friends);
 });
 
