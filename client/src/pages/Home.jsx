@@ -31,6 +31,7 @@ export default function Home() {
 
   const [tab, setTab] = useState('chats');
   const [friends, setFriends] = useState([]);
+  const [channels, setChannels] = useState([]);
   const [requests, setRequests] = useState([]);
   const [searchQ, setSearchQ] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -41,6 +42,12 @@ export default function Home() {
   const [showProfile, setShowProfile] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(() => localStorage.getItem('newUser') === '1');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showAddPanel, setShowAddPanel] = useState(false);
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [chName, setChName] = useState('');
+  const [chDesc, setChDesc] = useState('');
+  const [chAvatarFile, setChAvatarFile] = useState(null);
+  const [chCreating, setChCreating] = useState(false);
 
   // Handle mobile viewport resize (keyboard etc.)
   useEffect(() => {
@@ -57,6 +64,13 @@ export default function Home() {
   const fetchFriends = useCallback(async () => {
     const { data } = await api.get('/users/friends');
     setFriends(data);
+  }, []);
+
+  const fetchChannels = useCallback(async () => {
+    try {
+      const { data } = await api.get('/channels/my');
+      setChannels(data);
+    } catch { /* */ }
   }, []);
 
   // Request push permission and subscribe
@@ -82,6 +96,7 @@ export default function Home() {
   useEffect(() => {
     fetchFriends();
     fetchRequests();
+    fetchChannels();
 
     const socket = connectSocket();
     if (!socket) return;
@@ -135,7 +150,7 @@ export default function Home() {
 
     // Re-fetch when tab becomes visible (e.g., returning from chat)
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') fetchFriends();
+      if (document.visibilityState === 'visible') { fetchFriends(); fetchChannels(); }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
@@ -149,7 +164,7 @@ export default function Home() {
       socket.off('friend_removed');
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [fetchFriends, fetchRequests]);
+  }, [fetchFriends, fetchRequests, fetchChannels]);
 
   // Search users by public_id
   useEffect(() => {
@@ -218,6 +233,29 @@ export default function Home() {
     localStorage.removeItem('newUser');
   };
 
+  const createChannel = async () => {
+    if (!chName.trim() || chCreating) return;
+    setChCreating(true);
+    try {
+      const { data } = await api.post('/channels', { name: chName.trim(), description: chDesc.trim() });
+      // Upload avatar if selected
+      if (chAvatarFile) {
+        const fd = new FormData();
+        fd.append('avatar', chAvatarFile);
+        await api.post(`/channels/${data.id}/avatar`, fd);
+      }
+      setChName(''); setChDesc(''); setChAvatarFile(null);
+      setShowCreateChannel(false);
+      setShowAddPanel(false);
+      fetchChannels();
+      navigate(`/channel/${data.id}`);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Ошибка создания канала');
+    } finally {
+      setChCreating(false);
+    }
+  };
+
   return (
     <div className="app-layout" ref={layoutRef}>
       {/* Push notifications prompt for new users */}
@@ -280,10 +318,6 @@ export default function Home() {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           Чаты
         </button>
-        <button className={`tab ${tab === 'search' ? 'active' : ''}`} onClick={() => setTab('search')}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          Найти
-        </button>
         <button className={`tab ${tab === 'requests' ? 'active' : ''}`} onClick={() => setTab('requests')}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
           {requests.length > 0 && <span className="badge">{requests.length}</span>}
@@ -295,39 +329,97 @@ export default function Home() {
         {/* ── Chats ── */}
         {tab === 'chats' && (
           <>
-            {friends.length === 0 ? (
+            {friends.length === 0 && channels.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon">💬</div>
                 <div className="empty-title">Пока нет чатов</div>
-                <div className="empty-text">Найдите друзей по ID во вкладке «Найти»</div>
+                <div className="empty-text">Нажмите + чтобы найти друзей или создать канал</div>
               </div>
             ) : (
-              friends.map((f) => (
-                <div key={f.id} className="friend-item" onClick={() => navigate(`/chat/${f.id}`)}>
-                  <div className="avatar-wrap">
-                    <Avatar user={f} size={46} />
-                    <div className={`status-dot ${online[f.id] ? 'online' : ''}`} />
-                  </div>
-                  <div className="friend-info">
-                    <div className="friend-name">{f.username}</div>
-                    <div className="friend-status">
-                      {online[f.id] ? 'онлайн' : timeSince(f.last_seen)}
+              <>
+                {friends.map((f) => (
+                  <div key={`f-${f.id}`} className="friend-item" onClick={() => navigate(`/chat/${f.id}`)}>
+                    <div className="avatar-wrap">
+                      <Avatar user={f} size={46} />
+                      <div className={`status-dot ${online[f.id] ? 'online' : ''}`} />
                     </div>
+                    <div className="friend-info">
+                      <div className="friend-name">{f.username}</div>
+                      <div className="friend-status">
+                        {online[f.id] ? 'онлайн' : timeSince(f.last_seen)}
+                      </div>
+                    </div>
+                    {f.unread_count > 0 ? (
+                      <span className="unread-badge">{f.unread_count > 99 ? '99+' : f.unread_count}</span>
+                    ) : (
+                      <svg className="friend-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    )}
                   </div>
-                  {f.unread_count > 0 ? (
-                    <span className="unread-badge">{f.unread_count > 99 ? '99+' : f.unread_count}</span>
-                  ) : (
+                ))}
+                {channels.map((ch) => (
+                  <div key={`ch-${ch.id}`} className="friend-item" onClick={() => navigate(`/channel/${ch.id}`)}>
+                    <div className="avatar-wrap">
+                      {ch.avatar ? (
+                        <img className="avatar" src={ch.avatar} alt="" style={{ width: 46, height: 46 }} />
+                      ) : (
+                        <div className="avatar" style={{ width: 46, height: 46 }}>📢</div>
+                      )}
+                    </div>
+                    <div className="friend-info">
+                      <div className="friend-name">{ch.name}</div>
+                      <div className="friend-status">канал</div>
+                    </div>
                     <svg className="friend-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-                  )}
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* FAB */}
+            <button className="fab" onClick={() => setShowAddPanel(true)} title="Добавить">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </>
+        )}
+
+        {/* ── Requests ── */}
+        {tab === 'requests' && (
+          <>
+            {requests.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">🤝</div>
+                <div className="empty-title">Нет заявок</div>
+                <div className="empty-text">Входящие запросы в друзья появятся здесь</div>
+              </div>
+            ) : (
+              requests.map((r) => (
+                <div key={r.request_id} className="friend-item">
+                  <Avatar user={r} size={40} className="avatar-sm" />
+                  <div className="friend-info">
+                    <div className="friend-name">{r.username}</div>
+                    <div className="friend-id">@{r.public_id}</div>
+                  </div>
+                  <div className="request-actions">
+                    <button className="btn-icon accept" onClick={() => acceptRequest(r.request_id)} title="Принять">✓</button>
+                    <button className="btn-icon reject" onClick={() => rejectRequest(r.request_id)} title="Отклонить">✗</button>
+                  </div>
                 </div>
               ))
             )}
           </>
         )}
 
-        {/* ── Search ── */}
-        {tab === 'search' && (
-          <>
+      </div>
+
+      {/* ── Add panel overlay (search + create channel) ── */}
+      {showAddPanel && (
+        <div className="modal-overlay" onClick={() => setShowAddPanel(false)}>
+          <div className="add-panel-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="add-panel-header">
+              <h2>Добавить</h2>
+              <button className="modal-close" onClick={() => setShowAddPanel(false)}>✕</button>
+            </div>
+
             <div className="my-id-box">
               <div className="my-id-label">Ваш ID</div>
               <div className="my-id-value">{me.public_id}</div>
@@ -378,37 +470,50 @@ export default function Home() {
               </div>
               {addMsg && <p className={`add-msg ${addMsg.includes('отправлена') ? 'success' : 'error'}`}>{addMsg}</p>}
             </div>
-          </>
-        )}
 
-        {/* ── Requests ── */}
-        {tab === 'requests' && (
-          <>
-            {requests.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">🤝</div>
-                <div className="empty-title">Нет заявок</div>
-                <div className="empty-text">Входящие запросы в друзья появятся здесь</div>
-              </div>
-            ) : (
-              requests.map((r) => (
-                <div key={r.request_id} className="friend-item">
-                  <Avatar user={r} size={40} className="avatar-sm" />
-                  <div className="friend-info">
-                    <div className="friend-name">{r.username}</div>
-                    <div className="friend-id">@{r.public_id}</div>
-                  </div>
-                  <div className="request-actions">
-                    <button className="btn-icon accept" onClick={() => acceptRequest(r.request_id)} title="Принять">✓</button>
-                    <button className="btn-icon reject" onClick={() => rejectRequest(r.request_id)} title="Отклонить">✗</button>
-                  </div>
-                </div>
-              ))
-            )}
-          </>
-        )}
+            <div className="divider" />
 
-      </div>
+            <button className="btn btn-accent" style={{ width: '100%' }} onClick={() => setShowCreateChannel(true)}>
+              📢 Создать канал
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Create channel modal ── */}
+      {showCreateChannel && (
+        <div className="modal-overlay" onClick={() => setShowCreateChannel(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+            <button className="modal-close" onClick={() => setShowCreateChannel(false)}>✕</button>
+            <div className="modal-name" style={{ fontSize: '1.1rem', marginBottom: 12 }}>Создать канал</div>
+
+            <div className="ch-avatar-pick" onClick={() => document.getElementById('ch-avatar-input').click()}>
+              {chAvatarFile ? (
+                <img src={URL.createObjectURL(chAvatarFile)} alt="" className="ch-avatar-preview" />
+              ) : (
+                <div className="ch-avatar-placeholder">📷</div>
+              )}
+              <input id="ch-avatar-input" type="file" accept="image/*" hidden onChange={(e) => { if (e.target.files[0]) setChAvatarFile(e.target.files[0]); }} />
+            </div>
+
+            <div className="form-group">
+              <label>Название</label>
+              <input placeholder="Мой канал" value={chName} onChange={(e) => setChName(e.target.value)} maxLength={50} />
+            </div>
+            <div className="form-group">
+              <label>Описание</label>
+              <textarea placeholder="О чём этот канал..." value={chDesc} onChange={(e) => setChDesc(e.target.value)} rows={3} style={{ resize: 'vertical' }} />
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setShowCreateChannel(false)}>Отмена</button>
+              <button className="btn btn-accent" onClick={createChannel} disabled={!chName.trim() || chCreating}>
+                {chCreating ? 'Создание...' : 'Создать'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

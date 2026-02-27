@@ -18,6 +18,7 @@ const db = require('./database');
 const authRoutes = require('./routes/auth');
 const { router: usersRouter, auth } = require('./routes/users');
 const adminRoutes = require('./routes/admin');
+const channelRoutes = require('./routes/channels');
 
 const app = express();
 const server = http.createServer(app);
@@ -74,6 +75,7 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRouter);
 app.use('/api/admin', adminRoutes);
+app.use('/api/channels', channelRoutes);
 
 // Serve React build in production
 if (process.env.NODE_ENV === 'production') {

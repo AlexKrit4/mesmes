@@ -182,3 +182,50 @@ try {
 try {
   db.prepare("UPDATE users SET is_admin = 1 WHERE public_id = 'alexkrit'").run();
 } catch (e) {}
+
+// Migration: channels table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      avatar TEXT DEFAULT NULL,
+      owner_id INTEGER NOT NULL,
+      invite_code TEXT UNIQUE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (owner_id) REFERENCES users(id)
+    )
+  `);
+} catch (e) {}
+
+// Migration: channel_members table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channel_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(channel_id, user_id)
+    )
+  `);
+} catch (e) {}
+
+// Migration: channel_messages table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channel_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id INTEGER NOT NULL,
+      sender_id INTEGER NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      file_url TEXT DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+      FOREIGN KEY (sender_id) REFERENCES users(id)
+    )
+  `);
+} catch (e) {}
