@@ -11,33 +11,35 @@ registerRoute(
   new NetworkFirst({ cacheName: 'api-cache' })
 );
 
+// Track which chat the user is viewing (set via postMessage from the app)
+let currentViewingChat = null;
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'VIEWING_CHAT') {
+    currentViewingChat = event.data.friendId || null;
+  }
+});
+
 // Push notification handler
 self.addEventListener('push', (event) => {
   if (!event.data) return;
   const data = event.data.json();
   // Extract senderId from tag like "chat-123"
   const senderId = data.tag ? data.tag.replace('chat-', '') : null;
+
+  // If user is currently viewing this sender's chat, suppress the notification
+  if (senderId && currentViewingChat && String(currentViewingChat) === String(senderId)) {
+    return;
+  }
+
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // If any focused client is on the sender's chat page, suppress notification
-      for (const client of clientList) {
-        if (client.visibilityState === 'visible' && client.url) {
-          try {
-            const url = new URL(client.url);
-            if (senderId && url.pathname === `/chat/${senderId}`) {
-              return; // suppress — user is looking at this chat
-            }
-          } catch {}
-        }
-      }
-      return self.registration.showNotification(data.title || 'МесМес', {
-        body: data.body || 'Новое сообщение',
-        icon: '/icons/icon-192.png',
-        badge: '/icons/icon-192.png',
-        tag: data.tag || 'message',
-        renotify: true,
-        data: { url: data.url || '/' },
-      });
+    self.registration.showNotification(data.title || 'МесМес', {
+      body: data.body || 'Новое сообщение',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: data.tag || 'message',
+      renotify: true,
+      data: { url: data.url || '/' },
     })
   );
 });

@@ -119,13 +119,22 @@ export default function Chat() {
     if (messages.length) setTimeout(scrollToBottom, 50);
   }, [messages, scrollToBottom]);
 
-  // Tell server we are viewing this chat (suppresses push notifications)
+  // Tell server + service worker we are viewing this chat (suppresses push notifications)
   useEffect(() => {
     const socket = getSocket();
     if (socket) socket.emit('viewing_chat', { friendId: friendIdNum });
+    // Notify SW via postMessage (works in TWA where clients.matchAll fails)
+    navigator.serviceWorker?.controller?.postMessage({ type: 'VIEWING_CHAT', friendId: friendIdNum });
+    // Also handle SW becoming active later
+    const onControllerChange = () => {
+      navigator.serviceWorker?.controller?.postMessage({ type: 'VIEWING_CHAT', friendId: friendIdNum });
+    };
+    navigator.serviceWorker?.addEventListener('controllerchange', onControllerChange);
     return () => {
       const s = getSocket();
       if (s) s.emit('viewing_chat', { friendId: null });
+      navigator.serviceWorker?.controller?.postMessage({ type: 'VIEWING_CHAT', friendId: null });
+      navigator.serviceWorker?.removeEventListener('controllerchange', onControllerChange);
     };
   }, [friendIdNum]);
 
