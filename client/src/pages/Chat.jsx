@@ -119,6 +119,16 @@ export default function Chat() {
     if (messages.length) setTimeout(scrollToBottom, 50);
   }, [messages, scrollToBottom]);
 
+  // Tell server we are viewing this chat (suppresses push notifications)
+  useEffect(() => {
+    const socket = getSocket();
+    if (socket) socket.emit('viewing_chat', { friendId: friendIdNum });
+    return () => {
+      const s = getSocket();
+      if (s) s.emit('viewing_chat', { friendId: null });
+    };
+  }, [friendIdNum]);
+
   // Close context menu / chat menu on click outside
   useEffect(() => {
     const close = () => { setContextMenu(null); setShowChatMenu(false); };
@@ -345,15 +355,32 @@ export default function Chat() {
     const VH = window.innerHeight;
     const VW = window.innerWidth;
 
-    // Horizontal: right-align for own msgs, left-align for friend msgs
-    const xProp = isOut
-      ? { right: Math.max(0, VW - btnRect.right) }
-      : { left: Math.max(0, Math.min(btnRect.left, VW - MENU_W)) };
+    // Horizontal: for outgoing, align menu's right edge to gear's right edge;
+    // for incoming, align menu's left edge to gear's left edge.
+    // Always clamp so the menu stays within the viewport.
+    let xProp;
+    if (isOut) {
+      // Try right-aligning to gear button. If that pushes menu off-left, switch to left-aligning.
+      const rightVal = VW - btnRect.right;
+      if (rightVal + MENU_W > VW) {
+        xProp = { left: Math.max(4, btnRect.left) };
+      } else {
+        // Also check if menu goes off the left edge (right + MENU_W > VW means left edge < 0)
+        const menuLeft = VW - rightVal - MENU_W;
+        if (menuLeft < 4) {
+          xProp = { left: 4 };
+        } else {
+          xProp = { right: rightVal };
+        }
+      }
+    } else {
+      xProp = { left: Math.max(4, Math.min(btnRect.left, VW - MENU_W - 4)) };
+    }
 
     // Vertical: below button or above if not enough space
     const belowY = btnRect.bottom + 4;
     const aboveY = btnRect.top - MENU_H - 4;
-    const fixedTop = belowY + MENU_H <= VH ? belowY : Math.max(0, aboveY);
+    const fixedTop = belowY + MENU_H <= VH ? belowY : Math.max(4, aboveY);
 
     setContextMenu({ msgId: msg.id, content: msg.content, xProp, fixedTop, isOut });
   };

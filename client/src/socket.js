@@ -1,6 +1,7 @@
 import { io } from 'socket.io-client';
 
 let socket = null;
+let _visHandler = null;
 
 export function getSocket() {
   return socket;
@@ -19,10 +20,26 @@ export function connectSocket() {
     reconnectionDelay: 1500,
   });
 
+  // Track page visibility — tell server when user goes away / comes back
+  if (_visHandler) document.removeEventListener('visibilitychange', _visHandler);
+  _visHandler = () => {
+    if (!socket?.connected) return;
+    if (document.visibilityState === 'hidden') {
+      socket.emit('user_away');
+    } else {
+      socket.emit('user_active');
+    }
+  };
+  document.addEventListener('visibilitychange', _visHandler);
+
   return socket;
 }
 
 export function disconnectSocket() {
+  if (_visHandler) {
+    document.removeEventListener('visibilitychange', _visHandler);
+    _visHandler = null;
+  }
   if (socket) {
     socket.disconnect();
     socket = null;

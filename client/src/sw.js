@@ -15,14 +15,29 @@ registerRoute(
 self.addEventListener('push', (event) => {
   if (!event.data) return;
   const data = event.data.json();
+  // Extract senderId from tag like "chat-123"
+  const senderId = data.tag ? data.tag.replace('chat-', '') : null;
   event.waitUntil(
-    self.registration.showNotification(data.title || 'МесМес', {
-      body: data.body || 'Новое сообщение',
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
-      tag: data.tag || 'message',
-      renotify: true,
-      data: { url: data.url || '/' },
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // If any focused client is on the sender's chat page, suppress notification
+      for (const client of clientList) {
+        if (client.visibilityState === 'visible' && client.url) {
+          try {
+            const url = new URL(client.url);
+            if (senderId && url.pathname === `/chat/${senderId}`) {
+              return; // suppress — user is looking at this chat
+            }
+          } catch {}
+        }
+      }
+      return self.registration.showNotification(data.title || 'МесМес', {
+        body: data.body || 'Новое сообщение',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        tag: data.tag || 'message',
+        renotify: true,
+        data: { url: data.url || '/' },
+      });
     })
   );
 });

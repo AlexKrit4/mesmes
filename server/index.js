@@ -105,6 +105,9 @@ io.on('connection', (socket) => {
   if (!onlineUsers.has(uid)) onlineUsers.set(uid, new Set());
   onlineUsers.get(uid).add(socket.id);
 
+  // Track which chat this socket is currently viewing (null = none)
+  socket.viewingChat = null;
+
   // Notify friends that user is online
   broadcastPresence(uid, true);
 
@@ -222,6 +225,38 @@ io.on('connection', (socket) => {
   socket.on('stop_typing', ({ to }) => {
     if (onlineUsers.has(to)) {
       onlineUsers.get(to).forEach((sid) => io.to(sid).emit('user_stop_typing', { from: uid }));
+    }
+  });
+  // ── Viewing chat tracking (suppress push when user is looking at the chat) ──
+  socket.on('viewing_chat', ({ friendId }) => {
+    socket.viewingChat = friendId || null;
+  });
+
+  // ── Activity tracking (realistic online status) ──────────────────────────
+  socket.isAway = false;
+
+  socket.on('user_away', () => {
+    socket.isAway = true;
+    // If ALL sockets for this user are away, broadcast offline
+    const allAway = [...(onlineUsers.get(uid) || [])].every((sid) => {
+      const s = io.sockets.sockets.get(sid);
+      return s && s.isAway;
+    });
+    if (allAway) {
+      const now = new Date().toISOString();
+      db.prepare('UPDATE users SET last_seen = ? WHERE id = ?').run(now, uid);
+      broadcastPresence(uid, false, now);
+    }
+  });
+
+  socket.on('user_active', () => {
+    const wasAllAway = [...(onlineUsers.get(uid) || [])].every((sid) => {
+      const s = io.sockets.sockets.get(sid);
+      return s && s.isAway;
+    });
+    socket.isAway = false;
+    if (wasAllAway) {
+      broadcastPresence(uid, true);
     }
   });
 
