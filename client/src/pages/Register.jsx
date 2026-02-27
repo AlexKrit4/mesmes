@@ -73,7 +73,12 @@ export default function Register() {
       setInfo(`Код отправлен на ${email}`);
       setStep(2);
     } catch (err) {
-      setError(err.response?.data?.error || 'Ошибка соединения');
+      console.error('send-code error:', err.message, err.code, err.response?.status, err.response?.data);
+      const msg = err.response?.data?.error
+        || (err.code === 'ECONNABORTED' ? 'Тайм-аут. Попробуйте ещё раз.' : '')
+        || err.message
+        || 'Ошибка соединения';
+      setError(msg);
       // Reset turnstile
       if (widgetIdRef.current != null && window.turnstile) {
         window.turnstile.reset(widgetIdRef.current);
@@ -102,7 +107,9 @@ export default function Register() {
       localStorage.setItem('me', JSON.stringify(data.user));
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Ошибка соединения');
+      console.error('register error:', err.message, err.code, err.response?.status, err.response?.data);
+      const msg = err.response?.data?.error || err.message || 'Ошибка соединения';
+      setError(msg);
     } finally {
       setLoading(false);
     }
