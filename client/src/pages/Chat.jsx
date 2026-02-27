@@ -367,8 +367,15 @@ export default function Chat() {
     }
   };
 
+  const autoResize = (el) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 6 * 24 + 20) + 'px';
+  };
+
   const handleInput = (e) => {
     setText(e.target.value);
+    autoResize(e.target);
     const socket = getSocket();
     if (!socket) return;
 
@@ -450,7 +457,7 @@ export default function Chat() {
           <div className="chat-topbar-text">
             <div className="chat-topbar-name">{friend?.username || '...'}</div>
             <div className={`chat-topbar-status ${isOnline ? 'online' : ''}`}>
-              {isTyping ? 'печатает...' : isOnline ? 'в сети' : `@${friend?.public_id || ''}`}
+              {isTyping ? 'печатает...' : isOnline ? 'в сети' : friend?.last_seen ? `был(а) ${timeSince(friend.last_seen)}` : ''}
             </div>
           </div>
         </div>
@@ -643,7 +650,7 @@ export default function Chat() {
           placeholder={editingMsgId ? 'Изменить сообщение...' : 'Сообщение...'}
           value={editingMsgId ? editText : text}
           onChange={editingMsgId
-            ? (e) => setEditText(e.target.value)
+            ? (e) => { setEditText(e.target.value); autoResize(e.target); }
             : handleInput
           }
           onKeyDown={(e) => {
