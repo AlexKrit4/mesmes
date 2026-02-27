@@ -56,6 +56,9 @@ export default function Chat() {
   const [lightboxScale, setLightboxScale] = useState(1);
   const [fileUploading, setFileUploading] = useState(false);
 
+  // Reply state
+  const [replyTo, setReplyTo] = useState(null); // { id, content, sender_id, sender_username, file_url }
+
   const bottomRef = useRef(null);
   const typingTimeout = useRef(null);
   const messagesRef = useRef(null);
@@ -244,8 +247,9 @@ export default function Chat() {
     const socket = getSocket();
     if (!socket) return;
 
-    socket.emit('send_message', { to: friendIdNum, content });
+    socket.emit('send_message', { to: friendIdNum, content, reply_to_id: replyTo?.id || null });
     setText('');
+    setReplyTo(null);
 
     socket.emit('stop_typing', { to: friendIdNum });
     clearTimeout(typingTimeout.current);
@@ -345,7 +349,8 @@ export default function Chat() {
       const res = await api.post('/users/messages/file', formData);
       const { file_url } = res.data;
       const socket = getSocket();
-      if (socket) socket.emit('send_message', { to: friendIdNum, content: '', file_url });
+      if (socket) socket.emit('send_message', { to: friendIdNum, content: '', file_url, reply_to_id: replyTo?.id || null });
+      setReplyTo(null);
     } catch (err) {
       console.error('File upload error', err);
     } finally {
@@ -450,15 +455,42 @@ export default function Chat() {
         {messages.map((msg) => {
           const isOut = msg.sender_id === me.id;
           return (
-            <div key={msg.id} className={`message-row ${isOut ? 'out' : 'in'}`}>
-              <button
-                className="msg-gear-btn"
-                onClick={(e) => openContextMenu(e, msg)}
-                title="Действия"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.92c.04-.34.07-.69.07-1.08 0-.39-.03-.74-.07-1.08l2.32-1.81c.21-.16.27-.46.13-.7l-2.2-3.81c-.13-.24-.42-.33-.67-.24l-2.73 1.1c-.57-.43-1.18-.8-1.87-1.07L14.5 2.42C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42L9.13 5.29C8.44 5.56 7.83 5.93 7.26 6.36L4.53 5.26c-.25-.09-.54 0-.67.24L1.66 9.31c-.14.24-.08.54.13.7L4.11 11.82C4.07 12.16 4 12.51 4 12.92c0 .39.03.74.07 1.08l-2.32 1.81c-.21.16-.27.46-.13.7l2.2 3.81c.13.24.42.33.67.24l2.73-1.1c.57.43 1.18.8 1.87 1.07l.37 2.87c.04.24.25.42.5.42h4c.25 0 .46-.18.49-.42l.37-2.87c.69-.27 1.3-.64 1.87-1.07l2.73 1.1c.25.09.54 0 .67-.24l2.2-3.81c.14-.24.08-.54-.13-.7l-2.32-1.81z"/></svg>
-              </button>
+            <div key={msg.id} id={`msg-${msg.id}`} className={`message-row ${isOut ? 'out' : 'in'}`}>
+              <div className="msg-action-btns">
+                <button
+                  className="msg-gear-btn"
+                  onClick={() => {
+                    const replyMsg = {
+                      id: msg.id,
+                      content: msg.content,
+                      sender_id: msg.sender_id,
+                      sender_username: msg.sender_id === me.id ? me.username : (friend?.username || '?'),
+                      file_url: msg.file_url,
+                    };
+                    setReplyTo(replyMsg);
+                  }}
+                  title="Ответить"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
+                </button>
+                <button
+                  className="msg-gear-btn"
+                  onClick={(e) => openContextMenu(e, msg)}
+                  title="Действия"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.92c.04-.34.07-.69.07-1.08 0-.39-.03-.74-.07-1.08l2.32-1.81c.21-.16.27-.46.13-.7l-2.2-3.81c-.13-.24-.42-.33-.67-.24l-2.73 1.1c-.57-.43-1.18-.8-1.87-1.07L14.5 2.42C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42L9.13 5.29C8.44 5.56 7.83 5.93 7.26 6.36L4.53 5.26c-.25-.09-.54 0-.67.24L1.66 9.31c-.14.24-.08.54.13.7L4.11 11.82C4.07 12.16 4 12.51 4 12.92c0 .39.03.74.07 1.08l-2.32 1.81c-.21.16-.27.46-.13.7l2.2 3.81c.13.24.42.33.67.24l2.73-1.1c.57.43 1.18.8 1.87 1.07l.37 2.87c.04.24.25.42.5.42h4c.25 0 .46-.18.49-.42l.37-2.87c.69-.27 1.3-.64 1.87-1.07l2.73 1.1c.25.09.54 0 .67-.24l2.2-3.81c.14-.24.08-.54-.13-.7l-2.32-1.81z"/></svg>
+                </button>
+              </div>
               <div className={`message ${isOut ? 'out' : 'in'}`}>
+                {msg.reply_to && (
+                  <div className="reply-quote" onClick={() => {
+                    const el = document.getElementById(`msg-${msg.reply_to.id}`);
+                    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('msg-highlight'); setTimeout(() => el.classList.remove('msg-highlight'), 1500); }
+                  }}>
+                    <div className="reply-quote-name">{msg.reply_to.sender_id === me.id ? 'Вы' : (msg.reply_to.sender_username || 'Пользователь')}</div>
+                    <div className="reply-quote-text">{msg.reply_to.file_url ? '🖼️ Изображение' : (msg.reply_to.content || '...')}</div>
+                  </div>
+                )}
                 {msg.file_url && (
                   <img
                     src={msg.file_url}
@@ -524,6 +556,18 @@ export default function Chat() {
             </button>
           </div>
         </>
+      )}
+
+      {/* Reply bar */}
+      {replyTo && !editingMsgId && (
+        <div className="reply-bar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0, color: 'var(--accent)' }}><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
+          <div className="reply-bar-content">
+            <div className="reply-bar-name">{replyTo.sender_id === me.id ? 'Вы' : (replyTo.sender_username || 'Пользователь')}</div>
+            <div className="reply-bar-text">{replyTo.file_url ? '🖼️ Изображение' : (replyTo.content?.slice(0, 80) || '...')}</div>
+          </div>
+          <button className="reply-bar-cancel" onClick={() => setReplyTo(null)}>✕</button>
+        </div>
       )}
 
       {/* Edit bar */}

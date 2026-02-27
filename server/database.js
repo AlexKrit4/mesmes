@@ -118,6 +118,11 @@ try {
   db.exec(`ALTER TABLE messages ADD COLUMN file_url TEXT DEFAULT NULL`);
 } catch (e) {}
 
+// Migration: add reply_to_id to messages (for reply/quote feature)
+try {
+  db.exec(`ALTER TABLE messages ADD COLUMN reply_to_id INTEGER DEFAULT NULL`);
+} catch (e) {}
+
 // Migration: remove UNIQUE constraint from username (display name should not be unique)
 // SQLite doesn't support DROP CONSTRAINT, so we recreate the table
 try {

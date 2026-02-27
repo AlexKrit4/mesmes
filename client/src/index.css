@@ -1438,3 +1438,89 @@ img.avatar {
   margin-top: 8px;
 }
 .delete-option input { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+
+/* ─── Message action buttons container (reply + gear) ─── */
+.msg-action-btns {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 0;
+  align-items: center;
+}
+
+/* ─── Reply quote inside bubble ─── */
+.reply-quote {
+  background: rgba(139, 92, 246, 0.10);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+}
+.reply-quote-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 1px;
+}
+.reply-quote-text {
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+/* ─── Reply bar above input ─── */
+.reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg2);
+  border-top: 1px solid var(--bg3);
+}
+.reply-bar-content {
+  flex: 1;
+  min-width: 0;
+}
+.reply-bar-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.reply-bar-text {
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reply-bar-cancel {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 50%;
+  color: var(--text2);
+  font-size: 14px;
+  transition: background 0.15s;
+}
+.reply-bar-cancel:hover { background: var(--bg3); color: var(--text); }
+
+/* ─── Highlight when scrolling to a replied message ─── */
+.msg-highlight .message {
+  animation: msgHighlight 1.5s ease;
+}
+@keyframes msgHighlight {
+  0%, 100% { box-shadow: none; }
+  20%, 60% { box-shadow: 0 0 0 2px var(--accent); }
+}

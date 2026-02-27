@@ -112,7 +112,7 @@ io.on('connection', (socket) => {
   broadcastPresence(uid, true);
 
   // ── Отправка сообщения ──────────────────────────────────────────────────
-  socket.on('send_message', ({ to, content, file_url }) => {
+  socket.on('send_message', ({ to, content, file_url, reply_to_id }) => {
     const trimContent = (content || '').trim();
     if (!to || (!trimContent && !file_url)) return;
 
@@ -127,10 +127,20 @@ io.on('connection', (socket) => {
 
     const now = new Date().toISOString();
     const result = db.prepare(
-      'INSERT INTO messages (sender_id, receiver_id, content, file_url, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(uid, to, trimContent, file_url || null, now);
+      'INSERT INTO messages (sender_id, receiver_id, content, file_url, reply_to_id, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(uid, to, trimContent, file_url || null, reply_to_id || null, now);
 
     const sender = db.prepare('SELECT username FROM users WHERE id = ?').get(uid);
+
+    // Fetch replied-to message if exists
+    let reply_to = null;
+    if (reply_to_id) {
+      const rm = db.prepare('SELECT id, content, sender_id, file_url FROM messages WHERE id = ?').get(reply_to_id);
+      if (rm) {
+        const rmSender = db.prepare('SELECT username FROM users WHERE id = ?').get(rm.sender_id);
+        reply_to = { id: rm.id, content: rm.content, sender_id: rm.sender_id, file_url: rm.file_url, sender_username: rmSender?.username };
+      }
+    }
 
     const message = {
       id: result.lastInsertRowid,
@@ -138,6 +148,8 @@ io.on('connection', (socket) => {
       receiver_id: to,
       content: trimContent,
       file_url: file_url || null,
+      reply_to_id: reply_to_id || null,
+      reply_to,
       created_at: now,
       read_at: null,
       sender_username: sender.username,

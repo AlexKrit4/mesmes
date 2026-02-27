@@ -299,7 +299,7 @@ router.delete('/friends/:friendId', auth, (req, res) => {
 router.get('/messages/:friendId', auth, (req, res) => {
   const friendId = parseInt(req.params.friendId);
   const messages = db.prepare(`
-    SELECT m.id, m.sender_id, m.receiver_id, m.content, m.file_url, m.created_at, m.read_at,
+    SELECT m.id, m.sender_id, m.receiver_id, m.content, m.file_url, m.reply_to_id, m.created_at, m.read_at,
            m.edited, u.username as sender_username
     FROM messages m
     JOIN users u ON m.sender_id = u.id
@@ -322,7 +322,19 @@ router.get('/messages/:friendId', auth, (req, res) => {
     });
   }
 
-  res.json(messages);
+  // Enrich messages with reply_to data
+  const enriched = messages.map((msg) => {
+    if (msg.reply_to_id) {
+      const rm = db.prepare('SELECT id, content, sender_id, file_url FROM messages WHERE id = ?').get(msg.reply_to_id);
+      if (rm) {
+        const rmSender = db.prepare('SELECT username FROM users WHERE id = ?').get(rm.sender_id);
+        msg.reply_to = { id: rm.id, content: rm.content, sender_id: rm.sender_id, file_url: rm.file_url, sender_username: rmSender?.username };
+      }
+    }
+    return msg;
+  });
+
+  res.json(enriched);
 });
 
 // PATCH /api/users/messages/:messageId — edit message
