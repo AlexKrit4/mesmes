@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, disconnectSocket, getSocket } from '../socket.js';
 import { subscribeToPush, setupPushKeepAlive } from '../pushNotifications.js';
+import AvatarCropModal from '../AvatarCropModal.jsx';
 
 function timeSince(dateStr) {
   if (!dateStr) return '';
@@ -51,6 +52,9 @@ export default function Home() {
   const [chDesc, setChDesc] = useState('');
   const [chAvatarFile, setChAvatarFile] = useState(null);
   const [chCreating, setChCreating] = useState(false);
+
+  // Avatar crop modal
+  const [avatarCropFile, setAvatarCropFile] = useState(null);
 
   // Handle mobile viewport resize (keyboard etc.)
   useEffect(() => {
@@ -221,11 +225,17 @@ export default function Home() {
     fetchRequests();
   };
 
-  const uploadAvatar = async (e) => {
+  const uploadAvatar = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    e.target.value = '';
+    setAvatarCropFile(file);
+  };
+
+  const uploadCroppedAvatar = async (blob) => {
+    setAvatarCropFile(null);
     const formData = new FormData();
-    formData.append('avatar', file);
+    formData.append('avatar', blob, 'avatar.jpg');
     try {
       const { data } = await api.post('/users/avatar', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -590,6 +600,15 @@ export default function Home() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Avatar crop modal */}
+      {avatarCropFile && (
+        <AvatarCropModal
+          file={avatarCropFile}
+          onConfirm={uploadCroppedAvatar}
+          onCancel={() => setAvatarCropFile(null)}
+        />
       )}
     </div>
   );

@@ -1199,6 +1199,129 @@ img.avatar {
   user-select: none;
 }
 
+/* ─── Avatar Crop Modal ─── */
+.crop-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.15s ease-out;
+}
+.crop-modal {
+  background: var(--bg2);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 360px;
+}
+.crop-modal-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+}
+.crop-hint {
+  font-size: 13px;
+  color: var(--text2);
+  margin-top: -6px;
+}
+.crop-wrapper {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  flex-shrink: 0;
+}
+.crop-container {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  overflow: hidden;
+  border-radius: 4px;
+  cursor: grab;
+  touch-action: none;
+  background: #111;
+  user-select: none;
+}
+.crop-container:active { cursor: grabbing; }
+/* Circle vignette over crop square — shows what will become the circle avatar */
+.crop-vignette {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 560px rgba(0,0,0,0.58);
+  pointer-events: none;
+  z-index: 10;
+}
+/* Zoom slider */
+.crop-zoom-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  color: var(--text2);
+}
+.crop-zoom-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg3);
+  outline: none;
+  cursor: pointer;
+}
+.crop-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+.crop-zoom-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+.crop-modal-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+/* Avatar view hint (eye icon) on profile */
+.profile-avatar-view-hint {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0,0,0,0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.18s, background 0.18s;
+  pointer-events: none;
+}
+.profile-avatar-wrap:hover .profile-avatar-view-hint {
+  opacity: 1;
+  background: rgba(0,0,0,0.35);
+}
+
 
 .spinner {
   width: 28px;

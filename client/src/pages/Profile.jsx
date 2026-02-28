@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
+import AvatarCropModal from '../AvatarCropModal.jsx';
 
 function parseUTC(dateStr) {
   if (!dateStr) return null;
@@ -44,6 +45,14 @@ export default function Profile() {
   const [idRateLimitHours, setIdRateLimitHours] = useState(0);
   const [phoneRateLimitDays, setPhoneRateLimitDays] = useState(0);
 
+  // Avatar crop
+  const [cropFile, setCropFile] = useState(null);
+
+  // Avatar lightbox
+  const [avatarLightbox, setAvatarLightbox] = useState(false);
+  const [lightboxScale, setLightboxScale] = useState(1);
+  const pinchDistRef = useRef(null);
+
   useEffect(() => {
     setLoading(true);
     api.get(`/users/profile/${publicId}`).then(({ data }) => {
@@ -69,11 +78,17 @@ export default function Profile() {
     }).finally(() => setLoading(false));
   }, [publicId]);
 
-  const uploadAvatar = async (e) => {
+  const onFileSelected = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    e.target.value = '';
+    setCropFile(file);
+  };
+
+  const uploadCroppedAvatar = async (blob) => {
+    setCropFile(null);
     const formData = new FormData();
-    formData.append('avatar', file);
+    formData.append('avatar', blob, 'avatar.jpg');
     try {
       const { data } = await api.post('/users/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       setProfile((p) => ({ ...p, avatar: data.avatar }));
@@ -191,8 +206,15 @@ export default function Profile() {
 
       <div className="profile-content">
         {/* Avatar */}
-        <div className="profile-avatar-wrap" onClick={isMe && editing ? () => fileInputRef.current?.click() : undefined} style={isMe && editing ? { cursor: 'pointer' } : {}}>
-          {isMe && <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={uploadAvatar} />}
+        <div
+          className="profile-avatar-wrap"
+          onClick={() => {
+            if (isMe && editing) { fileInputRef.current?.click(); return; }
+            if (profile.avatar) { setAvatarLightbox(true); setLightboxScale(1); }
+          }}
+          style={{ cursor: (isMe && editing) || profile.avatar ? 'pointer' : 'default' }}
+        >
+          {isMe && <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={onFileSelected} />}
           {profile.avatar ? (
             <img className="profile-avatar" src={profile.avatar} alt="" />
           ) : (
@@ -201,6 +223,11 @@ export default function Profile() {
           {isMe && editing && (
             <div className="profile-avatar-overlay">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M3 21h3l12.2-12.2-3-3L3 18v3zM21.7 7.3a1 1 0 000-1.4l-1.6-1.6a1 1 0 00-1.4 0l-1.8 1.8 3 3 1.8-1.8z"/></svg>
+            </div>
+          )}
+          {!editing && profile.avatar && (
+            <div className="profile-avatar-view-hint">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
             </div>
           )}
         </div>
@@ -311,6 +338,52 @@ export default function Profile() {
           <p className={`settings-msg ${msg.startsWith('✓') ? 'success' : 'error'}`} style={{ textAlign: 'center', marginTop: 12 }}>{msg}</p>
         )}
       </div>
+
+      {/* Avatar crop modal */}
+      {cropFile && (
+        <AvatarCropModal
+          file={cropFile}
+          onConfirm={uploadCroppedAvatar}
+          onCancel={() => setCropFile(null)}
+        />
+      )}
+
+      {/* Avatar lightbox */}
+      {avatarLightbox && profile.avatar && (
+        <div
+          className="lightbox-overlay"
+          onClick={() => { setAvatarLightbox(false); setLightboxScale(1); }}
+        >
+          <button className="lightbox-close" onClick={(e) => { e.stopPropagation(); setAvatarLightbox(false); setLightboxScale(1); }}>✕</button>
+          <img
+            src={profile.avatar}
+            className="lightbox-img"
+            alt=""
+            style={{ transform: `scale(${lightboxScale})`, borderRadius: '50%' }}
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => {
+              if (e.touches.length === 2) {
+                pinchDistRef.current = Math.hypot(
+                  e.touches[0].clientX - e.touches[1].clientX,
+                  e.touches[0].clientY - e.touches[1].clientY
+                );
+              }
+            }}
+            onTouchMove={(e) => {
+              if (e.touches.length === 2 && pinchDistRef.current) {
+                const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                setLightboxScale(s => Math.min(5, Math.max(0.5, s * (d / pinchDistRef.current))));
+                pinchDistRef.current = d;
+              }
+            }}
+            onTouchEnd={() => { pinchDistRef.current = null; }}
+            onWheel={(e) => {
+              e.preventDefault();
+              setLightboxScale(s => Math.min(5, Math.max(0.5, s - e.deltaY * 0.005)));
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
