@@ -72,6 +72,7 @@ export default function Chat() {
 
   // Reply state
   const [replyTo, setReplyTo] = useState(null); // { id, content, sender_id, sender_username, file_url }
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   const bottomRef = useRef(null);
   const typingTimeout = useRef(null);
@@ -80,9 +81,27 @@ export default function Chat() {
   const inputBarRef = useRef(null);
   const fileInputRef = useRef(null);
   const pinchDistRef = useRef(null);
+  const hasInitiallyScrolled = useRef(false);
+
+  const scrollToBottomInstant = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+    setShowScrollBtn(false);
+  }, []);
 
   const scrollToBottom = useCallback(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = messagesRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distFromBottom < 150) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollBtn(distFromBottom > 120);
   }, []);
 
   // Handle mobile keyboard: resize layout using visualViewport API
@@ -96,7 +115,7 @@ export default function Chat() {
       // Set height to actual visible viewport (accounts for keyboard)
       el.style.height = `${vv.height}px`;
       // Scroll to bottom when keyboard opens
-      setTimeout(scrollToBottom, 50);
+      setTimeout(scrollToBottomInstant, 50);
     };
 
     vv.addEventListener('resize', handleResize);
@@ -108,7 +127,7 @@ export default function Chat() {
       vv.removeEventListener('resize', handleResize);
       vv.removeEventListener('scroll', handleResize);
     };
-  }, [scrollToBottom]);
+  }, [scrollToBottomInstant]);
 
   useEffect(() => {
     (async () => {
@@ -133,8 +152,16 @@ export default function Chat() {
   }, [friendId, friendIdNum]);
 
   useEffect(() => {
-    if (messages.length) setTimeout(scrollToBottom, 50);
-  }, [messages, scrollToBottom]);
+    if (!messages.length) return;
+    if (!hasInitiallyScrolled.current) {
+      hasInitiallyScrolled.current = true;
+      // First load — jump instantly, no fly-through animation
+      setTimeout(scrollToBottomInstant, 30);
+    } else {
+      // New messages: only auto-scroll if already near bottom
+      scrollToBottom();
+    }
+  }, [messages, scrollToBottom, scrollToBottomInstant]);
 
   // Tell server + service worker we are viewing this chat (suppresses push notifications)
   useEffect(() => {
@@ -478,7 +505,7 @@ export default function Chat() {
       </div>
 
       {/* Messages */}
-      <div className="messages-area" ref={messagesRef}>
+      <div className="messages-area" ref={messagesRef} onScroll={handleMessagesScroll}>
         {messages.length === 0 && (
           <div className="empty-state chat-empty">
             <div className="empty-icon">👋</div>
@@ -557,6 +584,13 @@ export default function Chat() {
 
         <div ref={bottomRef} />
       </div>
+
+      {/* Scroll-to-bottom button */}
+      {showScrollBtn && (
+        <button className="scroll-to-bottom-btn" onClick={scrollToBottomInstant} aria-label="Смотреть последнее сообщение">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+      )}
 
       {/* Context menu — rendered at fixed position outside scroll area */}
       {contextMenu && (
@@ -660,7 +694,7 @@ export default function Chat() {
             }
             if (e.key === 'Escape' && editingMsgId) cancelEdit();
           }}
-          onFocus={() => setTimeout(scrollToBottom, 300)}
+          onFocus={() => setTimeout(scrollToBottomInstant, 300)}
           rows={1}
         />
         <button
