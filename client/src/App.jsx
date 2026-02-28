@@ -7,6 +7,7 @@ import ChannelPage from './pages/ChannelPage.jsx';
 import JoinChannel from './pages/JoinChannel.jsx';
 import Settings from './pages/Settings.jsx';
 import AdminPanel from './pages/AdminPanel.jsx';
+import Profile from './pages/Profile.jsx';
 
 function PrivateRoute({ children }) {
   return localStorage.getItem('token') ? children : <Navigate to="/login" replace />;
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/join/:code" element={<PrivateRoute><JoinChannel /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute><AdminPanel /></PrivateRoute>} />
+        <Route path="/:publicId" element={<PrivateRoute><Profile /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

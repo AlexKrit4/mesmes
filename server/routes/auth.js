@@ -202,7 +202,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// POST /api/auth/login — вход ТОЛЬКО по public_id
+// POST /api/auth/login — вход по public_id или телефону
 router.post('/login', async (req, res) => {
   const { public_id, password } = req.body;
 
@@ -210,7 +210,11 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ error: 'Введите ID и пароль' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE public_id = ?').get(public_id);
+  // Try public_id first, then phone
+  let user = db.prepare('SELECT * FROM users WHERE public_id = ?').get(public_id);
+  if (!user) {
+    user = db.prepare('SELECT * FROM users WHERE phone = ?').get(public_id);
+  }
   if (!user) {
     return res.status(401).json({ error: 'Неверный ID или пароль' });
   }

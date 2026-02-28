@@ -76,16 +76,16 @@ export default function Login() {
       <div className="auth-card">
         <div className="auth-logo">M</div>
         <h1>Вход в МесМес</h1>
-        <p className="subtitle">Используйте ваш уникальный ID для входа</p>
+        <p className="subtitle">Используйте ваш ID или номер телефона</p>
 
         {error && <div className="error-box">{error}</div>}
 
         <form onSubmit={submit}>
           <div className="form-group">
-            <label>Ваш ID</label>
+            <label>ID или телефон</label>
             <input
               name="public_id"
-              placeholder="my_unique_id"
+              placeholder="ID или номер телефона"
               autoComplete="username"
               value={form.public_id}
               onChange={handle}

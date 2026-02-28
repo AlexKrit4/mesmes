@@ -102,6 +102,33 @@ router.patch('/me', auth, (req, res) => {
   const newUsername = username ? username.trim() : user.username;
   const newPublicId = public_id ? public_id.trim().toLowerCase() : user.public_id;
 
+  // Handle bio update
+  if (req.body.bio !== undefined) {
+    const newBio = String(req.body.bio).slice(0, 200);
+    db.prepare('UPDATE users SET bio = ? WHERE id = ?').run(newBio, req.userId);
+  }
+
+  // Handle phone update
+  if (req.body.phone !== undefined) {
+    const newPhone = String(req.body.phone).replace(/[^0-9+]/g, '').slice(0, 20);
+    if (newPhone && newPhone !== (user.phone || '')) {
+      // Rate limit: once per 30 days
+      if (user.last_phone_change) {
+        const diff = Date.now() - new Date(user.last_phone_change.endsWith('Z') ? user.last_phone_change : user.last_phone_change + 'Z').getTime();
+        if (diff < 30 * 24 * 60 * 60 * 1000) {
+          const daysLeft = Math.ceil((30 * 24 * 60 * 60 * 1000 - diff) / 86400000);
+          return res.status(429).json({ error: `Менять номер можно раз в 30 дней. Осталось ${daysLeft} дн.` });
+        }
+      }
+      // Check uniqueness
+      const phoneTaken = db.prepare('SELECT id FROM users WHERE phone = ? AND id != ?').get(newPhone, req.userId);
+      if (phoneTaken) return res.status(409).json({ error: 'Этот номер уже привязан к другому аккаунту' });
+      db.prepare('UPDATE users SET phone = ?, last_phone_change = CURRENT_TIMESTAMP WHERE id = ?').run(newPhone, req.userId);
+    } else if (!newPhone) {
+      db.prepare('UPDATE users SET phone = NULL WHERE id = ?').run(req.userId);
+    }
+  }
+
   if (newPublicId !== user.public_id) {
     if (!/^[a-z0-9_]{3,24}$/.test(newPublicId)) return res.status(400).json({ error: 'ID: только a-z, 0-9, _ (3-24 символа)' });
     const exists = db.prepare('SELECT id FROM users WHERE public_id = ? AND id != ?').get(newPublicId, req.userId);
@@ -129,6 +156,29 @@ router.patch('/me', auth, (req, res) => {
   res.json({ username: newUsername, public_id: newPublicId });
 });
 
+// GET /api/users/profile/:publicId — public profile
+router.get('/profile/:publicId', auth, (req, res) => {
+  const user = db.prepare(
+    'SELECT id, username, public_id, avatar, bio, last_seen, created_at FROM users WHERE public_id = ?'
+  ).get(req.params.publicId);
+  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+  // Check friendship
+  const friendship = db.prepare(
+    `SELECT status FROM friends WHERE
+      ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)) AND status = 'accepted'`
+  ).get(req.userId, user.id, user.id, req.userId);
+  user.isFriend = !!friendship;
+  user.isMe = user.id === req.userId;
+  // Return phone only if it's the user's own profile
+  if (user.isMe) {
+    const full = db.prepare('SELECT phone, last_phone_change, last_public_id_change FROM users WHERE id = ?').get(user.id);
+    user.phone = full.phone;
+    user.last_phone_change = full.last_phone_change;
+    user.last_public_id_change = full.last_public_id_change;
+  }
+  res.json(user);
+});
+
 // DELETE /api/users/me — delete account
 router.delete('/me', auth, (req, res) => {
   const uid = req.userId;
@@ -141,7 +191,7 @@ router.delete('/me', auth, (req, res) => {
 
 // GET /api/users/me
 router.get('/me', auth, (req, res) => {
-  const user = db.prepare('SELECT id, username, public_id, avatar, last_seen, last_public_id_change FROM users WHERE id = ???').get(req.userId);
+  const user = db.prepare('SELECT id, username, public_id, avatar, last_seen, last_public_id_change, phone, bio, last_phone_change FROM users WHERE id = ?').get(req.userId);
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
 
   // Check active ban
@@ -178,13 +228,13 @@ router.post('/avatar', auth, (req, res, next) => {
   });
 });
 
-// GET /api/users/search?q=ID
+// GET /api/users/search?q=ID or phone
 router.get('/search', auth, (req, res) => {
   const q = (req.query.q || '').trim();
   if (!q) return res.json([]);
   const users = db.prepare(
-    'SELECT id, username, public_id, avatar, last_seen FROM users WHERE public_id LIKE ? AND id != ? LIMIT 10'
-  ).all(`%${q}%`, req.userId);
+    'SELECT id, username, public_id, avatar, last_seen FROM users WHERE (public_id LIKE ? OR phone = ?) AND id != ? LIMIT 10'
+  ).all(`%${q}%`, q, req.userId);
   res.json(users);
 });
 
@@ -346,7 +396,7 @@ router.get('/messages/:friendId', auth, (req, res) => {
     });
   }
 
-  // Enrich messages with reply_to data
+  // Enrich messages with reply_to data and reactions
   const enriched = messages.map((msg) => {
     if (msg.reply_to_id) {
       const rm = db.prepare('SELECT id, content, sender_id, file_url FROM messages WHERE id = ?').get(msg.reply_to_id);
@@ -355,6 +405,15 @@ router.get('/messages/:friendId', auth, (req, res) => {
         msg.reply_to = { id: rm.id, content: rm.content, sender_id: rm.sender_id, file_url: rm.file_url, sender_username: rmSender?.username };
       }
     }
+    // Attach reactions
+    const reactionRows = db.prepare('SELECT emoji, user_id FROM message_reactions WHERE message_id = ?').all(msg.id);
+    const grouped = {};
+    for (const r of reactionRows) {
+      if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, me: false };
+      grouped[r.emoji].count++;
+      if (r.user_id === req.userId) grouped[r.emoji].me = true;
+    }
+    msg.reactions = grouped;
     return msg;
   });
 
@@ -381,6 +440,56 @@ router.post('/messages/file', auth, (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Выберите изображение' });
     res.json({ file_url: `/uploads/${req.file.filename}` });
   });
+});
+
+// POST /api/users/messages/:messageId/react — toggle reaction on DM
+router.post('/messages/:messageId/react', auth, (req, res) => {
+  const msgId = parseInt(req.params.messageId);
+  const { emoji } = req.body;
+  const allowed = ['❤️', '👍', '👎', '😂', '😮', '😢'];
+  if (!allowed.includes(emoji)) return res.status(400).json({ error: 'Неизвестная реакция' });
+
+  const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(msgId);
+  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
+  if (msg.sender_id !== req.userId && msg.receiver_id !== req.userId) {
+    return res.status(403).json({ error: 'Нет доступа' });
+  }
+
+  const existing = db.prepare('SELECT * FROM message_reactions WHERE message_id = ? AND user_id = ?').get(msgId, req.userId);
+  if (existing) {
+    if (existing.emoji === emoji) {
+      db.prepare('DELETE FROM message_reactions WHERE id = ?').run(existing.id);
+    } else {
+      db.prepare('UPDATE message_reactions SET emoji = ? WHERE id = ?').run(emoji, existing.id);
+    }
+  } else {
+    db.prepare('INSERT INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)').run(msgId, req.userId, emoji);
+  }
+
+  // Get updated reactions for this message
+  const reactions = db.prepare('SELECT emoji, user_id FROM message_reactions WHERE message_id = ?').all(msgId);
+  const grouped = {};
+  for (const r of reactions) {
+    if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, me: false };
+    grouped[r.emoji].count++;
+    if (r.user_id === req.userId) grouped[r.emoji].me = true;
+  }
+
+  // Notify the other user via socket
+  const otherId = msg.sender_id === req.userId ? msg.receiver_id : msg.sender_id;
+  if (req.io && req.onlineUsers?.has(otherId)) {
+    req.onlineUsers.get(otherId).forEach((sid) => {
+      req.io.to(sid).emit('message_reaction', { messageId: msgId, reactions: grouped });
+    });
+  }
+  // Also notify self (other tabs)
+  if (req.io && req.onlineUsers?.has(req.userId)) {
+    req.onlineUsers.get(req.userId).forEach((sid) => {
+      req.io.to(sid).emit('message_reaction', { messageId: msgId, reactions: grouped });
+    });
+  }
+
+  res.json({ reactions: grouped });
 });
 
 // DELETE /api/users/messages/:messageId

@@ -82,6 +82,7 @@ export default function Chat() {
   const fileInputRef = useRef(null);
   const pinchDistRef = useRef(null);
   const hasInitiallyScrolled = useRef(false);
+  const lastTapRef = useRef({ time: 0, msgId: null });
 
   const scrollToBottomInstant = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'instant' });
@@ -258,6 +259,12 @@ export default function Chat() {
       if (by === friendIdNum) navigate('/');
     };
 
+    const onMessageReaction = ({ messageId, reactions }) => {
+      setMessages((prev) =>
+        prev.map((m) => m.id === messageId ? { ...m, reactions } : m)
+      );
+    };
+
     socket.on('new_message', onNewMsg);
     socket.on('message_sent', onSent);
     socket.on('user_typing', onTyping);
@@ -267,6 +274,7 @@ export default function Chat() {
     socket.on('messages_read', onMessagesRead);
     socket.on('message_edited', onMessageEdited);
     socket.on('friend_removed', onFriendRemoved);
+    socket.on('message_reaction', onMessageReaction);
 
     return () => {
       socket.off('new_message', onNewMsg);
@@ -278,6 +286,7 @@ export default function Chat() {
       socket.off('messages_read', onMessagesRead);
       socket.off('message_edited', onMessageEdited);
       socket.off('friend_removed', onFriendRemoved);
+      socket.off('message_reaction', onMessageReaction);
     };
   }, [friendIdNum, me.id]);
 
@@ -398,6 +407,26 @@ export default function Chat() {
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 6 * 24 + 20) + 'px';
+  };
+
+  const reactToMessage = async (messageId, emoji) => {
+    try {
+      const { data } = await api.post(`/users/messages/${messageId}/react`, { emoji });
+      setMessages((prev) =>
+        prev.map((m) => m.id === messageId ? { ...m, reactions: data.reactions } : m)
+      );
+    } catch { /* */ }
+    setContextMenu(null);
+  };
+
+  const handleDoubleTap = (msgId) => {
+    const now = Date.now();
+    if (lastTapRef.current.msgId === msgId && now - lastTapRef.current.time < 350) {
+      reactToMessage(msgId, '❤️');
+      lastTapRef.current = { time: 0, msgId: null };
+    } else {
+      lastTapRef.current = { time: now, msgId };
+    }
   };
 
   const handleInput = (e) => {
@@ -542,7 +571,7 @@ export default function Chat() {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.92c.04-.34.07-.69.07-1.08 0-.39-.03-.74-.07-1.08l2.32-1.81c.21-.16.27-.46.13-.7l-2.2-3.81c-.13-.24-.42-.33-.67-.24l-2.73 1.1c-.57-.43-1.18-.8-1.87-1.07L14.5 2.42C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42L9.13 5.29C8.44 5.56 7.83 5.93 7.26 6.36L4.53 5.26c-.25-.09-.54 0-.67.24L1.66 9.31c-.14.24-.08.54.13.7L4.11 11.82C4.07 12.16 4 12.51 4 12.92c0 .39.03.74.07 1.08l-2.32 1.81c-.21.16-.27.46-.13.7l2.2 3.81c.13.24.42.33.67.24l2.73-1.1c.57.43 1.18.8 1.87 1.07l.37 2.87c.04.24.25.42.5.42h4c.25 0 .46-.18.49-.42l.37-2.87c.69-.27 1.3-.64 1.87-1.07l2.73 1.1c.25.09.54 0 .67-.24l2.2-3.81c.14-.24.08-.54-.13-.7l-2.32-1.81z"/></svg>
                 </button>
               </div>
-              <div className={`message ${isOut ? 'out' : 'in'}`}>
+              <div className={`message ${isOut ? 'out' : 'in'}`} onClick={() => handleDoubleTap(msg.id)}>
                 {msg.reply_to && (
                   <div className="reply-quote" onClick={() => {
                     const el = document.getElementById(`msg-${msg.reply_to.id}`);
@@ -570,6 +599,20 @@ export default function Chat() {
                     </span>
                   )}
                 </div>
+                {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                  <div className="reactions-row dm">
+                    {Object.entries(msg.reactions).map(([emoji, info]) => (
+                      <button
+                        key={emoji}
+                        className={`reaction-chip${info.me ? ' active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); reactToMessage(msg.id, emoji); }}
+                      >
+                        <span className="reaction-emoji">{emoji}</span>
+                        {info.count > 1 && <span className="reaction-count">{info.count}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -601,6 +644,11 @@ export default function Chat() {
             style={{ position: 'fixed', ...contextMenu.xProp, top: contextMenu.fixedTop }}
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="ctx-reactions-row">
+              {['❤️', '👍', '👎', '😂', '😮', '😢'].map((emoji) => (
+                <button key={emoji} className="ctx-reaction-btn" onClick={() => reactToMessage(contextMenu.msgId, emoji)}>{emoji}</button>
+              ))}
+            </div>
             {contextMenu.isOut && (
               <button className="ctx-btn edit" onClick={() => {
                 const msg = messages.find((m) => m.id === contextMenu.msgId);

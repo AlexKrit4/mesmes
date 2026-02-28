@@ -350,7 +350,7 @@ export default function Home() {
             ) : (
               friends.map((f) => (
                 <div key={`f-${f.id}`} className="friend-item" onClick={() => navigate(`/chat/${f.id}`)}>
-                  <div className="avatar-wrap">
+                  <div className="avatar-wrap" onClick={(e) => { e.stopPropagation(); navigate(`/${f.public_id}`); }}>
                     <Avatar user={f} size={46} />
                     <div className={`status-dot ${online[f.id] ? 'online' : ''}`} />
                   </div>

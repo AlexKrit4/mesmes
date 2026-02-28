@@ -250,3 +250,24 @@ try {
     )
   `);
 } catch (e) {}
+
+// Migration: add phone, bio, last_phone_change to users
+try { db.exec(`ALTER TABLE users ADD COLUMN phone TEXT DEFAULT NULL`); } catch (e) {}
+try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''`); } catch (e) {}
+try { db.exec(`ALTER TABLE users ADD COLUMN last_phone_change DATETIME DEFAULT NULL`); } catch (e) {}
+
+// Migration: message_reactions table for DMs
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS message_reactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      emoji TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(message_id, user_id)
+    )
+  `);
+} catch (e) {}

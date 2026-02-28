@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { disconnectSocket } from '../socket.js';
@@ -7,62 +7,8 @@ export default function Settings() {
   const navigate = useNavigate();
   const me = JSON.parse(localStorage.getItem('me') || '{}');
 
-  const [username, setUsername] = useState(me.username || '');
-  const [publicId, setPublicId] = useState(me.public_id || '');
-  const [nameMsg, setNameMsg] = useState('');
-  const [idMsg, setIdMsg] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [idRateLimitHours, setIdRateLimitHours] = useState(0); // 0 = no limit
-
-  // Fetch user data to check last_public_id_change
-  useEffect(() => {
-    api.get('/users/me').then(({ data }) => {
-      if (data.last_public_id_change) {
-        const diff = Date.now() - new Date(
-          data.last_public_id_change.endsWith('Z') ? data.last_public_id_change : data.last_public_id_change + 'Z'
-        ).getTime();
-        if (diff < 24 * 60 * 60 * 1000) {
-          setIdRateLimitHours(Math.ceil((24 * 60 * 60 * 1000 - diff) / 3600000));
-        }
-      }
-    }).catch(() => {});
-  }, []);
-
-  const saveName = async () => {
-    if (!username.trim() || username.trim() === me.username) return;
-    setLoading(true);
-    setNameMsg('');
-    try {
-      const { data } = await api.patch('/users/me', { username: username.trim() });
-      const meData = JSON.parse(localStorage.getItem('me') || '{}');
-      meData.username = data.username;
-      localStorage.setItem('me', JSON.stringify(meData));
-      setNameMsg('✓ Имя обновлено');
-    } catch (err) {
-      setNameMsg(err.response?.data?.error || 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const saveId = async () => {
-    if (!publicId.trim() || publicId.trim() === me.public_id) return;
-    setLoading(true);
-    setIdMsg('');
-    try {
-      const { data } = await api.patch('/users/me', { public_id: publicId.trim() });
-      const meData = JSON.parse(localStorage.getItem('me') || '{}');
-      meData.public_id = data.public_id;
-      localStorage.setItem('me', JSON.stringify(meData));
-      setIdMsg('✓ ID обновлён');
-      setIdRateLimitHours(24);
-    } catch (err) {
-      setIdMsg(err.response?.data?.error || 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -100,58 +46,11 @@ export default function Settings() {
 
       <div className="settings-content">
 
-        {/* Change name */}
-        <div className="settings-section">
-          <div className="settings-section-title">Имя пользователя</div>
-          <div className="settings-row">
-            <input
-              className="settings-input"
-              value={username}
-              onChange={(e) => { setUsername(e.target.value); setNameMsg(''); }}
-              placeholder="Ваше имя"
-              maxLength={32}
-            />
-            <button
-              className="btn btn-accent settings-save-btn"
-              onClick={saveName}
-              disabled={loading || !username.trim() || username.trim() === me.username}
-            >
-              Сохранить
-            </button>
-          </div>
-          {nameMsg && (
-            <p className={`settings-msg ${nameMsg.startsWith('✓') ? 'success' : 'error'}`}>{nameMsg}</p>
-          )}
-        </div>
-
-        {/* Change ID */}
-        <div className="settings-section">
-          <div className="settings-section-title">Публичный ID</div>
-          <div className="settings-hint">По этому ID вас находят друзья</div>
-          {idRateLimitHours > 0 && (
-            <p className="settings-msg error">ID можно менять раз в сутки. Следующая смена через {idRateLimitHours} ч.</p>
-          )}
-          <div className="settings-row">
-            <input
-              className="settings-input"
-              value={publicId}
-              onChange={(e) => { setPublicId(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')); setIdMsg(''); }}
-              placeholder="your_id"
-              maxLength={24}
-              disabled={idRateLimitHours > 0}
-            />
-            <button
-              className="btn btn-accent settings-save-btn"
-              onClick={saveId}
-              disabled={loading || !publicId.trim() || publicId.trim() === me.public_id || idRateLimitHours > 0}
-            >
-              Сохранить
-            </button>
-          </div>
-          {idMsg && (
-            <p className={`settings-msg ${idMsg.startsWith('✓') ? 'success' : 'error'}`}>{idMsg}</p>
-          )}
-        </div>
+        {/* My profile link */}
+        <button className="settings-action-btn" onClick={() => navigate(`/${me.public_id}`)} style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Мой профиль
+        </button>
 
         <div className="settings-divider" />
 
