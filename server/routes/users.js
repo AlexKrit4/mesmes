@@ -93,8 +93,10 @@ router.post('/push-subscribe', auth, (req, res) => {
 
 // PATCH /api/users/me — update username and/or public_id
 router.patch('/me', auth, (req, res) => {
-  const { username, public_id } = req.body;
-  if (!username && !public_id) return res.status(400).json({ error: 'Нет данных для обновления' });
+  const { username, public_id, bio, phone } = req.body;
+  if (username === undefined && public_id === undefined && bio === undefined && phone === undefined) {
+    return res.status(400).json({ error: 'Нет данных для обновления' });
+  }
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
@@ -146,11 +148,13 @@ router.patch('/me', auth, (req, res) => {
     return res.status(400).json({ error: 'Имя: от 2 до 32 символов' });
   }
 
+  // Only run username/public_id UPDATE if either changed
   const changedId = newPublicId !== user.public_id;
+  const changedName = newUsername !== user.username;
   if (changedId) {
     db.prepare('UPDATE users SET username = ?, public_id = ?, last_public_id_change = CURRENT_TIMESTAMP WHERE id = ?')
       .run(newUsername, newPublicId, req.userId);
-  } else {
+  } else if (changedName) {
     db.prepare('UPDATE users SET username = ? WHERE id = ?').run(newUsername, req.userId);
   }
   res.json({ username: newUsername, public_id: newPublicId });

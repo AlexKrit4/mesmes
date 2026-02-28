@@ -309,18 +309,17 @@ export default function Home() {
       {/* Profile dropdown */}
       {showProfile && (
         <div className="profile-panel">
-          <div className="profile-avatar-wrap" onClick={() => fileInputRef.current?.click()}>
+          <div className="profile-avatar-wrap" onClick={() => { setShowProfile(false); navigate(`/${me.public_id}`); }} style={{ cursor: 'pointer' }}>
             {myAvatar ? (
               <img className="avatar avatar-lg" src={myAvatar} alt="" />
             ) : (
               <div className="avatar avatar-lg">{(me.username || '?')[0].toUpperCase()}</div>
             )}
-            <div className="profile-avatar-edit">📷</div>
           </div>
           <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={uploadAvatar} />
           <div className="profile-name">{me.username}</div>
           <div className="profile-id">@{me.public_id}</div>
-          <div className="profile-hint">Нажмите на аватар, чтобы изменить</div>
+          <div className="profile-hint">Нажмите на аватар, чтобы открыть профиль</div>
         </div>
       )}
 
