@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, getSocket } from '../socket.js';
@@ -32,6 +32,23 @@ function parseUTC(dateStr) {
 function formatTime(dateStr) {
   if (!dateStr) return '';
   return parseUTC(dateStr).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+function dayKey(dateStr) {
+  if (!dateStr) return '';
+  const d = parseUTC(dateStr);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function formatDayLabel(dateStr) {
+  if (!dateStr) return '';
+  const d = parseUTC(dateStr);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Сегодня';
+  if (d.toDateString() === yesterday.toDateString()) return 'Вчера';
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 }
 
 function timeSince(dateStr) {
@@ -565,11 +582,16 @@ export default function Chat() {
           </div>
         )}
 
-        {messages.map((msg) => {
+        {messages.map((msg, idx) => {
           const isOut = msg.sender_id === me.id;
           const urls = parseFileUrls(msg.file_url);
+          const showDay = idx === 0 || dayKey(msg.created_at) !== dayKey(messages[idx - 1].created_at);
           return (
-            <div key={msg.id} id={`msg-${msg.id}`} className={`message-row ${isOut ? 'out' : 'in'}`}>
+            <React.Fragment key={msg.id}>
+              {showDay && (
+                <div className="day-separator"><span>{formatDayLabel(msg.created_at)}</span></div>
+              )}
+              <div id={`msg-${msg.id}`} className={`message-row ${isOut ? 'out' : 'in'}`}>
               <div className="msg-action-btns">
                 <button
                   className="msg-gear-btn"
@@ -652,6 +674,7 @@ export default function Chat() {
                 )}
               </div>
             </div>
+            </React.Fragment>
           );
         })}
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, getSocket } from '../socket.js';
@@ -26,6 +26,25 @@ function formatTime(dateStr) {
   if (!dateStr) return '';
   const s = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
   return new Date(s).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+function dayKey(dateStr) {
+  if (!dateStr) return '';
+  const s = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
+  const d = new Date(s);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function formatDayLabel(dateStr) {
+  if (!dateStr) return '';
+  const s = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
+  const d = new Date(s);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Сегодня';
+  if (d.toDateString() === yesterday.toDateString()) return 'Вчера';
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 }
 
 export default function ChannelPage() {
@@ -371,10 +390,15 @@ export default function ChannelPage() {
           </div>
         )}
 
-        {messages.map((msg) => {
+        {messages.map((msg, idx) => {
           const urls = parseFileUrls(msg.file_url);
+          const showDay = idx === 0 || dayKey(msg.created_at) !== dayKey(messages[idx - 1].created_at);
           return (
-          <div key={msg.id} className="message-row out">
+          <React.Fragment key={msg.id}>
+            {showDay && (
+              <div className="day-separator"><span>{formatDayLabel(msg.created_at)}</span></div>
+            )}
+            <div className="message-row out">
             {/* Action buttons for owner: edit + delete; for others: heart reaction */}
             {isMember && (
               <div className="msg-action-btns channel-action">
@@ -448,6 +472,7 @@ export default function ChannelPage() {
               </div>
             </div>
           </div>
+          </React.Fragment>
           );
         })}
 
