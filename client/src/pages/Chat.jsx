@@ -186,17 +186,19 @@ export default function Chat() {
     })();
   }, [friendId, friendIdNum]);
 
+  // Initial scroll: fires once after loading finishes and messages are rendered
   useEffect(() => {
-    if (!messages.length) return;
-    if (!hasInitiallyScrolled.current) {
+    if (!loading && !hasInitiallyScrolled.current && messages.length) {
       hasInitiallyScrolled.current = true;
-      // First load — jump instantly, no fly-through animation
       setTimeout(scrollToBottomInstant, 30);
-    } else {
-      // New messages: only auto-scroll if already near bottom
-      scrollToBottom();
     }
-  }, [messages, scrollToBottom, scrollToBottomInstant]);
+  }, [loading, messages, scrollToBottomInstant]);
+
+  // Subsequent messages: auto-scroll if already near bottom
+  useEffect(() => {
+    if (!hasInitiallyScrolled.current) return;
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
 
   // Tell server + service worker we are viewing this chat (suppresses push notifications)
   useEffect(() => {
