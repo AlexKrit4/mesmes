@@ -14,6 +14,14 @@ function Linkify({ children }) {
   );
 }
 
+function parseFileUrls(file_url) {
+  if (!file_url) return [];
+  if (file_url.startsWith('[')) {
+    try { return JSON.parse(file_url); } catch { return [file_url]; }
+  }
+  return [file_url];
+}
+
 function parseUTC(dateStr) {
   if (!dateStr) return null;
   // Ensure UTC interpretation — append Z if missing
@@ -61,13 +69,14 @@ export default function Chat() {
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showRemoveFriendConfirm, setShowRemoveFriendConfirm] = useState(false);
 
-  // Image viewer (lightbox)
-  const [lightboxSrc, setLightboxSrc] = useState(null);
+  // Lightbox with navigation
+  const [lightboxImages, setLightboxImages] = useState([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxScale, setLightboxScale] = useState(1);
   const [fileUploading, setFileUploading] = useState(false);
 
-  // Pending file attachment (preview before send)
-  const [pendingFile, setPendingFile] = useState(null);
+  // Pending files (multiple, up to 5)
+  const [pendingFiles, setPendingFiles] = useState([]);
 
   // Reply state
   const [replyTo, setReplyTo] = useState(null); // { id, content, sender_id, sender_username, file_url }
@@ -291,12 +300,12 @@ export default function Chat() {
 
   const sendMessage = () => {
     const content = text.trim();
-    if (!content && !pendingFile) return;
+    if (!content && pendingFiles.length === 0) return;
 
-    // If there's a pending file, upload it first then send
-    if (pendingFile) {
-      const file = pendingFile;
-      setPendingFile(null);
+    // If there are pending files, upload them first then send
+    if (pendingFiles.length > 0) {
+      const files = [...pendingFiles];
+      setPendingFiles([]);
       setText('');
       const currentReplyTo = replyTo;
       setReplyTo(null);
@@ -304,7 +313,7 @@ export default function Chat() {
       (async () => {
         try {
           const formData = new FormData();
-          formData.append('file', file);
+          files.forEach(f => formData.append('files', f));
           const res = await api.post('/users/messages/file', formData);
           const { file_url } = res.data;
           const socket = getSocket();
@@ -315,6 +324,11 @@ export default function Chat() {
           setFileUploading(false);
         }
       })();
+      const socket = getSocket();
+      if (socket) {
+        socket.emit('stop_typing', { to: friendIdNum });
+        clearTimeout(typingTimeout.current);
+      }
       return;
     }
 
@@ -441,10 +455,20 @@ export default function Chat() {
     }, 2000);
   };
 
-  const sendFile = async (file) => {
-    if (!file || fileUploading) return;
-    // Instead of sending immediately, set as pending attachment
-    setPendingFile(file);
+  const addFiles = (newFiles) => {
+    if (!newFiles || fileUploading) return;
+    const arr = Array.from(newFiles);
+    setPendingFiles(prev => [...prev, ...arr].slice(0, 5));
+  };
+
+  const removePendingFile = (idx) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const openLightbox = (urls, startIndex = 0) => {
+    setLightboxImages(urls);
+    setLightboxIndex(startIndex);
+    setLightboxScale(1);
   };
 
   // Gear button click — position menu in fixed (viewport) coordinates
@@ -543,6 +567,7 @@ export default function Chat() {
 
         {messages.map((msg) => {
           const isOut = msg.sender_id === me.id;
+          const urls = parseFileUrls(msg.file_url);
           return (
             <div key={msg.id} id={`msg-${msg.id}`} className={`message-row ${isOut ? 'out' : 'in'}`}>
               <div className="msg-action-btns">
@@ -580,13 +605,26 @@ export default function Chat() {
                     <div className="reply-quote-text">{msg.reply_to.file_url ? '🖼️ Изображение' : (msg.reply_to.content || '...')}</div>
                   </div>
                 )}
-                {msg.file_url && (
+                {urls.length === 1 && (
                   <img
-                    src={msg.file_url}
+                    src={urls[0]}
                     className="msg-image"
                     alt=""
-                    onClick={(e) => { e.stopPropagation(); setLightboxSrc(msg.file_url); setLightboxScale(1); }}
+                    onClick={(e) => { e.stopPropagation(); openLightbox(urls, 0); }}
                   />
+                )}
+                {urls.length > 1 && (
+                  <div className={`msg-collage c${urls.length}`}>
+                    {urls.map((url, i) => (
+                      <img
+                        key={i}
+                        src={url}
+                        className="msg-collage-img"
+                        alt=""
+                        onClick={(e) => { e.stopPropagation(); openLightbox(urls, i); }}
+                      />
+                    ))}
+                  </div>
                 )}
                 {msg.content && <div className="message-text"><Linkify>{msg.content}</Linkify></div>}
                 <div className="message-meta">
@@ -694,15 +732,22 @@ export default function Chat() {
         </div>
       )}
 
-      {/* Pending file preview */}
-      {pendingFile && (
-        <div className="file-preview-bar">
-          {pendingFile.type.startsWith('image/') ? (
-            <img src={URL.createObjectURL(pendingFile)} alt="" className="file-preview-thumb" />
-          ) : (
-            <div className="file-preview-name">{pendingFile.name}</div>
+      {/* Pending files preview */}
+      {pendingFiles.length > 0 && (
+        <div className="file-preview-bar multi">
+          {pendingFiles.map((f, i) => (
+            <div key={i} className="file-preview-item">
+              {f.type.startsWith('image/') ? (
+                <img src={URL.createObjectURL(f)} alt="" className="file-preview-thumb" />
+              ) : (
+                <span className="file-preview-name">{f.name}</span>
+              )}
+              <button className="file-preview-cancel" onClick={() => removePendingFile(i)}>✕</button>
+            </div>
+          ))}
+          {pendingFiles.length < 5 && (
+            <button className="file-preview-add" onClick={() => fileInputRef.current?.click()}>+</button>
           )}
-          <button className="file-preview-cancel" onClick={() => setPendingFile(null)}>✕</button>
         </div>
       )}
 
@@ -711,9 +756,10 @@ export default function Chat() {
         <input
           type="file"
           accept="image/*"
+          multiple
           ref={fileInputRef}
           style={{ display: 'none' }}
-          onChange={(e) => { if (e.target.files[0]) sendFile(e.target.files[0]); e.target.value = ''; }}
+          onChange={(e) => { if (e.target.files.length) addFiles(e.target.files); e.target.value = ''; }}
         />
         <button
           className="attach-btn"
@@ -748,7 +794,7 @@ export default function Chat() {
           className="send-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={editingMsgId ? saveEdit : sendMessage}
-          disabled={editingMsgId ? !editText.trim() : (!text.trim() && !pendingFile)}
+          disabled={editingMsgId ? !editText.trim() : (!text.trim() && pendingFiles.length === 0)}
           aria-label={editingMsgId ? 'Сохранить' : 'Отправить'}
         >
           {editingMsgId ? (
@@ -790,18 +836,31 @@ export default function Chat() {
         </div>
       )}
 
-      {/* Lightbox image viewer */}
-      {lightboxSrc && (
+      {/* Lightbox with navigation */}
+      {lightboxImages.length > 0 && (
         <div
           className="lightbox-overlay"
-          onClick={() => { setLightboxSrc(null); setLightboxScale(1); }}
+          onClick={() => { setLightboxImages([]); setLightboxScale(1); }}
         >
           <button
             className="lightbox-close"
-            onClick={(e) => { e.stopPropagation(); setLightboxSrc(null); setLightboxScale(1); }}
+            onClick={(e) => { e.stopPropagation(); setLightboxImages([]); setLightboxScale(1); }}
           >✕</button>
+          {lightboxImages.length > 1 && lightboxIndex > 0 && (
+            <button className="lightbox-nav lightbox-prev" onClick={(e) => { e.stopPropagation(); setLightboxIndex(i => i - 1); setLightboxScale(1); }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            </button>
+          )}
+          {lightboxImages.length > 1 && lightboxIndex < lightboxImages.length - 1 && (
+            <button className="lightbox-nav lightbox-next" onClick={(e) => { e.stopPropagation(); setLightboxIndex(i => i + 1); setLightboxScale(1); }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
+            </button>
+          )}
+          {lightboxImages.length > 1 && (
+            <div className="lightbox-counter">{lightboxIndex + 1} / {lightboxImages.length}</div>
+          )}
           <img
-            src={lightboxSrc}
+            src={lightboxImages[lightboxIndex]}
             className="lightbox-img"
             alt=""
             style={{ transform: `scale(${lightboxScale})` }}

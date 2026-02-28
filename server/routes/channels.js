@@ -219,14 +219,15 @@ router.post('/:id/messages', auth, (req, res) => {
   if (!ch) return res.status(404).json({ error: 'Канал не найден' });
   if (ch.owner_id !== req.userId) return res.status(403).json({ error: 'Только владелец может писать' });
 
-  const { content, file_url } = req.body;
+  const { content, file_url, file_urls } = req.body;
   const trimContent = (content || '').trim();
-  if (!trimContent && !file_url) return res.status(400).json({ error: 'Пустое сообщение' });
+  const storedFileUrl = file_urls && file_urls.length > 0 ? JSON.stringify(file_urls) : file_url || null;
+  if (!trimContent && !storedFileUrl) return res.status(400).json({ error: 'Пустое сообщение' });
 
   const now = new Date().toISOString();
   const result = db.prepare(
     'INSERT INTO channel_messages (channel_id, sender_id, content, file_url, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(chId, req.userId, trimContent, file_url || null, now);
+  ).run(chId, req.userId, trimContent, storedFileUrl, now);
 
   const sender = db.prepare('SELECT username FROM users WHERE id = ?').get(req.userId);
 
@@ -235,7 +236,7 @@ router.post('/:id/messages', auth, (req, res) => {
     channel_id: chId,
     sender_id: req.userId,
     content: trimContent,
-    file_url: file_url || null,
+    file_url: storedFileUrl,
     created_at: now,
     sender_username: sender?.username,
   };
@@ -255,18 +256,48 @@ router.post('/:id/messages', auth, (req, res) => {
   res.json(message);
 });
 
-// POST /api/channels/:id/messages/file — upload image for channel message
+// POST /api/channels/:id/messages/file — upload images for channel message (up to 5)
 router.post('/:id/messages/file', auth, (req, res) => {
   const chId = parseInt(req.params.id);
   const ch = db.prepare('SELECT owner_id FROM channels WHERE id = ?').get(chId);
   if (!ch) return res.status(404).json({ error: 'Канал не найден' });
   if (ch.owner_id !== req.userId) return res.status(403).json({ error: 'Только владелец' });
 
-  msgUpload.single('file')(req, res, (err) => {
+  msgUpload.array('files', 5)(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
-    if (!req.file) return res.status(400).json({ error: 'Выберите изображение' });
-    res.json({ file_url: `/uploads/${req.file.filename}` });
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Выберите изображение' });
+    const urls = req.files.map(f => `/uploads/${f.filename}`);
+    res.json({ file_urls: urls });
   });
+});
+
+// DELETE /api/channels/:id/messages/:msgId — delete channel message (owner only)
+router.delete('/:id/messages/:msgId', auth, (req, res) => {
+  const chId = parseInt(req.params.id);
+  const msgId = parseInt(req.params.msgId);
+  const ch = db.prepare('SELECT owner_id FROM channels WHERE id = ?').get(chId);
+  if (!ch) return res.status(404).json({ error: 'Канал не найден' });
+  if (ch.owner_id !== req.userId) return res.status(403).json({ error: 'Только владелец' });
+
+  const msg = db.prepare('SELECT * FROM channel_messages WHERE id = ? AND channel_id = ?').get(msgId, chId);
+  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
+
+  db.prepare('DELETE FROM channel_reactions WHERE message_id = ?').run(msgId);
+  db.prepare('DELETE FROM channel_messages WHERE id = ?').run(msgId);
+
+  // Broadcast deletion to all online members
+  const members = db.prepare('SELECT user_id FROM channel_members WHERE channel_id = ?').all(chId);
+  if (req.io && req.onlineUsers) {
+    members.forEach(({ user_id }) => {
+      if (req.onlineUsers.has(user_id)) {
+        req.onlineUsers.get(user_id).forEach((sid) => {
+          req.io.to(sid).emit('channel_message_deleted', { channel_id: chId, messageId: msgId });
+        });
+      }
+    });
+  }
+
+  res.json({ success: true });
 });
 
 // PATCH /api/channels/:id/messages/:msgId — edit channel message (owner only)

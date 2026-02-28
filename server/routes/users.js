@@ -437,12 +437,14 @@ router.patch('/messages/:messageId', auth, (req, res) => {
   res.json({ success: true, messageId: msgId, content: newContent, receiverId: msg.receiver_id });
 });
 
-// POST /api/users/messages/file — upload image for message
+// POST /api/users/messages/file — upload images for message (up to 5)
 router.post('/messages/file', auth, (req, res) => {
-  msgUpload.single('file')(req, res, (err) => {
+  msgUpload.array('files', 5)(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
-    if (!req.file) return res.status(400).json({ error: 'Выберите изображение' });
-    res.json({ file_url: `/uploads/${req.file.filename}` });
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Выберите изображение' });
+    const urls = req.files.map(f => `/uploads/${f.filename}`);
+    // Return single URL for backward compat, plus array
+    res.json({ file_url: JSON.stringify(urls), file_urls: urls });
   });
 });
 

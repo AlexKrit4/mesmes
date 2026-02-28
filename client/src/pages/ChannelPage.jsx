@@ -14,6 +14,14 @@ function Linkify({ children }) {
   );
 }
 
+function parseFileUrls(file_url) {
+  if (!file_url) return [];
+  if (file_url.startsWith('[')) {
+    try { return JSON.parse(file_url); } catch { return [file_url]; }
+  }
+  return [file_url];
+}
+
 function formatTime(dateStr) {
   if (!dateStr) return '';
   const s = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
@@ -45,13 +53,17 @@ export default function ChannelPage() {
   // Reaction picker
   const [reactionPickerMsgId, setReactionPickerMsgId] = useState(null);
 
-  // Pending file
-  const [pendingFile, setPendingFile] = useState(null);
+  // Pending files (multiple)
+  const [pendingFiles, setPendingFiles] = useState([]);
 
-  // Lightbox
-  const [lightboxSrc, setLightboxSrc] = useState(null);
+  // Lightbox with navigation
+  const [lightboxImages, setLightboxImages] = useState([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxScale, setLightboxScale] = useState(1);
   const pinchDistRef = useRef(null);
+
+  // Delete confirm
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   const bottomRef = useRef(null);
   const chatPageRef = useRef(null);
@@ -59,6 +71,10 @@ export default function ChannelPage() {
 
   const isOwner = channel?.owner_id === me.id;
   const isMember = channel?.is_member;
+
+  const scrollToBottomInstant = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -72,7 +88,7 @@ export default function ChannelPage() {
       const el = chatPageRef.current;
       if (!el) return;
       el.style.height = `${vv.height}px`;
-      setTimeout(scrollToBottom, 50);
+      setTimeout(scrollToBottomInstant, 50);
     };
     vv.addEventListener('resize', handleResize);
     vv.addEventListener('scroll', handleResize);
@@ -101,9 +117,17 @@ export default function ChannelPage() {
     })();
   }, [channelId]);
 
+  const hasInitiallyScrolled = useRef(false);
+
   useEffect(() => {
-    if (messages.length) setTimeout(scrollToBottom, 50);
-  }, [messages, scrollToBottom]);
+    if (!messages.length) return;
+    if (!hasInitiallyScrolled.current) {
+      hasInitiallyScrolled.current = true;
+      setTimeout(scrollToBottomInstant, 30);
+    } else {
+      scrollToBottom();
+    }
+  }, [messages, scrollToBottom, scrollToBottomInstant]);
 
   // Close menus on outside click
   useEffect(() => {
@@ -132,10 +156,17 @@ export default function ChannelPage() {
         setMessages((prev) => prev.map((m) => m.id === messageId ? { ...m, content, edited: 1 } : m));
       }
     };
+    const onChannelMsgDeleted = ({ channel_id, messageId }) => {
+      if (channel_id === channelId) {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      }
+    };
     socket.on('channel_message_edited', onChannelMsgEdited);
+    socket.on('channel_message_deleted', onChannelMsgDeleted);
     return () => {
       socket.off('channel_message', onChannelMsg);
       socket.off('channel_message_edited', onChannelMsgEdited);
+      socket.off('channel_message_deleted', onChannelMsgDeleted);
     };
   }, [channelId]);
 
@@ -149,19 +180,19 @@ export default function ChannelPage() {
 
   const sendMessage = async () => {
     const content = text.trim();
-    if (!content && !pendingFile) return;
+    if (!content && pendingFiles.length === 0) return;
 
-    if (pendingFile) {
-      const file = pendingFile;
-      setPendingFile(null);
+    if (pendingFiles.length > 0) {
+      const files = [...pendingFiles];
+      setPendingFiles([]);
       setText('');
       setFileUploading(true);
       try {
         const formData = new FormData();
-        formData.append('file', file);
+        files.forEach(f => formData.append('files', f));
         const res = await api.post(`/channels/${channelId}/messages/file`, formData);
-        const { file_url } = res.data;
-        await api.post(`/channels/${channelId}/messages`, { content, file_url });
+        const { file_urls } = res.data;
+        await api.post(`/channels/${channelId}/messages`, { content, file_urls });
       } catch (err) {
         console.error('File upload error', err);
       } finally {
@@ -178,9 +209,30 @@ export default function ChannelPage() {
     }
   };
 
-  const sendFile = async (file) => {
-    if (!file || fileUploading) return;
-    setPendingFile(file);
+  const addFiles = (newFiles) => {
+    if (!newFiles || fileUploading) return;
+    const arr = Array.from(newFiles);
+    setPendingFiles(prev => [...prev, ...arr].slice(0, 5));
+  };
+
+  const removePendingFile = (idx) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const deleteMessage = async (msgId) => {
+    setDeleteConfirmId(null);
+    try {
+      await api.delete(`/channels/${channelId}/messages/${msgId}`);
+      setMessages(prev => prev.filter(m => m.id !== msgId));
+    } catch (err) {
+      console.error('Delete failed', err);
+    }
+  };
+
+  const openLightbox = (urls, startIndex = 0) => {
+    setLightboxImages(urls);
+    setLightboxIndex(startIndex);
+    setLightboxScale(1);
   };
 
   const startEditMsg = (msg) => {
@@ -319,15 +371,22 @@ export default function ChannelPage() {
           </div>
         )}
 
-        {messages.map((msg) => (
+        {messages.map((msg) => {
+          const urls = parseFileUrls(msg.file_url);
+          return (
           <div key={msg.id} className="message-row out">
-            {/* Action button: pencil for owner, heart for others */}
+            {/* Action buttons for owner: edit + delete; for others: heart reaction */}
             {isMember && (
               <div className="msg-action-btns channel-action">
                 {isOwner ? (
-                  <button className="msg-gear-btn" onClick={() => startEditMsg(msg)} title="Редактировать">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  </button>
+                  <>
+                    <button className="msg-gear-btn" onClick={() => startEditMsg(msg)} title="Редактировать">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button className="msg-gear-btn" onClick={() => setDeleteConfirmId(msg.id)} title="Удалить">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                  </>
                 ) : (
                   <button className="msg-gear-btn reaction-btn" onClick={(e) => { e.stopPropagation(); setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id); }} title="Реакция">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -346,13 +405,26 @@ export default function ChannelPage() {
               </div>
             )}
             <div className="message out channel-msg">
-              {msg.file_url && (
+              {urls.length === 1 && (
                 <img
-                  src={msg.file_url}
+                  src={urls[0]}
                   className="msg-image"
                   alt=""
-                  onClick={(e) => { e.stopPropagation(); setLightboxSrc(msg.file_url); setLightboxScale(1); }}
+                  onClick={(e) => { e.stopPropagation(); openLightbox(urls, 0); }}
                 />
+              )}
+              {urls.length > 1 && (
+                <div className={`msg-collage c${urls.length}`}>
+                  {urls.map((url, i) => (
+                    <img
+                      key={i}
+                      src={url}
+                      className="msg-collage-img"
+                      alt=""
+                      onClick={(e) => { e.stopPropagation(); openLightbox(urls, i); }}
+                    />
+                  ))}
+                </div>
               )}
               {msg.content && <div className="message-text"><Linkify>{msg.content}</Linkify></div>}
               {/* Reactions display */}
@@ -376,7 +448,8 @@ export default function ChannelPage() {
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
 
         <div ref={bottomRef} />
       </div>
@@ -401,24 +474,32 @@ export default function ChannelPage() {
               <button className="edit-bar-cancel" onClick={cancelEditMsg}>✕</button>
             </div>
           )}
-          {/* Pending file preview */}
-          {pendingFile && (
-            <div className="file-preview-bar">
-              {pendingFile.type.startsWith('image/') ? (
-                <img src={URL.createObjectURL(pendingFile)} alt="" className="file-preview-thumb" />
-              ) : (
-                <span className="file-preview-name">{pendingFile.name}</span>
+          {/* Pending files preview */}
+          {pendingFiles.length > 0 && (
+            <div className="file-preview-bar multi">
+              {pendingFiles.map((f, i) => (
+                <div key={i} className="file-preview-item">
+                  {f.type.startsWith('image/') ? (
+                    <img src={URL.createObjectURL(f)} alt="" className="file-preview-thumb" />
+                  ) : (
+                    <span className="file-preview-name">{f.name}</span>
+                  )}
+                  <button className="file-preview-cancel" onClick={() => removePendingFile(i)}>✕</button>
+                </div>
+              ))}
+              {pendingFiles.length < 5 && (
+                <button className="file-preview-add" onClick={() => fileInputRef.current?.click()}>+</button>
               )}
-              <button className="file-preview-cancel" onClick={() => setPendingFile(null)}>✕</button>
             </div>
           )}
           <div className="message-input-bar">
             <input
               type="file"
               accept="image/*"
+              multiple
               ref={fileInputRef}
               style={{ display: 'none' }}
-              onChange={(e) => { if (e.target.files[0]) sendFile(e.target.files[0]); e.target.value = ''; }}
+              onChange={(e) => { if (e.target.files.length) addFiles(e.target.files); e.target.value = ''; }}
             />
             {!editingMsgId && (
               <button
@@ -451,13 +532,27 @@ export default function ChannelPage() {
               className="send-btn"
               onMouseDown={(e) => e.preventDefault()}
               onClick={editingMsgId ? saveEditMsg : sendMessage}
-              disabled={editingMsgId ? !editMsgText.trim() : (!text.trim() && !pendingFile)}
+              disabled={editingMsgId ? !editMsgText.trim() : (!text.trim() && pendingFiles.length === 0)}
               aria-label="Отправить"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
             </button>
           </div>
         </>
+      )}
+
+      {/* Delete message confirm */}
+      {deleteConfirmId && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirmId(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-name" style={{ fontSize: '1rem', marginBottom: 8 }}>Удалить запись?</div>
+            <div className="modal-status-text">Запись будет удалена для всех подписчиков</div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setDeleteConfirmId(null)}>Отмена</button>
+              <button className="btn btn-danger" onClick={() => deleteMessage(deleteConfirmId)}>Удалить</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Unsubscribe confirm */}
@@ -529,12 +624,25 @@ export default function ChannelPage() {
         </div>
       )}
 
-      {/* Lightbox */}
-      {lightboxSrc && (
-        <div className="lightbox-overlay" onClick={() => { setLightboxSrc(null); setLightboxScale(1); }}>
-          <button className="lightbox-close" onClick={(e) => { e.stopPropagation(); setLightboxSrc(null); setLightboxScale(1); }}>✕</button>
+      {/* Lightbox with navigation */}
+      {lightboxImages.length > 0 && (
+        <div className="lightbox-overlay" onClick={() => { setLightboxImages([]); setLightboxScale(1); }}>
+          <button className="lightbox-close" onClick={(e) => { e.stopPropagation(); setLightboxImages([]); setLightboxScale(1); }}>✕</button>
+          {lightboxImages.length > 1 && lightboxIndex > 0 && (
+            <button className="lightbox-nav lightbox-prev" onClick={(e) => { e.stopPropagation(); setLightboxIndex(i => i - 1); setLightboxScale(1); }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            </button>
+          )}
+          {lightboxImages.length > 1 && lightboxIndex < lightboxImages.length - 1 && (
+            <button className="lightbox-nav lightbox-next" onClick={(e) => { e.stopPropagation(); setLightboxIndex(i => i + 1); setLightboxScale(1); }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
+            </button>
+          )}
+          {lightboxImages.length > 1 && (
+            <div className="lightbox-counter">{lightboxIndex + 1} / {lightboxImages.length}</div>
+          )}
           <img
-            src={lightboxSrc}
+            src={lightboxImages[lightboxIndex]}
             className="lightbox-img"
             alt=""
             style={{ transform: `scale(${lightboxScale})` }}
