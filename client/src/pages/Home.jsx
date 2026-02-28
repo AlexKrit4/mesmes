@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, disconnectSocket, getSocket } from '../socket.js';
-import { subscribeToPush } from '../pushNotifications.js';
+import { subscribeToPush, setupPushKeepAlive } from '../pushNotifications.js';
 
 function timeSince(dateStr) {
   if (!dateStr) return '';
@@ -74,9 +74,10 @@ export default function Home() {
     } catch { /* */ }
   }, []);
 
-  // Request push permission and subscribe
+  // Request push permission and subscribe + keep-alive on visibility change
   useEffect(() => {
     subscribeToPush();
+    setupPushKeepAlive();
   }, []);
 
   // Check admin status (silent, hidden from non-admins)

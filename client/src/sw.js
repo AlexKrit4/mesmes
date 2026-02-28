@@ -5,6 +5,10 @@ import { NetworkFirst } from 'workbox-strategies';
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
+// Activate new SW immediately — don't wait for old tabs to close
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+
 // Cache API requests
 registerRoute(
   ({ url }) => url.pathname.startsWith('/api/'),

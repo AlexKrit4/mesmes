@@ -179,7 +179,8 @@ io.on('connection', (socket) => {
         for (const sub of subs) {
           webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-            pushPayload
+            pushPayload,
+            { TTL: 86400, urgency: 'high' }
           ).catch((err) => {
             console.error('Push send error:', err.statusCode, err.message);
             if (err.statusCode === 410 || err.statusCode === 404) {

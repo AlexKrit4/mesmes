@@ -20,7 +20,7 @@ export async function subscribeToPush() {
       new Promise((_, reject) => setTimeout(() => reject(new Error('SW timeout')), 10000)),
     ]);
 
-    // Check for existing subscription first
+    // Always get a fresh subscription to avoid stale endpoints on Android
     let subscription = await reg.pushManager.getSubscription();
 
     if (!subscription) {
@@ -37,4 +37,14 @@ export async function subscribeToPush() {
   } catch (err) {
     console.warn('Push subscription failed:', err.message);
   }
+}
+
+// Re-subscribe when user returns to the app (handles stale subscriptions on Android)
+export function setupPushKeepAlive() {
+  if (typeof document === 'undefined') return;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      subscribeToPush().catch(() => {});
+    }
+  });
 }
