@@ -64,6 +64,8 @@ export default function Settings() {
     }
   };
 
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
   const logout = () => {
     disconnectSocket();
     localStorage.removeItem('token');
@@ -176,10 +178,20 @@ export default function Settings() {
         <div className="settings-divider" />
 
         {/* Logout */}
-        <button className="settings-action-btn logout" onClick={logout}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          Выйти из аккаунта
-        </button>
+        {!showLogoutConfirm ? (
+          <button className="settings-action-btn logout" onClick={() => setShowLogoutConfirm(true)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Выйти из аккаунта
+          </button>
+        ) : (
+          <div className="settings-confirm">
+            <p className="settings-confirm-text">Вы уверены, что хотите выйти?</p>
+            <div className="settings-confirm-btns">
+              <button className="btn btn-ghost" onClick={() => setShowLogoutConfirm(false)}>Отмена</button>
+              <button className="btn btn-danger" onClick={logout}>Выйти</button>
+            </div>
+          </div>
+        )}
 
         {/* Delete account */}
         {!showDeleteConfirm ? (
