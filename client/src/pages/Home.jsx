@@ -87,12 +87,17 @@ export default function Home() {
   }, []);
 
   // Check admin status (silent, hidden from non-admins)
+  // Also refresh me data (premium_until, hide_last_seen)
   useEffect(() => {
     (async () => {
       try {
         const { data } = await api.get('/admin/check');
         if (data.isAdmin) setIsAdmin(true);
       } catch { /* not admin */ }
+      try {
+        const { data } = await api.get('/users/me');
+        localStorage.setItem('me', JSON.stringify(data));
+      } catch { /* */ }
     })();
   }, []);
 
@@ -229,7 +234,26 @@ export default function Home() {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
+    // GIF: upload directly (no crop; server will gate non-premium)
+    if (file.type === 'image/gif') {
+      uploadGifAvatar(file);
+      return;
+    }
     setAvatarCropFile(file);
+  };
+
+  const uploadGifAvatar = async (file) => {
+    const formData = new FormData();
+    formData.append('avatar', file, file.name);
+    try {
+      const { data } = await api.post('/users/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setMyAvatar(data.avatar);
+      const meData = JSON.parse(localStorage.getItem('me') || '{}');
+      meData.avatar = data.avatar;
+      localStorage.setItem('me', JSON.stringify(meData));
+    } catch (err) {
+      alert(err.response?.data?.error || 'Ошибка загрузки');
+    }
   };
 
   const uploadCroppedAvatar = async (blob) => {
@@ -379,13 +403,18 @@ export default function Home() {
                     <div className={`status-dot ${online[f.id] ? 'online' : ''}`} />
                   </div>
                   <div className="friend-info">
-                    <div className="friend-name">{f.username}</div>
+                    <div className="friend-name">
+                      {f.username}
+                      {f.premium_until && new Date(f.premium_until) > new Date() && <span className="premium-badge" title="mes-premium">✓</span>}
+                    </div>
                     <div className="friend-status friend-last-msg">
                       {f.last_message
                         ? (f.last_message_sender_id === me.id ? 'Вы: ' : '') + f.last_message.slice(0, 40)
                         : f.last_message_file
                           ? (f.last_message_sender_id === me.id ? 'Вы: ' : '') + '🖼️ Фото'
-                          : online[f.id] ? 'онлайн' : timeSince(f.last_seen)
+                          : online[f.id] ? 'онлайн'
+                            : (f.hide_last_seen && f.premium_until && new Date(f.premium_until) > new Date()) ? ''
+                              : timeSince(f.last_seen)
                       }
                     </div>
                   </div>
@@ -502,7 +531,10 @@ export default function Home() {
               <div key={u.id} className="friend-item">
                 <Avatar user={u} size={40} className="avatar-sm" />
                 <div className="friend-info">
-                  <div className="friend-name">{u.username}</div>
+                  <div className="friend-name">
+                    {u.username}
+                    {u.premium_until && new Date(u.premium_until) > new Date() && <span className="premium-badge" title="mes-premium">✓</span>}
+                  </div>
                   <div className="friend-id">@{u.public_id}</div>
                 </div>
                 <button className="btn btn-accent btn-sm" onClick={() => sendRequest(u.public_id)}>

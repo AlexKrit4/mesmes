@@ -9,6 +9,13 @@ const webpush = require('web-push');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret_in_production';
 
+// Helper: check if user has active premium
+function isPremium(userId) {
+  const u = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(userId);
+  if (!u || !u.premium_until) return false;
+  return new Date(u.premium_until) > new Date();
+}
+
 // Avatar upload setup
 const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -93,8 +100,8 @@ router.post('/push-subscribe', auth, (req, res) => {
 
 // PATCH /api/users/me — update username and/or public_id
 router.patch('/me', auth, (req, res) => {
-  const { username, public_id, bio, phone } = req.body;
-  if (username === undefined && public_id === undefined && bio === undefined && phone === undefined) {
+  const { username, public_id, bio, phone, hide_last_seen } = req.body;
+  if (username === undefined && public_id === undefined && bio === undefined && phone === undefined && hide_last_seen === undefined) {
     return res.status(400).json({ error: 'Нет данных для обновления' });
   }
 
@@ -131,6 +138,14 @@ router.patch('/me', auth, (req, res) => {
     }
   }
 
+  // Handle hide_last_seen update (premium only)
+  if (req.body.hide_last_seen !== undefined) {
+    if (!isPremium(req.userId)) {
+      return res.status(403).json({ error: 'Скрытие статуса доступно только с mes-premium' });
+    }
+    db.prepare('UPDATE users SET hide_last_seen = ? WHERE id = ?').run(req.body.hide_last_seen ? 1 : 0, req.userId);
+  }
+
   if (newPublicId !== user.public_id) {
     if (!/^[a-z0-9_]{3,24}$/.test(newPublicId)) return res.status(400).json({ error: 'ID: только a-z, 0-9, _ (3-24 символа)' });
     const exists = db.prepare('SELECT id FROM users WHERE public_id = ? AND id != ?').get(newPublicId, req.userId);
@@ -163,7 +178,7 @@ router.patch('/me', auth, (req, res) => {
 // GET /api/users/profile/:publicId — public profile
 router.get('/profile/:publicId', auth, (req, res) => {
   const user = db.prepare(
-    'SELECT id, username, public_id, avatar, bio, last_seen, created_at FROM users WHERE public_id = ?'
+    'SELECT id, username, public_id, avatar, bio, last_seen, created_at, premium_until, hide_last_seen FROM users WHERE public_id = ?'
   ).get(req.params.publicId);
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
   // Check friendship
@@ -195,7 +210,7 @@ router.delete('/me', auth, (req, res) => {
 
 // GET /api/users/me
 router.get('/me', auth, (req, res) => {
-  const user = db.prepare('SELECT id, username, public_id, avatar, last_seen, last_public_id_change, phone, bio, last_phone_change FROM users WHERE id = ?').get(req.userId);
+  const user = db.prepare('SELECT id, username, public_id, avatar, last_seen, last_public_id_change, phone, bio, last_phone_change, premium_until, hide_last_seen FROM users WHERE id = ?').get(req.userId);
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
 
   // Check active ban
@@ -219,6 +234,14 @@ router.post('/avatar', auth, (req, res, next) => {
     if (err) return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
     if (!req.file) return res.status(400).json({ error: 'Выберите изображение' });
 
+    // Block GIF avatars for non-premium users
+    if (req.file.mimetype === 'image/gif' && !isPremium(req.userId)) {
+      // Remove uploaded file
+      const fp = path.join(uploadDir, req.file.filename);
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+      return res.status(403).json({ error: 'GIF-аватар доступен только с mes-premium' });
+    }
+
     // Delete old avatar file
     const old = db.prepare('SELECT avatar FROM users WHERE id = ?').get(req.userId);
     if (old?.avatar) {
@@ -237,7 +260,7 @@ router.get('/search', auth, (req, res) => {
   const q = (req.query.q || '').trim();
   if (!q) return res.json([]);
   const users = db.prepare(
-    'SELECT id, username, public_id, avatar, last_seen FROM users WHERE (public_id LIKE ? OR phone = ?) AND id != ? LIMIT 10'
+    'SELECT id, username, public_id, avatar, last_seen, premium_until FROM users WHERE (public_id LIKE ? OR phone = ?) AND id != ? LIMIT 10'
   ).all(`%${q}%`, q, req.userId);
   res.json(users);
 });
@@ -245,7 +268,7 @@ router.get('/search', auth, (req, res) => {
 // GET /api/users/friends
 router.get('/friends', auth, (req, res) => {
   const friends = db.prepare(`
-    SELECT u.id, u.username, u.public_id, u.avatar, u.last_seen, f.status,
+    SELECT u.id, u.username, u.public_id, u.avatar, u.last_seen, u.premium_until, u.hide_last_seen, f.status,
       (SELECT COUNT(*) FROM messages
          WHERE sender_id = u.id AND receiver_id = ? AND read_at IS NULL
            AND deleted_for_receiver = 0) as unread_count,
@@ -529,6 +552,120 @@ router.delete('/messages/:messageId', auth, (req, res) => {
     db.prepare('UPDATE messages SET deleted_for_sender = 1 WHERE id = ?').run(msgId);
   }
   res.json({ success: true, deletedId: msgId, receiverId: msg.receiver_id, deleteForBoth: !!deleteForBoth });
+});
+
+// ─── Chat Wallpapers (premium) ───────────────────────────────────────────────
+
+// Wallpaper upload
+const wallpaperStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `wallpaper_${req.userId}_${Date.now()}${ext}`);
+  },
+});
+const wallpaperUpload = multer({
+  storage: wallpaperStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/^image\/(jpeg|png|webp)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Только изображения (jpg, png, webp)'));
+  },
+});
+
+// POST /api/users/wallpaper/:friendId — set wallpaper for chat
+router.post('/wallpaper/:friendId', auth, (req, res) => {
+  if (!isPremium(req.userId)) {
+    return res.status(403).json({ error: 'Обои чата доступны только с mes-premium' });
+  }
+  const friendId = parseInt(req.params.friendId);
+  wallpaperUpload.single('wallpaper')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
+    if (!req.file) return res.status(400).json({ error: 'Выберите изображение' });
+
+    // Delete old wallpaper file
+    const old = db.prepare('SELECT wallpaper_url FROM chat_wallpapers WHERE user_id = ? AND friend_id = ?').get(req.userId, friendId);
+    if (old?.wallpaper_url) {
+      const oldPath = path.join(uploadDir, path.basename(old.wallpaper_url));
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    }
+
+    const wallpaperUrl = `/uploads/${req.file.filename}`;
+    db.prepare(`INSERT INTO chat_wallpapers (user_id, friend_id, wallpaper_url) VALUES (?, ?, ?)
+      ON CONFLICT(user_id, friend_id) DO UPDATE SET wallpaper_url = excluded.wallpaper_url`
+    ).run(req.userId, friendId, wallpaperUrl);
+    res.json({ wallpaper_url: wallpaperUrl });
+  });
+});
+
+// GET /api/users/wallpaper/:friendId — get wallpaper for chat
+router.get('/wallpaper/:friendId', auth, (req, res) => {
+  const friendId = parseInt(req.params.friendId);
+  const row = db.prepare('SELECT wallpaper_url FROM chat_wallpapers WHERE user_id = ? AND friend_id = ?').get(req.userId, friendId);
+  res.json({ wallpaper_url: row?.wallpaper_url || null });
+});
+
+// DELETE /api/users/wallpaper/:friendId — remove wallpaper
+router.delete('/wallpaper/:friendId', auth, (req, res) => {
+  const friendId = parseInt(req.params.friendId);
+  const old = db.prepare('SELECT wallpaper_url FROM chat_wallpapers WHERE user_id = ? AND friend_id = ?').get(req.userId, friendId);
+  if (old?.wallpaper_url) {
+    const oldPath = path.join(uploadDir, path.basename(old.wallpaper_url));
+    if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+  }
+  db.prepare('DELETE FROM chat_wallpapers WHERE user_id = ? AND friend_id = ?').run(req.userId, friendId);
+  res.json({ success: true });
+});
+
+// ─── Video Stories (premium) ─────────────────────────────────────────────────
+
+const storyStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.mp4';
+    cb(null, `story_${req.userId}_${Date.now()}${ext}`);
+  },
+});
+const storyUpload = multer({
+  storage: storyStorage,
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB
+  fileFilter: (req, file, cb) => {
+    if (/^video\/(mp4|webm|quicktime)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Только видео (mp4, webm)'));
+  },
+});
+
+// POST /api/users/stories — upload a story
+router.post('/stories', auth, (req, res) => {
+  if (!isPremium(req.userId)) {
+    return res.status(403).json({ error: 'Видео-истории доступны только с mes-premium' });
+  }
+  storyUpload.single('video')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
+    if (!req.file) return res.status(400).json({ error: 'Выберите видео' });
+    const videoUrl = `/uploads/${req.file.filename}`;
+    const result = db.prepare('INSERT INTO stories (user_id, video_url) VALUES (?, ?)').run(req.userId, videoUrl);
+    res.json({ id: result.lastInsertRowid, video_url: videoUrl, created_at: new Date().toISOString() });
+  });
+});
+
+// GET /api/users/stories/:userId — get stories for user
+router.get('/stories/:userId', auth, (req, res) => {
+  const userId = parseInt(req.params.userId);
+  const stories = db.prepare('SELECT id, video_url, created_at FROM stories WHERE user_id = ? ORDER BY created_at DESC').all(userId);
+  res.json(stories);
+});
+
+// DELETE /api/users/stories/:storyId — delete own story
+router.delete('/stories/:storyId', auth, (req, res) => {
+  const storyId = parseInt(req.params.storyId);
+  const story = db.prepare('SELECT * FROM stories WHERE id = ? AND user_id = ?').get(storyId, req.userId);
+  if (!story) return res.status(404).json({ error: 'История не найдена' });
+  // Delete file
+  const filePath = path.join(uploadDir, path.basename(story.video_url));
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  db.prepare('DELETE FROM stories WHERE id = ?').run(storyId);
+  res.json({ success: true });
 });
 
 module.exports = { router, auth };

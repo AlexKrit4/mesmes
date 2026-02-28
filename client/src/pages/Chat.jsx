@@ -86,6 +86,10 @@ export default function Chat() {
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showRemoveFriendConfirm, setShowRemoveFriendConfirm] = useState(false);
 
+  // Chat wallpaper
+  const [wallpaper, setWallpaper] = useState(null);
+  const wallpaperInputRef = useRef(null);
+
   // Lightbox with navigation
   const [lightboxImages, setLightboxImages] = useState([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -169,6 +173,11 @@ export default function Chat() {
         // Mark friend's messages as read now that we opened the chat
         const socket = getSocket();
         if (socket) socket.emit('mark_read', { friendId: friendIdNum });
+        // Fetch wallpaper
+        try {
+          const wpRes = await api.get(`/users/wallpaper/${friendId}`);
+          if (wpRes.data.wallpaper_url) setWallpaper(wpRes.data.wallpaper_url);
+        } catch { /* */ }
       } catch (e) {
         console.error(e);
       } finally {
@@ -433,6 +442,29 @@ export default function Chat() {
     }
   };
 
+  const uploadWallpaper = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    const formData = new FormData();
+    formData.append('wallpaper', file, file.name);
+    try {
+      const { data } = await api.post(`/users/wallpaper/${friendIdNum}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setWallpaper(data.wallpaper_url);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Ошибка');
+    }
+    setShowChatMenu(false);
+  };
+
+  const removeWallpaper = async () => {
+    try {
+      await api.delete(`/users/wallpaper/${friendIdNum}`);
+      setWallpaper(null);
+    } catch { /* */ }
+    setShowChatMenu(false);
+  };
+
   const autoResize = (el) => {
     if (!el) return;
     el.style.height = 'auto';
@@ -551,9 +583,12 @@ export default function Chat() {
             <div className="avatar avatar-topbar">{(friend?.username || '?')[0].toUpperCase()}</div>
           )}
           <div className="chat-topbar-text">
-            <div className="chat-topbar-name">{friend?.username || '...'}</div>
+            <div className="chat-topbar-name">
+              {friend?.username || '...'}
+              {friend?.premium_until && new Date(friend.premium_until) > new Date() && <span className="premium-badge" title="mes-premium">✓</span>}
+            </div>
             <div className={`chat-topbar-status ${isOnline ? 'online' : ''}`}>
-              {isTyping ? 'печатает...' : isOnline ? 'в сети' : friend?.last_seen ? `был(а) ${timeSince(friend.last_seen)}` : ''}
+              {isTyping ? 'печатает...' : isOnline ? 'в сети' : (friend?.hide_last_seen && friend?.premium_until && new Date(friend.premium_until) > new Date()) ? '' : friend?.last_seen ? `был(а) ${timeSince(friend.last_seen)}` : ''}
             </div>
           </div>
         </div>
@@ -564,6 +599,21 @@ export default function Chat() {
           </button>
           {showChatMenu && (
             <div className="chat-dropdown" onClick={(e) => e.stopPropagation()}>
+              <button className="chat-dropdown-item" onClick={() => {
+                const meData = JSON.parse(localStorage.getItem('me') || '{}');
+                const hasPremium = meData.premium_until && new Date(meData.premium_until) > new Date();
+                if (!hasPremium) { alert('Обои чата доступны только с mes-premium'); setShowChatMenu(false); return; }
+                wallpaperInputRef.current?.click();
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                Настроить фон чата
+              </button>
+              {wallpaper && (
+                <button className="chat-dropdown-item" onClick={removeWallpaper}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  Убрать фон
+                </button>
+              )}
               <button className="chat-dropdown-item danger" onClick={() => { setShowChatMenu(false); setShowRemoveFriendConfirm(true); }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
                 Удалить из друзей
@@ -571,10 +621,16 @@ export default function Chat() {
             </div>
           )}
         </div>
+        <input type="file" accept="image/jpeg,image/png,image/webp" ref={wallpaperInputRef} style={{ display: 'none' }} onChange={uploadWallpaper} />
       </div>
 
       {/* Messages */}
-      <div className="messages-area" ref={messagesRef} onScroll={handleMessagesScroll}>
+      <div
+        className="messages-area"
+        ref={messagesRef}
+        onScroll={handleMessagesScroll}
+        style={wallpaper ? { backgroundImage: `url(${wallpaper})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+      >
         {messages.length === 0 && (
           <div className="empty-state chat-empty">
             <div className="empty-icon">👋</div>

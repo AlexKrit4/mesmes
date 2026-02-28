@@ -15,10 +15,12 @@ export default function AdminPanel() {
   const [messages, setMessages] = useState([]);
   const [bans, setBans] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('messages'); // messages | bans
+  const [tab, setTab] = useState('messages'); // messages | bans | premium
   const [banForm, setBanForm] = useState({ reason: '', duration: '' });
   const [banMsg, setBanMsg] = useState('');
   const [search, setSearch] = useState('');
+  const [premiumMonths, setPremiumMonths] = useState('1');
+  const [premiumMsg, setPremiumMsg] = useState('');
 
   // Check admin access
   useEffect(() => {
@@ -89,6 +91,30 @@ export default function AdminPanel() {
     }
   };
 
+  const grantPremium = async () => {
+    if (!selectedUser) return;
+    setPremiumMsg('');
+    try {
+      const { data } = await api.post('/admin/premium/grant', { user_id: selectedUser.id, months: parseInt(premiumMonths) || 1 });
+      setPremiumMsg(`Премиум выдан до ${formatDate(data.premium_until)}`);
+      fetchUsers();
+    } catch (err) {
+      setPremiumMsg(err.response?.data?.error || 'Ошибка');
+    }
+  };
+
+  const revokePremium = async () => {
+    if (!selectedUser) return;
+    setPremiumMsg('');
+    try {
+      await api.post('/admin/premium/revoke', { user_id: selectedUser.id });
+      setPremiumMsg('Премиум снят');
+      fetchUsers();
+    } catch (err) {
+      setPremiumMsg(err.response?.data?.error || 'Ошибка');
+    }
+  };
+
   const filteredUsers = users.filter((u) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
@@ -96,6 +122,8 @@ export default function AdminPanel() {
   });
 
   const isUserBanned = selectedUser && users.find(u => u.id === selectedUser.id)?.active_ban_id;
+  const userPremiumUntil = selectedUser && users.find(u => u.id === selectedUser.id)?.premium_until;
+  const isUserPremium = userPremiumUntil && new Date(userPremiumUntil) > new Date();
 
   if (loading) return <div className="admin-page"><div className="admin-loading">Загрузка...</div></div>;
 
@@ -129,6 +157,7 @@ export default function AdminPanel() {
               <div className="admin-user-info">
                 <div className="admin-user-name">
                   {u.username}
+                  {u.premium_until && new Date(u.premium_until) > new Date() && <span className="premium-badge" title="mes-premium">✓</span>}
                   {u.active_ban_id && <span className="admin-ban-badge">БАН</span>}
                 </div>
                 <div className="admin-user-id">@{u.public_id} · ID: {u.id}</div>
@@ -167,6 +196,9 @@ export default function AdminPanel() {
             </button>
             <button className={`admin-tab ${tab === 'bans' ? 'active' : ''}`} onClick={() => setTab('bans')}>
               Баны ({bans.length})
+            </button>
+            <button className={`admin-tab ${tab === 'premium' ? 'active' : ''}`} onClick={() => { setTab('premium'); setPremiumMsg(''); }}>
+              Премиум {isUserPremium ? '⭐' : ''}
             </button>
           </div>
 
@@ -240,6 +272,50 @@ export default function AdminPanel() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {tab === 'premium' && (
+            <div className="admin-premium">
+              <div className="admin-ban-form">
+                <h3>{isUserPremium ? '⭐ Пользователь — Premium' : 'Выдать Premium'}</h3>
+                {isUserPremium && (
+                  <div className="admin-premium-info">Активен до: {formatDate(userPremiumUntil)}</div>
+                )}
+                {!isUserPremium ? (
+                  <>
+                    <div className="admin-ban-duration">
+                      <label>Срок (месяцев):</label>
+                      <input
+                        className="admin-ban-input small"
+                        type="number"
+                        min="1"
+                        value={premiumMonths}
+                        onChange={(e) => setPremiumMonths(e.target.value)}
+                      />
+                    </div>
+                    <button className="btn btn-accent" onClick={grantPremium}>Выдать Premium</button>
+                  </>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <div className="admin-ban-duration">
+                        <label>Продлить (мес.):</label>
+                        <input
+                          className="admin-ban-input small"
+                          type="number"
+                          min="1"
+                          value={premiumMonths}
+                          onChange={(e) => setPremiumMonths(e.target.value)}
+                        />
+                      </div>
+                      <button className="btn btn-accent" onClick={grantPremium} style={{ marginTop: 6 }}>Продлить</button>
+                    </div>
+                    <button className="btn btn-danger" onClick={revokePremium} style={{ alignSelf: 'flex-end' }}>Снять Premium</button>
+                  </div>
+                )}
+                {premiumMsg && <div className="admin-ban-msg">{premiumMsg}</div>}
+              </div>
             </div>
           )}
         </div>

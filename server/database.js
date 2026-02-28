@@ -271,3 +271,34 @@ try {
     )
   `);
 } catch (e) {}
+
+// Migration: premium fields on users
+try { db.exec(`ALTER TABLE users ADD COLUMN premium_until DATETIME DEFAULT NULL`); } catch (e) {}
+try { db.exec(`ALTER TABLE users ADD COLUMN hide_last_seen INTEGER DEFAULT 0`); } catch (e) {}
+
+// Migration: stories table (video stories on profile)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      video_url TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+} catch (e) {}
+
+// Migration: chat_wallpapers table (per-user chat background)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_wallpapers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      friend_id INTEGER NOT NULL,
+      wallpaper_url TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, friend_id)
+    )
+  `);
+} catch (e) {}

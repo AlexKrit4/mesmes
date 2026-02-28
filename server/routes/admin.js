@@ -22,7 +22,7 @@ router.get('/check', auth, (req, res) => {
 // GET /api/admin/users — list all users
 router.get('/users', auth, requireAdmin, (req, res) => {
   const users = db.prepare(`
-    SELECT u.id, u.username, u.public_id, u.email, u.avatar, u.created_at, u.last_seen, u.is_admin,
+    SELECT u.id, u.username, u.public_id, u.email, u.avatar, u.created_at, u.last_seen, u.is_admin, u.premium_until,
       (SELECT COUNT(*) FROM messages WHERE sender_id = u.id) as message_count,
       (SELECT b.id FROM bans b WHERE b.user_id = u.id AND b.active = 1 LIMIT 1) as active_ban_id
     FROM users u
@@ -102,6 +102,29 @@ router.get('/bans/:userId', auth, requireAdmin, (req, res) => {
     ORDER BY b.banned_at DESC
   `).all(userId);
   res.json(bans);
+});
+
+// POST /api/admin/premium/grant — grant premium for N months
+router.post('/premium/grant', auth, requireAdmin, (req, res) => {
+  const { user_id, months } = req.body;
+  if (!user_id || !months || months < 1) return res.status(400).json({ error: 'user_id и months обязательны' });
+  const target = db.prepare('SELECT id, premium_until FROM users WHERE id = ?').get(user_id);
+  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+  // If already premium, extend from current end date; otherwise from now
+  const baseDate = target.premium_until && new Date(target.premium_until) > new Date() ? new Date(target.premium_until) : new Date();
+  const newDate = new Date(baseDate);
+  newDate.setMonth(newDate.getMonth() + parseInt(months));
+  const premiumUntil = newDate.toISOString();
+  db.prepare('UPDATE users SET premium_until = ? WHERE id = ?').run(premiumUntil, user_id);
+  res.json({ success: true, premium_until: premiumUntil });
+});
+
+// POST /api/admin/premium/revoke — revoke premium
+router.post('/premium/revoke', auth, requireAdmin, (req, res) => {
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id обязателен' });
+  db.prepare('UPDATE users SET premium_until = NULL WHERE id = ?').run(user_id);
+  res.json({ success: true });
 });
 
 module.exports = router;

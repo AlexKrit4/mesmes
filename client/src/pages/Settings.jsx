@@ -9,8 +9,36 @@ export default function Settings() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
-
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  // Premium + hide last seen
+  const [hideLastSeen, setHideLastSeen] = useState(!!me.hide_last_seen);
+  const [meData, setMeData] = useState(me);
+
+  // Fetch fresh me data
+  useState(() => {
+    api.get('/users/me').then(({ data }) => {
+      setMeData(data);
+      setHideLastSeen(!!data.hide_last_seen);
+      localStorage.setItem('me', JSON.stringify(data));
+    }).catch(() => {});
+  });
+
+  const hasPremium = meData.premium_until && new Date(meData.premium_until) > new Date();
+
+  const toggleHideLastSeen = async () => {
+    if (!hasPremium) { alert('Скрытие статуса доступно только с mes-premium'); return; }
+    const newVal = !hideLastSeen;
+    try {
+      await api.patch('/users/me', { hide_last_seen: newVal });
+      setHideLastSeen(newVal);
+      const stored = JSON.parse(localStorage.getItem('me') || '{}');
+      stored.hide_last_seen = newVal ? 1 : 0;
+      localStorage.setItem('me', JSON.stringify(stored));
+    } catch (err) {
+      alert(err.response?.data?.error || 'Ошибка');
+    }
+  };
 
   const logout = () => {
     disconnectSocket();
@@ -51,6 +79,39 @@ export default function Settings() {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           Мой профиль
         </button>
+
+        <div className="settings-divider" />
+
+        {/* Premium promo */}
+        <div className="settings-section">
+          <div className="settings-section-title">mes-premium {hasPremium && '⭐'}</div>
+          {hasPremium ? (
+            <p className="settings-msg" style={{ color: 'var(--accent)', lineHeight: 1.5 }}>
+              Премиум активен до {new Date(meData.premium_until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          ) : (
+            <button className="settings-action-btn" onClick={() => navigate('/premium')} style={{ color: '#a259ff', borderColor: '#a259ff' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              Купить mes-premium
+            </button>
+          )}
+        </div>
+
+        <div className="settings-divider" />
+
+        {/* Hide last seen (premium only) */}
+        <div className="settings-section">
+          <div className="settings-section-title">Приватность</div>
+          <div className="settings-toggle-row" onClick={toggleHideLastSeen} style={{ cursor: 'pointer' }}>
+            <div>
+              <div className="settings-toggle-label">Скрыть «был(а) в сети»</div>
+              <div className="settings-toggle-hint">{hasPremium ? 'Другие не увидят ваш статус, но вы видите их' : 'Только для mes-premium'}</div>
+            </div>
+            <div className={`settings-toggle ${hideLastSeen && hasPremium ? 'on' : ''}`}>
+              <div className="settings-toggle-knob" />
+            </div>
+          </div>
+        </div>
 
         <div className="settings-divider" />
 

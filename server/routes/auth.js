@@ -194,7 +194,7 @@ router.post('/register', async (req, res) => {
     const token = jwt.sign({ userId: result.lastInsertRowid }, JWT_SECRET, { expiresIn: '30d' });
     return res.json({
       token,
-      user: { id: result.lastInsertRowid, username: display_name, public_id, avatar: null },
+      user: { id: result.lastInsertRowid, username: display_name, public_id, avatar: null, premium_until: null, hide_last_seen: 0 },
     });
   } catch (e) {
     console.error('[register error]', e.message, e.stack);
@@ -248,7 +248,7 @@ router.post('/login', async (req, res) => {
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
   return res.json({
     token,
-    user: { id: user.id, username: user.username, public_id: user.public_id, avatar: user.avatar },
+    user: { id: user.id, username: user.username, public_id: user.public_id, avatar: user.avatar, premium_until: user.premium_until || null, hide_last_seen: user.hide_last_seen || 0 },
   });
 });
 

@@ -305,6 +305,10 @@ io.on('connection', (socket) => {
 });
 
 function broadcastPresence(userId, online, lastSeen) {
+  // Check if user hides last seen (premium feature)
+  const userData = db.prepare('SELECT hide_last_seen, premium_until FROM users WHERE id = ?').get(userId);
+  const hidesLastSeen = userData && userData.hide_last_seen && userData.premium_until && new Date(userData.premium_until) > new Date();
+
   // Get all friends of this user
   const friends = db.prepare(`
     SELECT CASE WHEN user_id = ? THEN friend_id ELSE user_id END as friend_id
@@ -314,7 +318,11 @@ function broadcastPresence(userId, online, lastSeen) {
   friends.forEach(({ friend_id }) => {
     if (onlineUsers.has(friend_id)) {
       onlineUsers.get(friend_id).forEach((sid) =>
-        io.to(sid).emit('presence', { userId, online, lastSeen })
+        io.to(sid).emit('presence', {
+          userId,
+          online: hidesLastSeen ? false : online,
+          lastSeen: hidesLastSeen ? null : lastSeen,
+        })
       );
     }
   });

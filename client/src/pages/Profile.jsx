@@ -53,6 +53,11 @@ export default function Profile() {
   const [lightboxScale, setLightboxScale] = useState(1);
   const pinchDistRef = useRef(null);
 
+  // Stories
+  const [stories, setStories] = useState([]);
+  const [storyPlaying, setStoryPlaying] = useState(null); // story object or null
+  const storyInputRef = useRef(null);
+
   useEffect(() => {
     setLoading(true);
     api.get(`/users/profile/${publicId}`).then(({ data }) => {
@@ -73,6 +78,9 @@ export default function Profile() {
           if (diff < 30 * 24 * 60 * 60 * 1000) setPhoneRateLimitDays(Math.ceil((30 * 24 * 60 * 60 * 1000 - diff) / 86400000));
         }
       }
+
+      // Fetch stories
+      api.get(`/users/stories/${data.id}`).then(r => setStories(r.data)).catch(() => {});
     }).catch(() => {
       setProfile(null);
     }).finally(() => setLoading(false));
@@ -82,7 +90,31 @@ export default function Profile() {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
+    // GIF: check premium, upload directly (no crop)
+    if (file.type === 'image/gif') {
+      const myPremium = profile.premium_until && new Date(profile.premium_until) > new Date();
+      if (!myPremium) {
+        setMsg('GIF-аватар доступен только с mes-premium');
+        return;
+      }
+      uploadGifAvatar(file);
+      return;
+    }
     setCropFile(file);
+  };
+
+  const uploadGifAvatar = async (file) => {
+    const formData = new FormData();
+    formData.append('avatar', file, file.name);
+    try {
+      const { data } = await api.post('/users/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setProfile((p) => ({ ...p, avatar: data.avatar }));
+      const meData = JSON.parse(localStorage.getItem('me') || '{}');
+      meData.avatar = data.avatar;
+      localStorage.setItem('me', JSON.stringify(meData));
+    } catch (err) {
+      setMsg(err.response?.data?.error || 'Ошибка загрузки');
+    }
   };
 
   const uploadCroppedAvatar = async (blob) => {
@@ -96,6 +128,30 @@ export default function Profile() {
       meData.avatar = data.avatar;
       localStorage.setItem('me', JSON.stringify(meData));
     } catch { /* */ }
+  };
+
+  const uploadStory = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    const formData = new FormData();
+    formData.append('video', file, file.name);
+    try {
+      const { data } = await api.post('/users/stories', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setStories(prev => [data, ...prev]);
+    } catch (err) {
+      setMsg(err.response?.data?.error || 'Ошибка загрузки истории');
+    }
+  };
+
+  const deleteStory = async (storyId) => {
+    try {
+      await api.delete(`/users/stories/${storyId}`);
+      setStories(prev => prev.filter(s => s.id !== storyId));
+      if (storyPlaying?.id === storyId) setStoryPlaying(null);
+    } catch (err) {
+      setMsg(err.response?.data?.error || 'Ошибка удаления');
+    }
   };
 
   const saveProfile = async () => {
@@ -235,15 +291,20 @@ export default function Profile() {
         {/* Info — view mode */}
         {!editing && (
           <>
-            <div className="profile-name">{profile.username}</div>
+            <div className="profile-name">
+              {profile.username}
+              {profile.premium_until && new Date(profile.premium_until) > new Date() && <span className="premium-badge" title="mes-premium">✓</span>}
+            </div>
             <div className="profile-id">@{profile.public_id}</div>
             {profile.bio && <div className="profile-bio">{profile.bio}</div>}
 
             <div className="profile-meta">
+              {!(profile.hide_last_seen && profile.premium_until && new Date(profile.premium_until) > new Date() && !isMe) && (
               <div className="profile-meta-row">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 <span>Был(а) {timeSince(profile.last_seen)}</span>
               </div>
+              )}
               <div className="profile-meta-row">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 <span>Зарегистрирован {formatDate(profile.created_at)}</span>
@@ -263,6 +324,40 @@ export default function Profile() {
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
                     Добавить в друзья
                   </button>
+                )}
+              </div>
+            )}
+
+            {/* Stories section */}
+            {(stories.length > 0 || isMe) && (
+              <div className="profile-stories-section">
+                <div className="profile-stories-header">
+                  <span className="profile-stories-title">Истории</span>
+                  {isMe && (
+                    <>
+                      <button className="btn btn-sm btn-accent" onClick={() => {
+                        const myPremium = profile.premium_until && new Date(profile.premium_until) > new Date();
+                        if (!myPremium) { setMsg('Видео-истории доступны только с mes-premium'); return; }
+                        storyInputRef.current?.click();
+                      }}>+ Добавить</button>
+                      <input type="file" accept="video/mp4,video/webm,video/quicktime" ref={storyInputRef} style={{ display: 'none' }} onChange={uploadStory} />
+                    </>
+                  )}
+                </div>
+                {stories.length === 0 ? (
+                  <div className="profile-stories-empty">Нет историй</div>
+                ) : (
+                  <div className="profile-stories-grid">
+                    {stories.map(s => (
+                      <div key={s.id} className="profile-story-card" onClick={() => setStoryPlaying(s)}>
+                        <video src={s.video_url} className="profile-story-thumb" muted preload="metadata" />
+                        <div className="profile-story-play">▶</div>
+                        {isMe && (
+                          <button className="profile-story-delete" onClick={(e) => { e.stopPropagation(); deleteStory(s.id); }}>✕</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -381,6 +476,22 @@ export default function Profile() {
               e.preventDefault();
               setLightboxScale(s => Math.min(5, Math.max(0.5, s - e.deltaY * 0.005)));
             }}
+          />
+        </div>
+      )}
+
+      {/* Story player overlay */}
+      {storyPlaying && (
+        <div className="lightbox-overlay story-player-overlay" onClick={() => setStoryPlaying(null)}>
+          <button className="lightbox-close" onClick={(e) => { e.stopPropagation(); setStoryPlaying(null); }}>✕</button>
+          <video
+            src={storyPlaying.video_url}
+            className="story-player-video"
+            autoPlay
+            controls
+            playsInline
+            onClick={(e) => e.stopPropagation()}
+            onEnded={() => setStoryPlaying(null)}
           />
         </div>
       )}
