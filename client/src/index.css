@@ -629,6 +629,38 @@ img.avatar {
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
+/* Phone search with +7 prefix */
+.phone-input-group {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.phone-input-group:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.phone-prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: var(--bg3);
+  color: var(--text2);
+  font-size: 14px;
+  white-space: nowrap;
+  user-select: none;
+  border-right: 1px solid var(--border);
+}
+.phone-input-group .search-input {
+  border: none;
+  border-radius: 0;
+  box-shadow: none !important;
+  padding-left: 12px;
+}
+
 /* ─── My ID box ─── */
 .my-id-box {
   background: linear-gradient(135deg, rgba(108,92,231,0.08) 0%, rgba(168,85,247,0.06) 100%);

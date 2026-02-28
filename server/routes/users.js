@@ -283,9 +283,15 @@ router.get('/requests', auth, (req, res) => {
 
 // POST /api/users/friend-request
 router.post('/friend-request', auth, (req, res) => {
-  const { public_id } = req.body;
-  const target = db.prepare('SELECT id FROM users WHERE public_id = ?').get(public_id);
-  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+  const { public_id, phone } = req.body;
+  let target;
+  if (phone) {
+    target = db.prepare('SELECT id FROM users WHERE phone = ?').get(phone);
+    if (!target) return res.status(404).json({ error: 'Пользователь с таким номером не найден' });
+  } else {
+    target = db.prepare('SELECT id FROM users WHERE public_id = ?').get(public_id);
+    if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+  }
   if (target.id === req.userId) return res.status(400).json({ error: 'Нельзя добавить себя' });
 
   const exists = db.prepare(

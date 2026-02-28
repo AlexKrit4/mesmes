@@ -37,6 +37,8 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState([]);
   const [addPublicId, setAddPublicId] = useState('');
   const [addMsg, setAddMsg] = useState('');
+  const [addPhone, setAddPhone] = useState('');
+  const [addPhoneMsg, setAddPhoneMsg] = useState('');
   const [online, setOnline] = useState({});
   const [myAvatar, setMyAvatar] = useState(me.avatar || null);
   const [showProfile, setShowProfile] = useState(false);
@@ -192,6 +194,19 @@ export default function Home() {
       setAddPublicId('');
     } catch (err) {
       setAddMsg(err.response?.data?.error || 'Ошибка');
+    }
+  };
+
+  const sendRequestByPhone = async () => {
+    setAddPhoneMsg('');
+    const digits = addPhone.replace(/\D/g, '');
+    if (digits.length !== 10) { setAddPhoneMsg('Введите 10 цифр'); return; }
+    try {
+      await api.post('/users/friend-request', { phone: '+7' + digits });
+      setAddPhoneMsg('Заявка отправлена!');
+      setAddPhone('');
+    } catch (err) {
+      setAddPhoneMsg(err.response?.data?.error || 'Ошибка');
     }
   };
 
@@ -500,12 +515,37 @@ export default function Home() {
                   placeholder="exact_user_id"
                   value={addPublicId}
                   onChange={(e) => setAddPublicId(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addPublicId.trim() && sendRequest(addPublicId)}
                 />
                 <button className="btn btn-accent btn-sm" onClick={() => sendRequest(addPublicId)} disabled={!addPublicId.trim()}>
                   →
                 </button>
               </div>
               {addMsg && <p className={`add-msg ${addMsg.includes('отправлена') ? 'success' : 'error'}`}>{addMsg}</p>}
+            </div>
+
+            <div className="divider" />
+
+            <div className="add-direct">
+              <div className="add-direct-label">Добавить по номеру телефона</div>
+              <div className="search-box">
+                <div className="phone-input-group">
+                  <span className="phone-prefix">+7</span>
+                  <input
+                    className="search-input"
+                    placeholder="0000000000"
+                    value={addPhone}
+                    maxLength={10}
+                    inputMode="numeric"
+                    onChange={(e) => setAddPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    onKeyDown={(e) => e.key === 'Enter' && sendRequestByPhone()}
+                  />
+                </div>
+                <button className="btn btn-accent btn-sm" onClick={sendRequestByPhone} disabled={addPhone.replace(/\D/g, '').length !== 10}>
+                  →
+                </button>
+              </div>
+              {addPhoneMsg && <p className={`add-msg ${addPhoneMsg.includes('отправлена') ? 'success' : 'error'}`}>{addPhoneMsg}</p>}
             </div>
 
             <div className="divider" />
