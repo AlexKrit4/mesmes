@@ -2319,7 +2319,7 @@ img.avatar {
   flex-direction: column;
   align-items: center;
 }
-.profile-avatar-wrap {
+.profile-page .profile-avatar-wrap {
   position: relative;
   width: 96px;
   height: 96px;
@@ -2445,4 +2445,32 @@ img.avatar {
   color: var(--text2);
   margin-top: 4px;
   line-height: 1.35;
+}
+
+/* Phone input with +7 prefix */
+.phone-input-wrap {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg2);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.phone-input-wrap:focus-within {
+  border-color: var(--accent);
+}
+.phone-prefix {
+  padding: 10px 0 10px 12px;
+  color: var(--text2);
+  font-size: 0.95rem;
+  user-select: none;
+  flex-shrink: 0;
+}
+.phone-input-wrap input {
+  border: none !important;
+  background: transparent !important;
+  padding-left: 4px;
+  flex: 1;
+  min-width: 0;
 }

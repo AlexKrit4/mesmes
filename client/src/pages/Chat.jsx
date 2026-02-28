@@ -48,7 +48,6 @@ export default function Chat() {
   const [isOnline, setIsOnline] = useState(false);
   const [loading, setLoading] = useState(true);
   const [contextMenu, setContextMenu] = useState(null); // { msgId, x, y, isOut, containerWidth, containerHeight }
-  const [showFriendProfile, setShowFriendProfile] = useState(false);
 
   // Edit state
   const [editingMsgId, setEditingMsgId] = useState(null);
@@ -504,7 +503,7 @@ export default function Chat() {
         <button className="topbar-back" onClick={() => navigate('/')}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
-        <div className="chat-topbar-info" onClick={() => setShowFriendProfile(true)} style={{ cursor: 'pointer' }}>
+        <div className="chat-topbar-info" onClick={() => friend?.public_id ? navigate(`/${friend.public_id}`) : null} style={{ cursor: 'pointer' }}>
           {friend?.avatar ? (
             <img className="avatar avatar-topbar" src={friend.avatar} alt="" />
           ) : (
@@ -791,27 +790,6 @@ export default function Chat() {
         </div>
       )}
 
-      {/* Friend profile modal */}
-      {showFriendProfile && friend && (
-        <div className="modal-overlay" onClick={() => setShowFriendProfile(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShowFriendProfile(false)}>✕</button>
-            <div className="modal-avatar-wrap">
-              {friend.avatar ? (
-                <img className="avatar avatar-xl" src={friend.avatar} alt="" />
-              ) : (
-                <div className="avatar avatar-xl">{(friend.username || '?')[0].toUpperCase()}</div>
-              )}
-              <div className={`modal-status-dot ${isOnline ? 'online' : ''}`} />
-            </div>
-            <div className="modal-name">{friend.username}</div>
-            <div className="modal-id">@{friend.public_id}</div>
-            <div className="modal-status-text">
-              {isOnline ? '🟢 В сети' : `Был(а) ${timeSince(friend.last_seen) || 'недавно'}`}
-            </div>
-          </div>
-        </div>
-      )}
       {/* Lightbox image viewer */}
       {lightboxSrc && (
         <div

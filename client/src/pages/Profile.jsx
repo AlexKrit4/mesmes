@@ -279,13 +279,20 @@ export default function Profile() {
 
             <div className="form-group">
               <label>Номер телефона</label>
-              <input
-                value={editPhone}
-                onChange={(e) => setEditPhone(e.target.value.replace(/[^0-9+]/g, ''))}
-                placeholder="+7 999 123 45 67"
-                maxLength={20}
-                disabled={phoneRateLimitDays > 0 && editPhone === (profile.phone || '')}
-              />
+              <div className="phone-input-wrap">
+                <span className="phone-prefix">+7</span>
+                <input
+                  value={editPhone.startsWith('+7') ? editPhone.slice(2) : editPhone.replace(/^[+78]/, '')}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setEditPhone(digits ? '+7' + digits : '');
+                  }}
+                  placeholder="999 123 45 67"
+                  maxLength={10}
+                  inputMode="tel"
+                  disabled={phoneRateLimitDays > 0 && editPhone === (profile.phone || '')}
+                />
+              </div>
               <div className="hint" style={{ color: 'var(--text2)' }}>
                 {phoneRateLimitDays > 0
                   ? `Номер можно менять раз в 30 дней. Осталось ${phoneRateLimitDays} дн.`
