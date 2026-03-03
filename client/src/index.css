@@ -3032,3 +3032,21 @@ img.avatar {
   background: #000;
 }
 
+/* ── Password reset pages ───────────────────────────────── */
+.reset-success-box {
+  text-align: center;
+  padding: 8px 0;
+}
+.reset-success-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+.reset-success-box p {
+  margin: 6px 0;
+  color: var(--text);
+}
+.reset-success-hint {
+  color: var(--text-secondary) !important;
+  font-size: 14px;
+}
+

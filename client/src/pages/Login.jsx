@@ -112,6 +112,9 @@ export default function Login() {
         <p className="auth-footer">
           Нет аккаунта? <Link to="/register">Создать</Link>
         </p>
+        <p className="auth-footer">
+          Забыли пароль? <Link to="/forgot-password">Восстановить</Link>
+        </p>
       </div>
     </div>
   );

@@ -9,6 +9,8 @@ import Settings from './pages/Settings.jsx';
 import AdminPanel from './pages/AdminPanel.jsx';
 import Profile from './pages/Profile.jsx';
 import PremiumPage from './pages/PremiumPage.jsx';
+import ForgotPassword from './pages/ForgotPassword.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
 
 function PrivateRoute({ children }) {
   return localStorage.getItem('token') ? children : <Navigate to="/login" replace />;
@@ -24,6 +26,8 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+        <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
         <Route path="/chat/:friendId" element={<PrivateRoute><Chat /></PrivateRoute>} />
         <Route path="/channel/:id" element={<PrivateRoute><ChannelPage /></PrivateRoute>} />

@@ -302,3 +302,21 @@ try {
     )
   `);
 } catch (e) {}
+
+// Migration: password_resets table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+} catch (e) {}
+
+// Migration: password_changed_at — rate-limit (once per day)
+try { db.exec(`ALTER TABLE users ADD COLUMN password_changed_at DATETIME DEFAULT NULL`); } catch (e) {}

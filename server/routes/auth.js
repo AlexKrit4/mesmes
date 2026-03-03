@@ -252,4 +252,115 @@ router.post('/login', async (req, res) => {
   });
 });
 
+// POST /api/auth/forgot-password — запрос на восстановление пароля
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email, public_id } = req.body || {};
+    if (!email || !public_id) {
+      return res.status(400).json({ error: 'Email и публичный ID обязательны' });
+    }
+
+    const user = db.prepare('SELECT id, public_id, email FROM users WHERE email = ? AND public_id = ?').get(email.trim().toLowerCase(), public_id.trim());
+    if (!user) {
+      return res.status(404).json({ error: 'Пользователь с такими данными не найден. Проверьте email и ID.' });
+    }
+
+    // Rate-limit: не более одного сброса в сутки
+    const dayAgo = Math.floor(Date.now() / 1000) - 86400;
+    const recentReset = db.prepare(
+      'SELECT id FROM password_resets WHERE user_id = ? AND used = 1 AND created_at > datetime(?, \'unixepoch\') ORDER BY id DESC LIMIT 1'
+    ).get(user.id, dayAgo);
+    if (recentReset) {
+      return res.status(429).json({ error: 'Пароль уже менялся сегодня. Попробуйте завтра.' });
+    }
+
+    // Токен живёт 1 час
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+
+    // Удаляем старые неиспользованные токены для этого пользователя
+    db.prepare('DELETE FROM password_resets WHERE user_id = ? AND used = 0').run(user.id);
+    db.prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)').run(user.id, token, expiresAt);
+
+    const APP_URL = process.env.APP_URL || 'https://mesmes.ru';
+    const resetLink = `${APP_URL}/reset-password/${token}`;
+
+    await sendEmail({
+      to: email.trim().toLowerCase(),
+      subject: 'МесМес - Восстановление пароля',
+      text: `Здравствуйте, ${user.public_id}. Это письмо поможет вам восстановить пароль. Перейдите по ссылке и вы сможете ввести новый пароль.\n\n${resetLink}\n\nЕсли вы не отправляли запрос на восстановление, просьба проигнорировать письмо.\n\nС наилучшими пожеланиями, МесМес.`,
+      html: `<div style="font-family:sans-serif;max-width:480px">
+        <h2 style="color:#6c5ce7">МесМес</h2>
+        <p>Здравствуйте, <strong>${user.public_id}</strong>.</p>
+        <p>Это письмо поможет вам восстановить пароль. Перейдите по ссылке и вы сможете ввести новый пароль.</p>
+        <p style="margin:24px 0">
+          <a href="${resetLink}" style="background:#6c5ce7;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:16px">Восстановить пароль</a>
+        </p>
+        <p style="color:#888;font-size:13px">Или скопируйте ссылку: ${resetLink}</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
+        <p style="color:#aaa;font-size:12px">Если вы не отправляли запрос на восстановление, просьба проигнорировать письмо.</p>
+        <p style="color:#aaa;font-size:12px">С наилучшими пожеланиями, МесМес.</p>
+      </div>`,
+    });
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[forgot-password error]', e.message || e);
+    return res.status(500).json({ error: e.message || 'Ошибка сервера' });
+  }
+});
+
+// GET /api/auth/reset-password/:token — проверка токена
+router.get('/reset-password/:token', (req, res) => {
+  const { token } = req.params;
+  const now = Math.floor(Date.now() / 1000);
+  const reset = db.prepare(
+    'SELECT id, user_id FROM password_resets WHERE token = ? AND expires_at > ? AND used = 0 LIMIT 1'
+  ).get(token, now);
+  if (!reset) {
+    return res.status(404).json({ error: 'Ссылка недействительна или устарела' });
+  }
+  return res.json({ ok: true });
+});
+
+// POST /api/auth/reset-password/:token — установить новый пароль
+router.post('/reset-password/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body || {};
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Пароль минимум 6 символов' });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const reset = db.prepare(
+      'SELECT id, user_id FROM password_resets WHERE token = ? AND expires_at > ? AND used = 0 LIMIT 1'
+    ).get(token, now);
+
+    if (!reset) {
+      return res.status(404).json({ error: 'Ссылка недействительна или устарела' });
+    }
+
+    // Rate-limit: не более одного сброса в сутки
+    const dayAgo = now - 86400;
+    const recentReset = db.prepare(
+      'SELECT id FROM password_resets WHERE user_id = ? AND used = 1 AND created_at > datetime(?, \'unixepoch\') ORDER BY id DESC LIMIT 1'
+    ).get(reset.user_id, dayAgo);
+    if (recentReset) {
+      return res.status(429).json({ error: 'Пароль уже менялся сегодня. Попробуйте завтра.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    db.prepare('UPDATE users SET password_hash = ?, password_changed_at = CURRENT_TIMESTAMP WHERE id = ?').run(passwordHash, reset.user_id);
+    db.prepare('UPDATE password_resets SET used = 1 WHERE id = ?').run(reset.id);
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[reset-password error]', e.message || e);
+    return res.status(500).json({ error: e.message || 'Ошибка сервера' });
+  }
+});
+
 module.exports = router;
