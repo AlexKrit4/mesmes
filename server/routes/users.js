@@ -46,10 +46,10 @@ const msgStorage = multer.diskStorage({
 });
 const msgUpload = multer({
   storage: msgStorage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB (video)
   fileFilter: (req, file, cb) => {
-    if (/^image\/(jpeg|png|webp|gif|heic|heif)$/.test(file.mimetype)) cb(null, true);
-    else cb(new Error('Только изображения'));
+    if (/^(image\/(jpeg|png|webp|gif|heic|heif)|video\/(mp4|webm|mov|quicktime|x-msvideo|x-matroska|3gpp))$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Только изображения и видео'));
   },
 });
 

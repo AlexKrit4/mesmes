@@ -22,6 +22,10 @@ function parseFileUrls(file_url) {
   return [file_url];
 }
 
+function isVideo(url) {
+  return /\.(mp4|webm|mov|avi|mkv|3gp)$/i.test(url);
+}
+
 function parseUTC(dateStr) {
   if (!dateStr) return null;
   // Ensure UTC interpretation — append Z if missing
@@ -682,10 +686,19 @@ export default function Chat() {
                     if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('msg-highlight'); setTimeout(() => el.classList.remove('msg-highlight'), 1500); }
                   }}>
                     <div className="reply-quote-name">{msg.reply_to.sender_id === me.id ? 'Вы' : (msg.reply_to.sender_username || 'Пользователь')}</div>
-                    <div className="reply-quote-text">{msg.reply_to.file_url ? '🖼️ Изображение' : (msg.reply_to.content || '...')}</div>
+                    <div className="reply-quote-text">{msg.reply_to.file_url ? (isVideo(msg.reply_to.file_url) ? '📹 Видео' : '🖼️ Изображение') : (msg.reply_to.content || '...')}</div>
                   </div>
                 )}
-                {urls.length === 1 && (
+                {urls.length === 1 && isVideo(urls[0]) && (
+                  <video
+                    src={urls[0]}
+                    className="msg-video"
+                    controls
+                    playsInline
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                )}
+                {urls.length === 1 && !isVideo(urls[0]) && (
                   <img
                     src={urls[0]}
                     className="msg-image"
@@ -696,13 +709,24 @@ export default function Chat() {
                 {urls.length > 1 && (
                   <div className={`msg-collage c${urls.length}`}>
                     {urls.map((url, i) => (
-                      <img
-                        key={i}
-                        src={url}
-                        className="msg-collage-img"
-                        alt=""
-                        onClick={(e) => { e.stopPropagation(); openLightbox(urls, i); }}
-                      />
+                      isVideo(url) ? (
+                        <video
+                          key={i}
+                          src={url}
+                          className="msg-collage-img"
+                          controls
+                          playsInline
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <img
+                          key={i}
+                          src={url}
+                          className="msg-collage-img"
+                          alt=""
+                          onClick={(e) => { e.stopPropagation(); openLightbox(urls.filter(u => !isVideo(u)), urls.filter(u => !isVideo(u)).indexOf(url)); }}
+                        />
+                      )
                     ))}
                   </div>
                 )}
@@ -798,7 +822,7 @@ export default function Chat() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0, color: 'var(--accent)' }}><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
           <div className="reply-bar-content">
             <div className="reply-bar-name">{replyTo.sender_id === me.id ? 'Вы' : (replyTo.sender_username || 'Пользователь')}</div>
-            <div className="reply-bar-text">{replyTo.file_url ? '🖼️ Изображение' : (replyTo.content?.slice(0, 80) || '...')}</div>
+            <div className="reply-bar-text">{replyTo.file_url ? (isVideo(replyTo.file_url) ? '📹 Видео' : '🖼️ Изображение') : (replyTo.content?.slice(0, 80) || '...')}</div>
           </div>
           <button className="reply-bar-cancel" onClick={() => setReplyTo(null)}>✕</button>
         </div>
@@ -820,6 +844,8 @@ export default function Chat() {
             <div key={i} className="file-preview-item">
               {f.type.startsWith('image/') ? (
                 <img src={URL.createObjectURL(f)} alt="" className="file-preview-thumb" />
+              ) : f.type.startsWith('video/') ? (
+                <video src={URL.createObjectURL(f)} className="file-preview-thumb" muted />
               ) : (
                 <span className="file-preview-name">{f.name}</span>
               )}
@@ -836,7 +862,7 @@ export default function Chat() {
       <div className="message-input-bar">
         <input
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           ref={fileInputRef}
           style={{ display: 'none' }}
@@ -846,7 +872,7 @@ export default function Chat() {
           className="attach-btn"
           onClick={() => fileInputRef.current?.click()}
           disabled={fileUploading}
-          title="Прикрепить изображение"
+          title="Прикрепить файл"
         >
           {fileUploading
             ? <span className="attach-spinner" />

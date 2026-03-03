@@ -265,6 +265,14 @@ router.post('/forgot-password', async (req, res) => {
       return res.status(404).json({ error: 'Пользователь с такими данными не найден. Проверьте email и ID.' });
     }
 
+    // Rate-limit: не более 1 письма в 60 секунд (защита от спама)
+    const recentRequest = db.prepare(
+      "SELECT id FROM password_resets WHERE user_id = ? AND used = 0 AND created_at > datetime('now', '-60 seconds') ORDER BY id DESC LIMIT 1"
+    ).get(user.id);
+    if (recentRequest) {
+      return res.status(429).json({ error: 'Подождите 60 секунд перед повторной отправкой' });
+    }
+
     // Rate-limit: не более одного сброса в сутки
     const dayAgo = Math.floor(Date.now() / 1000) - 86400;
     const recentReset = db.prepare(

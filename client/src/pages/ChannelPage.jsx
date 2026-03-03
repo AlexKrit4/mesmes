@@ -22,6 +22,10 @@ function parseFileUrls(file_url) {
   return [file_url];
 }
 
+function isVideo(url) {
+  return /\.(mp4|webm|mov|avi|mkv|3gp)$/i.test(url);
+}
+
 function formatTime(dateStr) {
   if (!dateStr) return '';
   const s = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
@@ -138,15 +142,19 @@ export default function ChannelPage() {
 
   const hasInitiallyScrolled = useRef(false);
 
+  // Initial scroll: fires once after loading finishes (DOM is ready)
   useEffect(() => {
-    if (!messages.length) return;
-    if (!hasInitiallyScrolled.current) {
+    if (!loading && !hasInitiallyScrolled.current && messages.length) {
       hasInitiallyScrolled.current = true;
       setTimeout(scrollToBottomInstant, 30);
-    } else {
-      scrollToBottom();
     }
-  }, [messages, scrollToBottom, scrollToBottomInstant]);
+  }, [loading, messages, scrollToBottomInstant]);
+
+  // Subsequent new messages: auto-scroll to bottom
+  useEffect(() => {
+    if (!hasInitiallyScrolled.current) return;
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
 
   // Close menus on outside click
   useEffect(() => {
@@ -429,7 +437,16 @@ export default function ChannelPage() {
               </div>
             )}
             <div className="message out channel-msg">
-              {urls.length === 1 && (
+              {urls.length === 1 && isVideo(urls[0]) && (
+                <video
+                  src={urls[0]}
+                  className="msg-video"
+                  controls
+                  playsInline
+                  onClick={(e) => e.stopPropagation()}
+                />
+              )}
+              {urls.length === 1 && !isVideo(urls[0]) && (
                 <img
                   src={urls[0]}
                   className="msg-image"
@@ -440,13 +457,24 @@ export default function ChannelPage() {
               {urls.length > 1 && (
                 <div className={`msg-collage c${urls.length}`}>
                   {urls.map((url, i) => (
-                    <img
-                      key={i}
-                      src={url}
-                      className="msg-collage-img"
-                      alt=""
-                      onClick={(e) => { e.stopPropagation(); openLightbox(urls, i); }}
-                    />
+                    isVideo(url) ? (
+                      <video
+                        key={i}
+                        src={url}
+                        className="msg-collage-img"
+                        controls
+                        playsInline
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <img
+                        key={i}
+                        src={url}
+                        className="msg-collage-img"
+                        alt=""
+                        onClick={(e) => { e.stopPropagation(); openLightbox(urls.filter(u => !isVideo(u)), urls.filter(u => !isVideo(u)).indexOf(url)); }}
+                      />
+                    )
                   ))}
                 </div>
               )}
@@ -506,6 +534,8 @@ export default function ChannelPage() {
                 <div key={i} className="file-preview-item">
                   {f.type.startsWith('image/') ? (
                     <img src={URL.createObjectURL(f)} alt="" className="file-preview-thumb" />
+                  ) : f.type.startsWith('video/') ? (
+                    <video src={URL.createObjectURL(f)} className="file-preview-thumb" muted />
                   ) : (
                     <span className="file-preview-name">{f.name}</span>
                   )}
@@ -520,7 +550,7 @@ export default function ChannelPage() {
           <div className="message-input-bar">
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,video/*"
               multiple
               ref={fileInputRef}
               style={{ display: 'none' }}
