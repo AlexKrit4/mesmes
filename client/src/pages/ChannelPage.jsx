@@ -91,6 +91,7 @@ export default function ChannelPage() {
   const bottomRef = useRef(null);
   const chatPageRef = useRef(null);
   const fileInputRef = useRef(null);
+  const messagesAreaRef = useRef(null);
 
   const isOwner = channel?.owner_id === me.id;
   const isMember = channel?.is_member;
@@ -141,14 +142,31 @@ export default function ChannelPage() {
   }, [channelId]);
 
   const hasInitiallyScrolled = useRef(false);
+  const anchorScrollRef = useRef(false); // true while we must keep bottom pinned
 
   // Initial scroll: fires once after loading finishes (DOM is ready)
   useEffect(() => {
     if (!loading && !hasInitiallyScrolled.current && messages.length) {
       hasInitiallyScrolled.current = true;
       setTimeout(scrollToBottomInstant, 30);
+      // Pin bottom for 5 s while media (images/videos) finishes loading
+      anchorScrollRef.current = true;
+      setTimeout(() => { anchorScrollRef.current = false; }, 5000);
     }
   }, [loading, messages, scrollToBottomInstant]);
+
+  // ResizeObserver: re-scroll to bottom whenever container grows (media loads)
+  useEffect(() => {
+    const el = messagesAreaRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (anchorScrollRef.current) {
+        bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Subsequent new messages: auto-scroll to bottom
   useEffect(() => {
@@ -390,7 +408,7 @@ export default function ChannelPage() {
       </div>
 
       {/* Messages */}
-      <div className="messages-area">
+      <div className="messages-area" ref={messagesAreaRef}>
         {messages.length === 0 && (
           <div className="empty-state chat-empty">
             <div className="empty-icon">📢</div>

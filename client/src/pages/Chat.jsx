@@ -115,6 +115,7 @@ export default function Chat() {
   const fileInputRef = useRef(null);
   const pinchDistRef = useRef(null);
   const hasInitiallyScrolled = useRef(false);
+  const anchorScrollRef = useRef(false);
   const lastTapRef = useRef({ time: 0, msgId: null });
 
   const scrollToBottomInstant = useCallback(() => {
@@ -195,8 +196,24 @@ export default function Chat() {
     if (!loading && !hasInitiallyScrolled.current && messages.length) {
       hasInitiallyScrolled.current = true;
       setTimeout(scrollToBottomInstant, 30);
+      // Pin bottom for 5 s while media (images/videos) finishes loading
+      anchorScrollRef.current = true;
+      setTimeout(() => { anchorScrollRef.current = false; }, 5000);
     }
   }, [loading, messages, scrollToBottomInstant]);
+
+  // ResizeObserver: re-scroll to bottom while media (images/videos) loads
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (anchorScrollRef.current) {
+        bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Subsequent messages: auto-scroll if already near bottom
   useEffect(() => {
