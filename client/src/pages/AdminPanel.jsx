@@ -194,7 +194,7 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      {mainTab === 'users' && !selectedUser && (
+      {mainTab === 'users' && !selectedUser ? (
         /* ── User list ── */
         <div className="admin-user-list">
           <input
