@@ -107,6 +107,104 @@ function timeSince(dateStr) {
   return `${Math.floor(diff / 86400)} дн назад`;
 }
 
+function formatAudioTime(value) {
+  const safe = Number.isFinite(value) && value >= 0 ? value : 0;
+  const mins = Math.floor(safe / 60);
+  const secs = Math.floor(safe % 60);
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+function VoiceMessagePlayer({ src }) {
+  const audioRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [position, setPosition] = useState(0);
+
+  const togglePlay = (e) => {
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (audio.paused) {
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+    }
+  };
+
+  const onSeek = (e) => {
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio) return;
+    const next = Number(e.target.value);
+    audio.currentTime = next;
+    setPosition(next);
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onLoaded = () => {
+      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+    };
+    const onTimeUpdate = () => {
+      setPosition(audio.currentTime || 0);
+    };
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onEnded = () => {
+      setIsPlaying(false);
+      setPosition(0);
+    };
+
+    audio.addEventListener('loadedmetadata', onLoaded);
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
+    audio.addEventListener('ended', onEnded);
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('ended', onEnded);
+    };
+  }, [src]);
+
+  const max = Math.max(duration, 1);
+  const value = Math.min(position, max);
+
+  return (
+    <div className="voice-msg-player" onClick={(e) => e.stopPropagation()}>
+      <audio ref={audioRef} src={src} preload="metadata" />
+      <button className="voice-msg-play" onClick={togglePlay} aria-label={isPlaying ? 'Пауза' : 'Воспроизвести'}>
+        {isPlaying ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        )}
+      </button>
+      <div className="voice-msg-main">
+        <div className="voice-msg-title">Голосовое сообщение</div>
+        <input
+          type="range"
+          className="voice-msg-progress"
+          min="0"
+          max={max}
+          value={value}
+          step="0.01"
+          onChange={onSeek}
+          onClick={(e) => e.stopPropagation()}
+        />
+        <div className="voice-msg-time">{formatAudioTime(position)} / {formatAudioTime(duration)}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function Chat() {
   const { friendId } = useParams();
   const friendIdNum = parseInt(friendId);
@@ -915,7 +1013,7 @@ export default function Chat() {
                   if (isVideo(fileObj)) {
                     return <video key={i} src={fileObj.url} className="msg-video" controls playsInline onClick={e => e.stopPropagation()} style={{maxWidth: '100%', borderRadius: '8px'}} />;
                   } else if (isAudio(fileObj)) {
-                    return <audio key={i} src={fileObj.url} controls onClick={e => e.stopPropagation()} style={{maxWidth: '100%'}} />;
+                    return <VoiceMessagePlayer key={i} src={fileObj.url} />;
                   } else if (isImage(fileObj)) {
                     return <img key={i} src={fileObj.url} className="msg-image" alt="" onClick={(e) => {
                       e.stopPropagation();

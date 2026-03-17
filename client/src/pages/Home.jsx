@@ -5,6 +5,58 @@ import { connectSocket, disconnectSocket, getSocket } from '../socket.js';
 import { subscribeToPush, setupPushKeepAlive } from '../pushNotifications.js';
 import AvatarCropModal from '../AvatarCropModal.jsx';
 
+const VIDEO_EXT_RE = /\.(mp4|mov|avi|mkv|3gp|webm)$/i;
+const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a|aac|flac)$/i;
+const IMAGE_EXT_RE = /\.(jpg|jpeg|png|gif|webp)$/i;
+
+function parseMessageFiles(rawFileField) {
+  if (!rawFileField) return [];
+  if (Array.isArray(rawFileField)) {
+    return rawFileField
+      .map((entry) => (typeof entry === 'string' ? { url: entry } : entry))
+      .filter((entry) => entry?.url);
+  }
+  if (typeof rawFileField === 'object') {
+    return rawFileField.url ? [rawFileField] : [];
+  }
+  if (typeof rawFileField !== 'string') return [];
+
+  if (rawFileField.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(rawFileField);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((entry) => (typeof entry === 'string' ? { url: entry } : entry))
+          .filter((entry) => entry?.url);
+      }
+    } catch {
+      return [{ url: rawFileField }];
+    }
+  }
+
+  return [{ url: rawFileField }];
+}
+
+function filePreviewLabel(rawFileField) {
+  const first = parseMessageFiles(rawFileField)[0];
+  if (!first) return '📎 Файл';
+
+  const type = String(first.type || '').toLowerCase();
+  const url = String(first.url || '').toLowerCase();
+  const name = String(first.name || '').toLowerCase();
+
+  if (type.startsWith('audio/') || AUDIO_EXT_RE.test(url) || /voice|audio/.test(name)) {
+    return '🎤 Голосовое';
+  }
+  if (type.startsWith('video/') || VIDEO_EXT_RE.test(url)) {
+    return '📹 Видео';
+  }
+  if (type.startsWith('image/') || IMAGE_EXT_RE.test(url)) {
+    return '🖼️ Фото';
+  }
+  return '📎 Файл';
+}
+
 function timeSince(dateStr) {
   if (!dateStr) return '';
   // Ensure UTC interpretation — append Z if missing
@@ -411,7 +463,7 @@ export default function Home() {
                       {f.last_message
                         ? (f.last_message_sender_id === me.id ? 'Вы: ' : '') + f.last_message.slice(0, 40)
                         : f.last_message_file
-                          ? (f.last_message_sender_id === me.id ? 'Вы: ' : '') + '🖼️ Фото'
+                          ? (f.last_message_sender_id === me.id ? 'Вы: ' : '') + filePreviewLabel(f.last_message_file)
                           : online[f.id] ? 'онлайн'
                             : (f.hide_last_seen && f.premium_until && new Date(f.premium_until) > new Date()) ? ''
                               : timeSince(f.last_seen)
@@ -459,7 +511,7 @@ export default function Home() {
                       {ch.last_message
                         ? ch.last_message.slice(0, 40)
                         : ch.last_message_file
-                          ? '🖼️ Фото'
+                          ? filePreviewLabel(ch.last_message_file)
                           : 'канал'
                       }
                     </div>

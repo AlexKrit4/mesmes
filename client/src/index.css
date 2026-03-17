@@ -1122,6 +1122,117 @@ img.avatar {
   50% { opacity: 0.35; }
 }
 
+/* ─── Voice message bubble ─── */
+.voice-msg-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+  max-width: 280px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+}
+
+.message.out .voice-msg-player {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.message.in .voice-msg-player {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: var(--border);
+}
+
+.voice-msg-play {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.message.out .voice-msg-play {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.message.in .voice-msg-play {
+  background: var(--accent);
+}
+
+.voice-msg-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.voice-msg-title {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.voice-msg-time {
+  font-size: 11px;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-msg-progress {
+  width: 100%;
+  height: 4px;
+  margin: 0;
+  border-radius: 999px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+}
+
+.message.in .voice-msg-progress {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.voice-msg-progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+}
+
+.message.in .voice-msg-progress::-webkit-slider-thumb {
+  background: var(--accent);
+}
+
+.voice-msg-progress::-moz-range-track {
+  height: 4px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.voice-msg-progress::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+}
+
+.message.in .voice-msg-progress::-moz-range-thumb {
+  background: var(--accent);
+}
+
 /* ─── Image in message bubble ─── */
 .msg-image {
   display: block;
