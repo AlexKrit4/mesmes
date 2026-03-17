@@ -8,6 +8,7 @@ import AvatarCropModal from '../AvatarCropModal.jsx';
 const VIDEO_EXT_RE = /\.(mp4|mov|avi|mkv|3gp|webm)$/i;
 const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a|aac|flac)$/i;
 const IMAGE_EXT_RE = /\.(jpg|jpeg|png|gif|webp)$/i;
+const VOICE_HINT_RE = /(voice[_-]?\d*|audio[_-]?\d*|record|opus)/i;
 
 function parseMessageFiles(rawFileField) {
   if (!rawFileField) return [];
@@ -45,10 +46,16 @@ function filePreviewLabel(rawFileField) {
   const url = String(first.url || '').toLowerCase();
   const name = String(first.name || '').toLowerCase();
 
-  if (type.startsWith('audio/') || AUDIO_EXT_RE.test(url) || /voice|audio/.test(name)) {
+  if (type.startsWith('audio/')) {
     return '🎤 Голосовое';
   }
-  if (type.startsWith('video/') || VIDEO_EXT_RE.test(url)) {
+  if (type.startsWith('video/')) {
+    return VOICE_HINT_RE.test(name) || VOICE_HINT_RE.test(url) ? '🎤 Голосовое' : '📹 Видео';
+  }
+  if (AUDIO_EXT_RE.test(url) || VOICE_HINT_RE.test(name) || VOICE_HINT_RE.test(url)) {
+    return '🎤 Голосовое';
+  }
+  if (VIDEO_EXT_RE.test(url)) {
     return '📹 Видео';
   }
   if (type.startsWith('image/') || IMAGE_EXT_RE.test(url)) {

@@ -17,25 +17,66 @@ function Linkify({ children }) {
 
 
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|avi|mkv|3gp)$/i;
-const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a|webm)$/i;
+const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a)$/i;
 const IMAGE_EXT_RE = /\.(jpg|jpeg|png|gif|webp)$/i;
+const VOICE_HINT_RE = /(voice[_-]?\d*|audio[_-]?\d*|record|opus)/i;
+
+function getFileType(fileObj) {
+  return String((typeof fileObj === 'object' && fileObj?.type) ? fileObj.type : '').toLowerCase();
+}
+
+function getFileUrl(fileObj) {
+  if (typeof fileObj === 'string') return fileObj;
+  return String((typeof fileObj === 'object' && fileObj?.url) ? fileObj.url : '');
+}
+
+function getFileName(fileObj) {
+  if (typeof fileObj !== 'object' || !fileObj) return '';
+  return String(fileObj.name || '');
+}
+
+function isLikelyVoiceWebm(fileObj) {
+  const type = getFileType(fileObj);
+  const url = getFileUrl(fileObj);
+  const name = getFileName(fileObj);
+
+  if (type.startsWith('audio/')) return true;
+  if (type.startsWith('video/')) {
+    return VOICE_HINT_RE.test(name) || VOICE_HINT_RE.test(url);
+  }
+  return /\.webm$/i.test(url) && (VOICE_HINT_RE.test(name) || VOICE_HINT_RE.test(url));
+}
 
 function isVideo(fileObj) {
   if (!fileObj) return false;
-  if (typeof fileObj === 'string') return VIDEO_EXT_RE.test(fileObj);
-  return (fileObj.type && fileObj.type.startsWith('video/')) || (typeof fileObj.url === 'string' && VIDEO_EXT_RE.test(fileObj.url));
+  const type = getFileType(fileObj);
+  const url = getFileUrl(fileObj);
+
+  if (type.startsWith('audio/')) return false;
+  if (type.startsWith('video/')) return !isLikelyVoiceWebm(fileObj);
+  if (!url) return false;
+
+  return VIDEO_EXT_RE.test(url) && !isLikelyVoiceWebm(fileObj);
 }
 
 function isAudio(fileObj) {
   if (!fileObj) return false;
-  if (typeof fileObj === 'string') return AUDIO_EXT_RE.test(fileObj);
-  return (fileObj.type && fileObj.type.startsWith('audio/')) || (typeof fileObj.url === 'string' && AUDIO_EXT_RE.test(fileObj.url));
+  const type = getFileType(fileObj);
+  const url = getFileUrl(fileObj);
+
+  if (type.startsWith('audio/')) return true;
+  if (type.startsWith('video/')) return isLikelyVoiceWebm(fileObj);
+  if (!url) return false;
+
+  return AUDIO_EXT_RE.test(url) || isLikelyVoiceWebm(fileObj);
 }
 
 function isImage(fileObj) {
   if (!fileObj) return false;
   if (typeof fileObj === 'string') return IMAGE_EXT_RE.test(fileObj);
-  return (!isVideo(fileObj) && !isAudio(fileObj)) && (fileObj.type ? fileObj.type.startsWith('image/') : (typeof fileObj.url === 'string' && IMAGE_EXT_RE.test(fileObj.url)));
+  const type = getFileType(fileObj);
+  const url = getFileUrl(fileObj);
+  return (!isVideo(fileObj) && !isAudio(fileObj)) && (type ? type.startsWith('image/') : IMAGE_EXT_RE.test(url));
 }
 
 function parseFileUrls(fileUrl) {
@@ -67,6 +108,15 @@ function parseFileUrls(fileUrl) {
   return parsed
     .map((entry) => (typeof entry === 'string' ? { url: entry } : entry))
     .filter((entry) => entry?.url);
+}
+
+function getAttachmentLabel(fileUrlValue) {
+  const first = parseFileUrls(fileUrlValue)[0];
+  if (!first) return '📎 Файл';
+  if (isAudio(first)) return '🎤 Голосовое';
+  if (isVideo(first)) return '📹 Видео';
+  if (isImage(first)) return '🖼️ Изображение';
+  return '📎 Файл';
 }
 
 function parseUTC(dateStr) {
@@ -750,7 +800,13 @@ export default function Chat() {
       setIsPreparingRecording(true);
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const preferredMimeTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+      ];
+      const mimeType = preferredMimeTypes.find((m) => MediaRecorder.isTypeSupported?.(m));
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
 
       mediaStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
@@ -1006,14 +1062,14 @@ export default function Chat() {
                     if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('msg-highlight'); setTimeout(() => el.classList.remove('msg-highlight'), 1500); }
                   }}>
                     <div className="reply-quote-name">{msg.reply_to.sender_id === me.id ? 'Вы' : (msg.reply_to.sender_username || 'Пользователь')}</div>
-                    <div className="reply-quote-text">{msg.reply_to.file_url ? (isVideo(msg.reply_to.file_url) ? '📹 Видео' : '🖼️ Изображение') : (msg.reply_to.content || '...')}</div>
+                    <div className="reply-quote-text">{msg.reply_to.file_url ? getAttachmentLabel(msg.reply_to.file_url) : (msg.reply_to.content || '...')}</div>
                   </div>
                 )}
                 {urls.map((fileObj, i) => {
-                  if (isVideo(fileObj)) {
-                    return <video key={i} src={fileObj.url} className="msg-video" controls playsInline onClick={e => e.stopPropagation()} style={{maxWidth: '100%', borderRadius: '8px'}} />;
-                  } else if (isAudio(fileObj)) {
+                  if (isAudio(fileObj)) {
                     return <VoiceMessagePlayer key={i} src={fileObj.url} />;
+                  } else if (isVideo(fileObj)) {
+                    return <video key={i} src={fileObj.url} className="msg-video" controls playsInline onClick={e => e.stopPropagation()} style={{maxWidth: '100%', borderRadius: '8px'}} />;
                   } else if (isImage(fileObj)) {
                     return <img key={i} src={fileObj.url} className="msg-image" alt="" onClick={(e) => {
                       e.stopPropagation();
@@ -1119,7 +1175,7 @@ export default function Chat() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0, color: 'var(--accent)' }}><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
           <div className="reply-bar-content">
             <div className="reply-bar-name">{replyTo.sender_id === me.id ? 'Вы' : (replyTo.sender_username || 'Пользователь')}</div>
-            <div className="reply-bar-text">{replyTo.file_url ? (isVideo(replyTo.file_url) ? '📹 Видео' : '🖼️ Изображение') : (replyTo.content?.slice(0, 80) || '...')}</div>
+            <div className="reply-bar-text">{replyTo.file_url ? getAttachmentLabel(replyTo.file_url) : (replyTo.content?.slice(0, 80) || '...')}</div>
           </div>
           <button className="reply-bar-cancel" onClick={() => setReplyTo(null)}>✕</button>
         </div>
