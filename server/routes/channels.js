@@ -38,7 +38,7 @@ const msgStorage = multer.diskStorage({
 });
 const msgUpload = multer({
   storage: msgStorage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+  limits: { fileSize: 500 * 1024 * 1024 }, // technical safety cap
 });
 
 // POST /api/channels — create channel
@@ -261,20 +261,23 @@ router.post('/:id/messages/file', auth, (req, res) => {
 
   msgUpload.array('files', 5)(req, res, (err) => {
     if (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Файл слишком велик (макс. 50 МБ для Premium)' });
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Файл слишком велик (технический лимит 500 МБ)' });
       return res.status(400).json({ error: err.message });
     }
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Выберите файл' });
 
     const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(req.userId);
     const isPremium = user && user.premium_until && new Date(user.premium_until) > new Date();
-    const maxSize = isPremium ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+    const nonImageMaxSize = isPremium ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
 
     for (const f of req.files) {
-      if (f.size > maxSize) {
+      const isImage = String(f.mimetype || '').startsWith('image/');
+      if (!isImage && f.size > nonImageMaxSize) {
         for (const cf of req.files) fs.unlink(cf.path, () => {});
         return res.status(413).json({ 
-          error: isPremium ? 'Максимальный размер файла для Premium 50 МБ' : 'Максимальный размер файла 10 МБ. Приобретите Premium для отправки до 50 МБ.'
+          error: isPremium
+            ? 'Максимальный размер файла (кроме фото) для Premium 50 МБ'
+            : 'Максимальный размер файла (кроме фото) 10 МБ. Приобретите Premium для отправки до 50 МБ.'
         });
       }
     }
