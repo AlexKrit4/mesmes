@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../database');
+const { decryptMessageContent } = require('../messageCrypto');
 const { auth } = require('./users');
 
 const router = express.Router();
@@ -46,6 +47,11 @@ router.get('/users/:userId/messages', auth, requireAdmin, (req, res) => {
     ORDER BY m.created_at DESC
     LIMIT 500
   `).all(userId);
+
+  messages.forEach((msg) => {
+    msg.content = decryptMessageContent(msg.content);
+  });
+
   res.json(messages);
 });
 

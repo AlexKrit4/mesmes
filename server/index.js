@@ -15,6 +15,7 @@ webpush.setVapidDetails(
 );
 
 const db = require('./database');
+const { encryptMessageContent, decryptMessageContent } = require('./messageCrypto');
 const authRoutes = require('./routes/auth');
 const { router: usersRouter, auth } = require('./routes/users');
 const adminRoutes = require('./routes/admin');
@@ -145,9 +146,10 @@ io.on('connection', (socket) => {
     }
 
     const now = new Date().toISOString();
+    const encryptedContent = encryptMessageContent(trimContent);
     const result = db.prepare(
       'INSERT INTO messages (sender_id, receiver_id, content, file_url, reply_to_id, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(uid, to, trimContent, file_url || null, reply_to_id || null, now);
+    ).run(uid, to, encryptedContent, file_url || null, reply_to_id || null, now);
 
     const sender = db.prepare('SELECT username FROM users WHERE id = ?').get(uid);
 
@@ -157,7 +159,13 @@ io.on('connection', (socket) => {
       const rm = db.prepare('SELECT id, content, sender_id, file_url FROM messages WHERE id = ?').get(reply_to_id);
       if (rm) {
         const rmSender = db.prepare('SELECT username FROM users WHERE id = ?').get(rm.sender_id);
-        reply_to = { id: rm.id, content: rm.content, sender_id: rm.sender_id, file_url: rm.file_url, sender_username: rmSender?.username };
+        reply_to = {
+          id: rm.id,
+          content: decryptMessageContent(rm.content),
+          sender_id: rm.sender_id,
+          file_url: rm.file_url,
+          sender_username: rmSender?.username,
+        };
       }
     }
 
@@ -240,7 +248,7 @@ io.on('connection', (socket) => {
       return;
     }
     const newContent = content.trim();
-    db.prepare('UPDATE messages SET content = ?, edited = 1 WHERE id = ?').run(newContent, messageId);
+    db.prepare('UPDATE messages SET content = ?, edited = 1 WHERE id = ?').run(encryptMessageContent(newContent), messageId);
     const payload = { messageId, content: newContent };
     // Notify recipient
     if (onlineUsers.has(friendId)) {

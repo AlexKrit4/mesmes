@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const db = require('../database');
+const { encryptMessageContent, decryptMessageContent } = require('../messageCrypto');
 const { auth } = require('./users');
 
 const router = express.Router();
@@ -106,6 +107,11 @@ router.get('/my', auth, (req, res) => {
     WHERE cm.user_id = ?
     ORDER BY COALESCE(lm.created_at, c.created_at) DESC
   `).all(req.userId);
+
+  channels.forEach((channel) => {
+    channel.last_message = decryptMessageContent(channel.last_message);
+  });
+
   res.json(channels);
 });
 
@@ -205,6 +211,10 @@ router.get('/:id/messages', auth, (req, res) => {
     messages.forEach(m => { m.reactions = {}; });
   }
 
+  messages.forEach((m) => {
+    m.content = decryptMessageContent(m.content);
+  });
+
   res.json(messages);
 });
 
@@ -217,13 +227,14 @@ router.post('/:id/messages', auth, (req, res) => {
 
   const { content, file_url, file_urls } = req.body;
   const trimContent = (content || '').trim();
+  const encryptedContent = encryptMessageContent(trimContent);
   const storedFileUrl = file_urls && file_urls.length > 0 ? JSON.stringify(file_urls) : file_url || null;
   if (!trimContent && !storedFileUrl) return res.status(400).json({ error: 'Пустое сообщение' });
 
   const now = new Date().toISOString();
   const result = db.prepare(
     'INSERT INTO channel_messages (channel_id, sender_id, content, file_url, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(chId, req.userId, trimContent, storedFileUrl, now);
+  ).run(chId, req.userId, encryptedContent, storedFileUrl, now);
 
   const sender = db.prepare('SELECT username FROM users WHERE id = ?').get(req.userId);
 
@@ -335,7 +346,7 @@ router.patch('/:id/messages/:msgId', auth, (req, res) => {
   const { content } = req.body;
   if (!content || !content.trim()) return res.status(400).json({ error: 'Пустое сообщение' });
 
-  db.prepare('UPDATE channel_messages SET content = ?, edited = 1 WHERE id = ?').run(content.trim(), msgId);
+  db.prepare('UPDATE channel_messages SET content = ?, edited = 1 WHERE id = ?').run(encryptMessageContent(content.trim()), msgId);
 
   // Broadcast edit to online members
   const members = db.prepare('SELECT user_id FROM channel_members WHERE channel_id = ?').all(chId);

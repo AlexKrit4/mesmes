@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../database');
 const webpush = require('web-push');
+const { encryptMessageContent, decryptMessageContent } = require('../messageCrypto');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret_in_production';
@@ -307,6 +308,11 @@ router.get('/friends', auth, (req, res) => {
     AND f.status = 'accepted'
     ORDER BY COALESCE(lm.created_at, '1970-01-01') DESC
   `).all(req.userId, req.userId, req.userId, req.userId, req.userId, req.userId);
+
+  friends.forEach((friend) => {
+    friend.last_message = decryptMessageContent(friend.last_message);
+  });
+
   res.json(friends);
 });
 
@@ -507,11 +513,18 @@ router.get('/messages/:friendId', auth, (req, res) => {
 
   // Enrich messages with reply_to data and reactions
   const enriched = messages.map((msg) => {
+    msg.content = decryptMessageContent(msg.content);
     if (msg.reply_to_id) {
       const rm = db.prepare('SELECT id, content, sender_id, file_url FROM messages WHERE id = ?').get(msg.reply_to_id);
       if (rm) {
         const rmSender = db.prepare('SELECT username FROM users WHERE id = ?').get(rm.sender_id);
-        msg.reply_to = { id: rm.id, content: rm.content, sender_id: rm.sender_id, file_url: rm.file_url, sender_username: rmSender?.username };
+        msg.reply_to = {
+          id: rm.id,
+          content: decryptMessageContent(rm.content),
+          sender_id: rm.sender_id,
+          file_url: rm.file_url,
+          sender_username: rmSender?.username,
+        };
       }
     }
     // Attach reactions
@@ -541,7 +554,7 @@ router.patch('/messages/:messageId', auth, (req, res) => {
     return res.status(403).json({ error: 'Отправка сообщений недоступна из-за блокировки' });
   }
   const newContent = content.trim();
-  db.prepare('UPDATE messages SET content = ?, edited = 1 WHERE id = ?').run(newContent, msgId);
+  db.prepare('UPDATE messages SET content = ?, edited = 1 WHERE id = ?').run(encryptMessageContent(newContent), msgId);
   res.json({ success: true, messageId: msgId, content: newContent, receiverId: msg.receiver_id });
 });
 
@@ -558,7 +571,7 @@ router.post('/messages/file', auth, (req, res) => {
 
     const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(req.userId);
     const isPremium = user && user.premium_until && new Date(user.premium_until) > new Date();
-    const nonImageMaxSize = isPremium ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+    const nonImageMaxSize = isPremium ? 5000 * 1024 * 1024 : 1000 * 1024 * 1024;
 
     for (const f of req.files) {
       const isImage = String(f.mimetype || '').startsWith('image/');
