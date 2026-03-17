@@ -11,3 +11,15 @@ npm run build
 cd ../server
 npm ci
 pm2 restart all
+
+if command -v nginx >/dev/null 2>&1; then
+	if [ "$(id -u)" -eq 0 ]; then
+		cat > /etc/nginx/conf.d/mesmes-upload.conf <<'EOF'
+client_max_body_size 600M;
+EOF
+		nginx -t
+		systemctl reload nginx
+	else
+		echo "Nginx найден, но скрипт запущен не от root: пропускаю настройку client_max_body_size"
+	fi
+fi
