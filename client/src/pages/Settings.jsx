@@ -151,6 +151,26 @@ export default function Settings() {
 
         <div className="settings-divider" />
 
+        {/* Sessions */}
+        <div className="settings-divider" />
+        <div className="settings-section">
+          <div className="settings-section-title">Активные сессии</div>
+          {sessions.map(s => (
+            <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: 'var(--bg-mid)', borderRadius: '8px', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '15px', fontWeight: '500' }}>{s.device_info} {s.is_current ? '(Текущая)' : ''}</span>
+                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>IP: {s.ip_address} | {new Date(s.last_active).toLocaleString()}</span>
+              </div>
+              {!s.is_current && (
+                <button onClick={() => terminateSession(s.id)} style={{ padding: '6px 12px', background: '#ff4d4f', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                  Завершить
+                </button>
+              )}
+            </div>
+          ))}
+          {sessions.length === 0 && <span style={{fontSize: '14px', color:'gray'}}>Нет данных о сессиях. Перезайдите в аккаунт!</span>}
+        </div>
+        
         {/* Logout */}
         {!showLogoutConfirm ? (
           <button className="settings-action-btn logout" onClick={() => setShowLogoutConfirm(true)}>
