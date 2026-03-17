@@ -14,6 +14,18 @@ function Linkify({ children }) {
   );
 }
 
+
+
+function isImage(fileObj) {
+  if (!fileObj) return false;
+  return (!isVideo(fileObj) && !isAudio(fileObj)) && (fileObj.type ? fileObj.type.startsWith('image/') : fileObj.url.match(/\.(jpg|jpeg|png|gif|webp)$/i));
+}
+
+function isAudio(fileObj) {
+  if (!fileObj) return false;
+  return (fileObj.type && fileObj.type.startsWith('audio/')) || (fileObj.url && fileObj.url.match(/\.(mp3|wav|ogg|m4a|webm)$/i));
+}
+
 function parseFileUrls(file_url) {
   if (!file_url) return [];
   let parsed = [];
