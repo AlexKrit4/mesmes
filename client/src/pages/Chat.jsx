@@ -16,10 +16,13 @@ function Linkify({ children }) {
 
 function parseFileUrls(file_url) {
   if (!file_url) return [];
+  let parsed = [];
   if (file_url.startsWith('[')) {
-    try { return JSON.parse(file_url); } catch { return [file_url]; }
+    try { parsed = JSON.parse(file_url); } catch { return [{url: file_url}]; }
+  } else {
+    parsed = [file_url];
   }
-  return [file_url];
+  return parsed.map(p => typeof p === 'string' ? { url: p, type: p.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg' } : p);
 }
 
 function isVideo(url) {
@@ -99,6 +102,16 @@ export default function Chat() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxScale, setLightboxScale] = useState(1);
   const [fileUploading, setFileUploading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [audioChunks, setAudioChunks] = useState([]);
+  const audioChunksRef = React.useRef([]);
+
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [audioChunks, setAudioChunks] = useState([]);
+  const audioChunksRef = React.useRef([]);
+
 
   // Pending files (multiple, up to 5)
   const [pendingFiles, setPendingFiles] = useState([]);
@@ -369,6 +382,16 @@ export default function Chat() {
           if (socket) socket.emit('send_message', { to: friendIdNum, content, file_url, reply_to_id: currentReplyTo?.id || null });
         } catch (err) {
           console.error('File upload error', err);
+          if (err.response?.status === 413) {
+             alert(err.response?.data?.error || 'Размер файла превышает допустимый лимит.');
+          } else {
+             alert(err.response?.data?.error || 'Ошибка загрузки файла');
+          }
+          if (err.response?.status === 413) {
+             alert(err.response?.data?.error || 'Размер файла превышает допустимый лимит.');
+          } else {
+             alert(err.response?.data?.error || 'Ошибка загрузки файла');
+          }
         } finally {
           setFileUploading(false);
         }
@@ -706,47 +729,24 @@ export default function Chat() {
                     <div className="reply-quote-text">{msg.reply_to.file_url ? (isVideo(msg.reply_to.file_url) ? '📹 Видео' : '🖼️ Изображение') : (msg.reply_to.content || '...')}</div>
                   </div>
                 )}
-                {urls.length === 1 && isVideo(urls[0]) && (
-                  <video
-                    src={urls[0]}
-                    className="msg-video"
-                    controls
-                    playsInline
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                )}
-                {urls.length === 1 && !isVideo(urls[0]) && (
-                  <img
-                    src={urls[0]}
-                    className="msg-image"
-                    alt=""
-                    onClick={(e) => { e.stopPropagation(); openLightbox(urls, 0); }}
-                  />
-                )}
-                {urls.length > 1 && (
-                  <div className={`msg-collage c${urls.length}`}>
-                    {urls.map((url, i) => (
-                      isVideo(url) ? (
-                        <video
-                          key={i}
-                          src={url}
-                          className="msg-collage-img"
-                          controls
-                          playsInline
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : (
-                        <img
-                          key={i}
-                          src={url}
-                          className="msg-collage-img"
-                          alt=""
-                          onClick={(e) => { e.stopPropagation(); openLightbox(urls.filter(u => !isVideo(u)), urls.filter(u => !isVideo(u)).indexOf(url)); }}
-                        />
-                      )
-                    ))}
-                  </div>
-                )}
+                {urls.map((fileObj, i) => {
+                  if (isVideo(fileObj)) {
+                    return <video key={i} src={fileObj.url} className="msg-video" controls playsInline onClick={e => e.stopPropagation()} style={{maxWidth: '100%', borderRadius: '8px'}} />;
+                  } else if (isAudio(fileObj)) {
+                    return <audio key={i} src={fileObj.url} controls onClick={e => e.stopPropagation()} style={{maxWidth: '100%'}} />;
+                  } else if (isImage(fileObj)) {
+                    return <img key={i} src={fileObj.url} className="msg-image" alt="" onClick={(e) => {
+                      e.stopPropagation();
+                      const imgUrls = urls.filter(isImage).map(u => u.url);
+                      openLightbox(imgUrls, imgUrls.indexOf(fileObj.url));
+                    }} style={{maxWidth: '100%', borderRadius: '8px', cursor: 'pointer', display: 'block', marginBottom: urls.length > 1 ? '5px' : 0}} />;
+                  } else {
+                    return <a key={i} href={fileObj.url} download target="_blank" rel="noopener noreferrer" className="msg-file-link" onClick={e => e.stopPropagation()} style={{display: 'flex', alignItems: 'center', padding: '10px', background: 'rgba(0,0,0,0.1)', borderRadius: '8px', textDecoration: 'none', color: 'inherit', marginBottom: '5px'}}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style={{marginRight: '10px'}}><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                      <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{fileObj.name || (fileObj.url ? fileObj.url.split('/').pop() : 'Файл')}</span>
+                    </a>;
+                  }
+                })}
                 {msg.content && <div className="message-text"><Linkify>{msg.content}</Linkify></div>}
                 <div className="message-meta">
                   {msg.edited ? <span className="message-edited">ред.</span> : null}
@@ -879,7 +879,7 @@ export default function Chat() {
       <div className="message-input-bar">
         <input
           type="file"
-          accept="image/*,video/*"
+          accept="*/*"
           multiple
           ref={fileInputRef}
           style={{ display: 'none' }}

@@ -240,6 +240,16 @@ export default function ChannelPage() {
         await api.post(`/channels/${channelId}/messages`, { content, file_urls });
       } catch (err) {
         console.error('File upload error', err);
+        if (err.response?.status === 413) {
+           alert(err.response?.data?.error || 'Размер файла превышает допустимый лимит.');
+        } else {
+           alert(err.response?.data?.error || 'Ошибка загрузки файла');
+        }
+        if (err.response?.status === 413) {
+           alert(err.response?.data?.error || 'Размер файла превышает допустимый лимит.');
+        } else {
+           alert(err.response?.data?.error || 'Ошибка загрузки файла');
+        }
       } finally {
         setFileUploading(false);
       }
@@ -568,7 +578,7 @@ export default function ChannelPage() {
           <div className="message-input-bar">
             <input
               type="file"
-              accept="image/*,video/*"
+              accept="*/*"
               multiple
               ref={fileInputRef}
               style={{ display: 'none' }}

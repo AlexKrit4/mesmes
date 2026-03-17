@@ -40,17 +40,13 @@ const upload = multer({
 const msgStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, `msg_${req.userId}_${Date.now()}${ext}`);
+    const ext = path.extname(file.originalname) || '';
+    cb(null, `msg_${req.userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
   },
 });
 const msgUpload = multer({
   storage: msgStorage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB (video)
-  fileFilter: (req, file, cb) => {
-    if (/^(image\/(jpeg|png|webp|gif|heic|heif)|video\/(mp4|webm|mov|quicktime|x-msvideo|x-matroska|3gpp))$/.test(file.mimetype)) cb(null, true);
-    else cb(new Error('Только изображения и видео'));
-  },
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB max overall
 });
 
 // Middleware: require auth
@@ -60,6 +56,20 @@ function auth(req, res, next) {
   const token = header.split(' ')[1];
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+    // check session validity in DB (if missing, consider invalidated, unless it's from before migration)
+    const sessionExists = db.prepare('SELECT id FROM sessions WHERE token = ?').get(token);
+    const userHasSessions = db.prepare('SELECT id FROM sessions WHERE user_id = ? LIMIT 1').get(payload.userId);
+    
+    // If the user has sessions (meaning they logged in after migration) but this token isn't there, it's invalid.
+    if (userHasSessions && !sessionExists) {
+       return res.status(401).json({ error: 'Сессия завершена' });
+    }
+    
+    // update last_active occasionally (e.g. 10% chance to not hammer DB if high load, but for now 100%)
+    if (sessionExists && Math.random() < 0.1) {
+       db.prepare('UPDATE sessions SET last_active = CURRENT_TIMESTAMP WHERE id = ?').run(sessionExists.id);
+    }
+
     req.userId = payload.userId;
     next();
   } catch {
@@ -466,14 +476,43 @@ router.patch('/messages/:messageId', auth, (req, res) => {
   res.json({ success: true, messageId: msgId, content: newContent, receiverId: msg.receiver_id });
 });
 
-// POST /api/users/messages/file — upload images for message (up to 5)
+// POST /api/users/messages/file — upload files for message
 router.post('/messages/file', auth, (req, res) => {
   msgUpload.array('files', 5)(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
-    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Выберите изображение' });
-    const urls = req.files.map(f => `/uploads/${f.filename}`);
-    // Return single URL for backward compat, plus array
-    res.json({ file_url: JSON.stringify(urls), file_urls: urls });
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'Файл слишком велик (макс. 30 МБ для Premium)' });
+      }
+      return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
+    }
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Выберите файл' });
+
+    const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(req.userId);
+    const isPremium = user && user.premium_until && new Date(user.premium_until) > new Date();
+    const maxSize = isPremium ? 30 * 1024 * 1024 : 5 * 1024 * 1024;
+
+    for (const f of req.files) {
+      if (f.size > maxSize) {
+        // delete all just uploaded
+        for (const cf of req.files) fs.unlink(cf.path, () => {});
+        return res.status(413).json({ 
+          error: isPremium ? 'Максимальный размер файла для Premium 30 МБ' : 'Максимальный размер файла 5 МБ. Приобретите Premium для отправки до 30 МБ.',
+          limitExceeded: true,
+          maxAllowed: maxSize
+        });
+      }
+    }
+
+    const filesData = req.files.map(f => ({
+      url: `/uploads/${f.filename}`,
+      name: f.originalname,
+      type: f.mimetype,
+      size: f.size
+    }));
+    
+    // Fallback to array of URLs for backward compat on clients if any, 
+    // but store raw JSON object array string in file_url
+    res.json({ file_url: JSON.stringify(filesData), filesData });
   });
 });
 
@@ -668,4 +707,36 @@ router.delete('/stories/:storyId', auth, (req, res) => {
   res.json({ success: true });
 });
 
+
+// GET /api/users/sessions -> list active sessions
+router.get('/sessions', auth, (req, res) => {
+  const token = req.headers.authorization.split(' ')[1];
+  const sessions = db.prepare('SELECT id, device_info, ip_address, last_active, created_at, (token = ?) as is_current FROM sessions WHERE user_id = ? ORDER BY last_active DESC').all(token, req.userId);
+  res.json(sessions);
+});
+
+// DELETE /api/users/sessions/:id -> terminate session
+router.delete('/sessions/:id', auth, (req, res) => {
+  const sessionId = parseInt(req.params.id);
+  db.prepare('DELETE FROM sessions WHERE id = ? AND user_id = ?').run(sessionId, req.userId);
+  res.json({ success: true });
+});
+
+
+// GET /api/users/sessions -> list active sessions
+router.get('/sessions', auth, (req, res) => {
+  const token = req.headers.authorization.split(' ')[1];
+  const sessions = db.prepare('SELECT id, device_info, ip_address, last_active, created_at, (token = ?) as is_current FROM sessions WHERE user_id = ? ORDER BY last_active DESC').all(token, req.userId);
+  res.json(sessions);
+});
+
+// DELETE /api/users/sessions/:id -> terminate session
+router.delete('/sessions/:id', auth, (req, res) => {
+  const sessionId = parseInt(req.params.id);
+  db.prepare('DELETE FROM sessions WHERE id = ? AND user_id = ?').run(sessionId, req.userId);
+  res.json({ success: true });
+});
+
 module.exports = { router, auth };
+
+

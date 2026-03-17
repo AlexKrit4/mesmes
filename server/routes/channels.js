@@ -264,10 +264,32 @@ router.post('/:id/messages/file', auth, (req, res) => {
   if (ch.owner_id !== req.userId) return res.status(403).json({ error: 'Только владелец' });
 
   msgUpload.array('files', 5)(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
-    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Выберите изображение' });
-    const urls = req.files.map(f => `/uploads/${f.filename}`);
-    res.json({ file_urls: urls });
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Файл слишком велик (макс. 30 МБ для Premium)' });
+      return res.status(400).json({ error: err.message });
+    }
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Выберите файл' });
+
+    const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(req.userId);
+    const isPremium = user && user.premium_until && new Date(user.premium_until) > new Date();
+    const maxSize = isPremium ? 30 * 1024 * 1024 : 5 * 1024 * 1024;
+
+    for (const f of req.files) {
+      if (f.size > maxSize) {
+        for (const cf of req.files) fs.unlink(cf.path, () => {});
+        return res.status(413).json({ 
+          error: isPremium ? 'Максимальный размер файла для Premium 30 МБ' : 'Максимальный размер файла 5 МБ. Приобретите Premium для отправки до 30 МБ.'
+        });
+      }
+    }
+
+    const filesData = req.files.map(f => ({
+      url: `/uploads/${f.filename}`,
+      name: f.originalname,
+      type: f.mimetype,
+      size: f.size
+    }));
+    res.json({ file_url: JSON.stringify(filesData), file_urls: filesData });
   });
 });
 

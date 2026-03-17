@@ -148,6 +148,22 @@ try {
 // Migration: remove UNIQUE constraint from username (display name should not be unique)
 // SQLite doesn't support DROP CONSTRAINT, so we recreate the table
 try {
+
+// Migration: sessions table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      device_info TEXT,
+      ip_address TEXT,
+      last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+} catch (e) {}
   const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get();
   // Only migrate if username still has UNIQUE constraint
   if (tableInfo && /username\s+TEXT\s+UNIQUE/i.test(tableInfo.sql)) {

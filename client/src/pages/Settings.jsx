@@ -14,6 +14,7 @@ export default function Settings() {
   // Premium + hide last seen
   const [hideLastSeen, setHideLastSeen] = useState(!!me.hide_last_seen);
   const [meData, setMeData] = useState(me);
+  const [sessions, setSessions] = useState([]);
 
   // Fetch fresh me data
   useState(() => {
@@ -22,7 +23,20 @@ export default function Settings() {
       setHideLastSeen(!!data.hide_last_seen);
       localStorage.setItem('me', JSON.stringify(data));
     }).catch(() => {});
+
+    api.get('/users/sessions').then(({ data }) => {
+      setSessions(data);
+    }).catch(() => {});
   });
+
+  const terminateSession = async (id) => {
+    try {
+      await api.delete(`/users/sessions/${id}`);
+      setSessions(prev => prev.filter(s => s.id !== id));
+    } catch (e) {
+      alert('Ошибка завершения сессии');
+    }
+  };
 
   const hasPremium = meData.premium_until && new Date(meData.premium_until) > new Date();
 
