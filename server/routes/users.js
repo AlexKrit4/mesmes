@@ -46,8 +46,15 @@ const msgStorage = multer.diskStorage({
 });
 const msgUpload = multer({
   storage: msgStorage,
-  limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB max overall
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB max overall
 });
+
+function isUsersBlocked(userA, userB) {
+  const row = db.prepare(
+    'SELECT id FROM user_blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1'
+  ).get(userA, userB, userB, userA);
+  return !!row;
+}
 
 // Middleware: require auth
 function auth(req, res, next) {
@@ -412,6 +419,65 @@ router.delete('/friends/:friendId', auth, (req, res) => {
   res.json({ success: true });
 });
 
+// GET /api/users/blocks/:friendId — get block status for current chat
+router.get('/blocks/:friendId', auth, (req, res) => {
+  const friendId = parseInt(req.params.friendId);
+  if (!friendId || Number.isNaN(friendId)) return res.status(400).json({ error: 'Некорректный ID' });
+
+  const blockedByMe = !!db.prepare('SELECT id FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?').get(req.userId, friendId);
+  const blockedMe = !!db.prepare('SELECT id FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?').get(friendId, req.userId);
+
+  res.json({ blockedByMe, blockedMe, blocked: blockedByMe || blockedMe });
+});
+
+// POST /api/users/blocks/:friendId — block user in DM
+router.post('/blocks/:friendId', auth, (req, res) => {
+  const friendId = parseInt(req.params.friendId);
+  if (!friendId || Number.isNaN(friendId)) return res.status(400).json({ error: 'Некорректный ID' });
+  if (friendId === req.userId) return res.status(400).json({ error: 'Нельзя заблокировать себя' });
+
+  const friendship = db.prepare(
+    `SELECT id FROM friends
+     WHERE ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))
+       AND status = 'accepted'`
+  ).get(req.userId, friendId, friendId, req.userId);
+  if (!friendship) return res.status(403).json({ error: 'Блокировка доступна только для друзей' });
+
+  db.prepare('INSERT OR IGNORE INTO user_blocks (blocker_id, blocked_id) VALUES (?, ?)').run(req.userId, friendId);
+
+  if (req.io && req.onlineUsers) {
+    const payload = { by: req.userId, target: friendId, blocked: true };
+    if (req.onlineUsers.has(friendId)) {
+      req.onlineUsers.get(friendId).forEach((sid) => req.io.to(sid).emit('chat_block_status_changed', payload));
+    }
+    if (req.onlineUsers.has(req.userId)) {
+      req.onlineUsers.get(req.userId).forEach((sid) => req.io.to(sid).emit('chat_block_status_changed', payload));
+    }
+  }
+
+  res.json({ success: true, blockedByMe: true });
+});
+
+// DELETE /api/users/blocks/:friendId — unblock user in DM
+router.delete('/blocks/:friendId', auth, (req, res) => {
+  const friendId = parseInt(req.params.friendId);
+  if (!friendId || Number.isNaN(friendId)) return res.status(400).json({ error: 'Некорректный ID' });
+
+  db.prepare('DELETE FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?').run(req.userId, friendId);
+
+  if (req.io && req.onlineUsers) {
+    const payload = { by: req.userId, target: friendId, blocked: false };
+    if (req.onlineUsers.has(friendId)) {
+      req.onlineUsers.get(friendId).forEach((sid) => req.io.to(sid).emit('chat_block_status_changed', payload));
+    }
+    if (req.onlineUsers.has(req.userId)) {
+      req.onlineUsers.get(req.userId).forEach((sid) => req.io.to(sid).emit('chat_block_status_changed', payload));
+    }
+  }
+
+  res.json({ success: true, blockedByMe: false });
+});
+
 // GET /api/users/messages/:friendId
 router.get('/messages/:friendId', auth, (req, res) => {
   const friendId = parseInt(req.params.friendId);
@@ -471,6 +537,9 @@ router.patch('/messages/:messageId', auth, (req, res) => {
   const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(msgId);
   if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
   if (msg.sender_id !== req.userId) return res.status(403).json({ error: 'Можно редактировать только свои сообщения' });
+  if (isUsersBlocked(msg.sender_id, msg.receiver_id)) {
+    return res.status(403).json({ error: 'Отправка сообщений недоступна из-за блокировки' });
+  }
   const newContent = content.trim();
   db.prepare('UPDATE messages SET content = ?, edited = 1 WHERE id = ?').run(newContent, msgId);
   res.json({ success: true, messageId: msgId, content: newContent, receiverId: msg.receiver_id });
@@ -481,7 +550,7 @@ router.post('/messages/file', auth, (req, res) => {
   msgUpload.array('files', 5)(req, res, (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({ error: 'Файл слишком велик (макс. 30 МБ для Premium)' });
+        return res.status(413).json({ error: 'Файл слишком велик (макс. 50 МБ для Premium)' });
       }
       return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
     }
@@ -489,14 +558,14 @@ router.post('/messages/file', auth, (req, res) => {
 
     const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(req.userId);
     const isPremium = user && user.premium_until && new Date(user.premium_until) > new Date();
-    const maxSize = isPremium ? 30 * 1024 * 1024 : 5 * 1024 * 1024;
+    const maxSize = isPremium ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
 
     for (const f of req.files) {
       if (f.size > maxSize) {
         // delete all just uploaded
         for (const cf of req.files) fs.unlink(cf.path, () => {});
         return res.status(413).json({ 
-          error: isPremium ? 'Максимальный размер файла для Premium 30 МБ' : 'Максимальный размер файла 5 МБ. Приобретите Premium для отправки до 30 МБ.',
+          error: isPremium ? 'Максимальный размер файла для Premium 50 МБ' : 'Максимальный размер файла 10 МБ. Приобретите Premium для отправки до 50 МБ.',
           limitExceeded: true,
           maxAllowed: maxSize
         });

@@ -288,6 +288,21 @@ try {
   `);
 } catch (e) {}
 
+// Migration: user blocks table (DM restrictions)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_blocks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      blocker_id INTEGER NOT NULL,
+      blocked_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(blocker_id, blocked_id)
+    )
+  `);
+} catch (e) {}
+
 // Migration: premium fields on users
 try { db.exec(`ALTER TABLE users ADD COLUMN premium_until DATETIME DEFAULT NULL`); } catch (e) {}
 try { db.exec(`ALTER TABLE users ADD COLUMN hide_last_seen INTEGER DEFAULT 0`); } catch (e) {}

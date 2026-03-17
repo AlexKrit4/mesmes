@@ -90,6 +90,13 @@ if (process.env.NODE_ENV === 'production') {
 // Map: userId -> Set of socketIds
 const onlineUsers = new Map();
 
+function areUsersBlocked(userA, userB) {
+  const row = db.prepare(
+    'SELECT id FROM user_blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1'
+  ).get(userA, userB, userB, userA);
+  return !!row;
+}
+
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
   if (!token) return next(new Error('Нет токена'));
@@ -127,7 +134,15 @@ io.on('connection', (socket) => {
       AND status = 'accepted'
     `).get(uid, to, to, uid);
 
-    if (!areFriends) return socket.emit('error', { msg: 'Вы не друзья' });
+    if (!areFriends) {
+      socket.emit('chat_error', { msg: 'Вы не друзья' });
+      return;
+    }
+
+    if (areUsersBlocked(uid, to)) {
+      socket.emit('chat_error', { msg: 'Переписка недоступна: один из пользователей заблокирован' });
+      return;
+    }
 
     const now = new Date().toISOString();
     const result = db.prepare(
@@ -220,6 +235,10 @@ io.on('connection', (socket) => {
     if (!content || !content.trim()) return;
     const msg = db.prepare('SELECT * FROM messages WHERE id = ? AND sender_id = ?').get(messageId, uid);
     if (!msg) return;
+    if (areUsersBlocked(uid, friendId)) {
+      socket.emit('chat_error', { msg: 'Редактирование недоступно из-за блокировки' });
+      return;
+    }
     const newContent = content.trim();
     db.prepare('UPDATE messages SET content = ?, edited = 1 WHERE id = ?').run(newContent, messageId);
     const payload = { messageId, content: newContent };
@@ -234,12 +253,14 @@ io.on('connection', (socket) => {
   });
   // ── Печатает ────────────────────────────────────────────────────────────
   socket.on('typing', ({ to }) => {
+    if (areUsersBlocked(uid, to)) return;
     if (onlineUsers.has(to)) {
       onlineUsers.get(to).forEach((sid) => io.to(sid).emit('user_typing', { from: uid }));
     }
   });
 
   socket.on('stop_typing', ({ to }) => {
+    if (areUsersBlocked(uid, to)) return;
     if (onlineUsers.has(to)) {
       onlineUsers.get(to).forEach((sid) => io.to(sid).emit('user_stop_typing', { from: uid }));
     }

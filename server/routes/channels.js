@@ -38,11 +38,7 @@ const msgStorage = multer.diskStorage({
 });
 const msgUpload = multer({
   storage: msgStorage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB (video)
-  fileFilter: (req, file, cb) => {
-    if (/^(image\/(jpeg|png|webp|gif|heic|heif)|video\/(mp4|webm|mov|quicktime|x-msvideo|x-matroska|3gpp))$/.test(file.mimetype)) cb(null, true);
-    else cb(new Error('Только изображения и видео'));
-  },
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
 });
 
 // POST /api/channels — create channel
@@ -265,20 +261,20 @@ router.post('/:id/messages/file', auth, (req, res) => {
 
   msgUpload.array('files', 5)(req, res, (err) => {
     if (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Файл слишком велик (макс. 30 МБ для Premium)' });
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Файл слишком велик (макс. 50 МБ для Premium)' });
       return res.status(400).json({ error: err.message });
     }
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Выберите файл' });
 
     const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(req.userId);
     const isPremium = user && user.premium_until && new Date(user.premium_until) > new Date();
-    const maxSize = isPremium ? 30 * 1024 * 1024 : 5 * 1024 * 1024;
+    const maxSize = isPremium ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
 
     for (const f of req.files) {
       if (f.size > maxSize) {
         for (const cf of req.files) fs.unlink(cf.path, () => {});
         return res.status(413).json({ 
-          error: isPremium ? 'Максимальный размер файла для Premium 30 МБ' : 'Максимальный размер файла 5 МБ. Приобретите Premium для отправки до 30 МБ.'
+          error: isPremium ? 'Максимальный размер файла для Premium 50 МБ' : 'Максимальный размер файла 10 МБ. Приобретите Premium для отправки до 50 МБ.'
         });
       }
     }

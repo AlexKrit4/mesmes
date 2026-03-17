@@ -1927,6 +1927,41 @@ img.avatar {
 .push-prompt-card { text-align: center; }
 .push-prompt-icon { font-size: 48px; margin-bottom: 8px; }
 .push-prompt-text { color: var(--text2); font-size: 14px; margin-top: 6px; line-height: 1.5; }
+.premium-grant-icon { font-size: 48px; margin-bottom: 8px; color: #f6c445; }
+.premium-grant-date { margin-top: 8px; color: var(--accent); font-weight: 600; }
+
+.chat-blocked-banner {
+  border-top: 1px solid var(--border);
+  background: var(--bg2);
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chat-blocked-text {
+  color: var(--text2);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.chat-blocked-action {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.chat-blocked-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 
 
 .delete-option {
@@ -2506,6 +2541,38 @@ img.avatar {
   color: var(--accent);
   word-break: break-all;
   font-family: monospace;
+}
+
+.channel-avatar-controls {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+}
+
+.channel-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.channel-msg-audio {
+  width: min(280px, 100%);
+  display: block;
+}
+
+.channel-file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.channel-file-link:hover {
+  text-decoration: underline;
 }
 
 /* ─── Join Channel Page ─── */

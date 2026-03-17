@@ -119,6 +119,10 @@ function getAttachmentLabel(fileUrlValue) {
   return '📎 Файл';
 }
 
+function fileTypeStartsWith(file, prefix) {
+  return String(file?.type || '').startsWith(prefix);
+}
+
 function parseUTC(dateStr) {
   if (!dateStr) return null;
   // Ensure UTC interpretation — append Z if missing
@@ -280,6 +284,8 @@ export default function Chat() {
   // Three-dots menu + remove friend
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showRemoveFriendConfirm, setShowRemoveFriendConfirm] = useState(false);
+  const [blockState, setBlockState] = useState({ blockedByMe: false, blockedMe: false });
+  const [blockActionLoading, setBlockActionLoading] = useState(false);
 
   // Chat wallpaper
   const [wallpaper, setWallpaper] = useState(null);
@@ -343,6 +349,20 @@ export default function Chat() {
     setShowScrollBtn(distFromBottom > 120);
   }, []);
 
+  const loadBlockState = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/users/blocks/${friendIdNum}`);
+      setBlockState({ blockedByMe: !!data?.blockedByMe, blockedMe: !!data?.blockedMe });
+    } catch {
+      setBlockState({ blockedByMe: false, blockedMe: false });
+    }
+  }, [friendIdNum]);
+
+  const hasBlock = blockState.blockedByMe || blockState.blockedMe;
+  const blockedBannerText = blockState.blockedByMe
+    ? 'Вы заблокировали пользователя'
+    : (blockState.blockedMe ? 'Вы были заблокированы для этого пользователя' : '');
+
   // Handle mobile keyboard: resize layout using visualViewport API
   useEffect(() => {
     const vv = window.visualViewport;
@@ -394,6 +414,10 @@ export default function Chat() {
       }
     })();
   }, [friendId, friendIdNum]);
+
+  useEffect(() => {
+    loadBlockState();
+  }, [loadBlockState]);
 
   // Initial scroll: fires once after loading finishes and messages are rendered
   useEffect(() => {
@@ -526,6 +550,16 @@ export default function Chat() {
       );
     };
 
+    const onChatError = ({ msg }) => {
+      if (msg) alert(msg);
+    };
+
+    const onBlockStatusChanged = ({ by, target }) => {
+      if ((by === friendIdNum && target === me.id) || (by === me.id && target === friendIdNum)) {
+        loadBlockState();
+      }
+    };
+
     socket.on('new_message', onNewMsg);
     socket.on('message_sent', onSent);
     socket.on('user_typing', onTyping);
@@ -536,6 +570,8 @@ export default function Chat() {
     socket.on('message_edited', onMessageEdited);
     socket.on('friend_removed', onFriendRemoved);
     socket.on('message_reaction', onMessageReaction);
+    socket.on('chat_error', onChatError);
+    socket.on('chat_block_status_changed', onBlockStatusChanged);
 
     return () => {
       socket.off('new_message', onNewMsg);
@@ -548,10 +584,13 @@ export default function Chat() {
       socket.off('message_edited', onMessageEdited);
       socket.off('friend_removed', onFriendRemoved);
       socket.off('message_reaction', onMessageReaction);
+      socket.off('chat_error', onChatError);
+      socket.off('chat_block_status_changed', onBlockStatusChanged);
     };
-  }, [friendIdNum, me.id]);
+  }, [friendIdNum, loadBlockState, me.id]);
 
   const sendMessage = () => {
+    if (hasBlock) return;
     const content = text.trim();
     if (!content && pendingFiles.length === 0) return;
 
@@ -674,6 +713,34 @@ export default function Chat() {
     }
   };
 
+  const blockUser = async () => {
+    if (blockActionLoading) return;
+    setBlockActionLoading(true);
+    try {
+      await api.post(`/users/blocks/${friendIdNum}`);
+      setBlockState((prev) => ({ ...prev, blockedByMe: true }));
+      setShowChatMenu(false);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Не удалось заблокировать пользователя');
+    } finally {
+      setBlockActionLoading(false);
+    }
+  };
+
+  const unblockUser = async () => {
+    if (blockActionLoading) return;
+    setBlockActionLoading(true);
+    try {
+      await api.delete(`/users/blocks/${friendIdNum}`);
+      setBlockState((prev) => ({ ...prev, blockedByMe: false }));
+      setShowChatMenu(false);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Не удалось разблокировать пользователя');
+    } finally {
+      setBlockActionLoading(false);
+    }
+  };
+
   const uploadWallpaper = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -724,6 +791,7 @@ export default function Chat() {
   };
 
   const handleInput = (e) => {
+    if (hasBlock) return;
     setText(e.target.value);
     autoResize(e.target);
     const socket = getSocket();
@@ -751,6 +819,7 @@ export default function Chat() {
   };
 
   const sendVoiceBlob = async (voiceBlob) => {
+    if (hasBlock) return;
     if (!voiceBlob || !voiceBlob.size) return;
 
     const currentReplyTo = replyTo;
@@ -789,6 +858,7 @@ export default function Chat() {
   };
 
   const startRecording = async () => {
+    if (hasBlock) return;
     if (isRecording || isPreparingRecording || fileUploading || editingMsgId) return;
 
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -996,6 +1066,17 @@ export default function Chat() {
                   Убрать фон
                 </button>
               )}
+              {blockState.blockedByMe ? (
+                <button className="chat-dropdown-item" onClick={unblockUser} disabled={blockActionLoading}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16v-2a4 4 0 0 0-4-4H8"/><path d="M3 8v2a4 4 0 0 0 4 4h9"/><polyline points="17 1 21 5 17 9"/><polyline points="7 23 3 19 7 15"/></svg>
+                  Разблокировать пользователя
+                </button>
+              ) : (
+                <button className="chat-dropdown-item danger" onClick={blockUser} disabled={blockActionLoading}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><line x1="5" y1="19" x2="19" y2="5"/></svg>
+                  Заблокировать пользователя
+                </button>
+              )}
               <button className="chat-dropdown-item danger" onClick={() => { setShowChatMenu(false); setShowRemoveFriendConfirm(true); }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
                 Удалить из друзей
@@ -1195,9 +1276,9 @@ export default function Chat() {
         <div className="file-preview-bar multi">
           {pendingFiles.map((f, i) => (
             <div key={i} className="file-preview-item">
-              {f.type.startsWith('image/') ? (
+              {fileTypeStartsWith(f, 'image/') ? (
                 <img src={URL.createObjectURL(f)} alt="" className="file-preview-thumb" />
-              ) : f.type.startsWith('video/') ? (
+              ) : fileTypeStartsWith(f, 'video/') ? (
                 <video src={URL.createObjectURL(f)} className="file-preview-thumb" muted />
               ) : (
                 <span className="file-preview-name">{f.name}</span>
@@ -1212,91 +1293,106 @@ export default function Chat() {
       )}
 
       {/* Input bar */}
-      <div className="message-input-bar">
-        <input
-          type="file"
-          accept="*/*"
-          multiple
-          ref={fileInputRef}
-          style={{ display: 'none' }}
-          onChange={(e) => { if (e.target.files.length) addFiles(e.target.files); e.target.value = ''; }}
-        />
+      {hasBlock ? (
+        <div className="chat-blocked-banner">
+          <span className="chat-blocked-text">{blockedBannerText}</span>
+          {blockState.blockedByMe && (
+            <button
+              className="chat-blocked-action"
+              onClick={unblockUser}
+              disabled={blockActionLoading}
+            >
+              Разблокировать
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="message-input-bar">
+          <input
+            type="file"
+            accept="*/*"
+            multiple
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            onChange={(e) => { if (e.target.files.length) addFiles(e.target.files); e.target.value = ''; }}
+          />
 
-        {isRecording ? (
-          <div className="voice-recording-wrap">
-            <div className="voice-recording-indicator">
-              <span className="voice-recording-dot" />
-              <span className="voice-recording-time">{formatRecordingTime(recordingSeconds)}</span>
-            </div>
-            <button
-              className="send-btn"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => stopRecording(true)}
-              disabled={fileUploading || isPreparingRecording}
-              title="Отправить голосовое сообщение"
-              aria-label="Отправить голосовое сообщение"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-            </button>
-          </div>
-        ) : (
-          <>
-            <button
-              className="attach-btn"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={fileUploading}
-              title="Прикрепить файл"
-            >
-              {fileUploading
-                ? <span className="attach-spinner" />
-                : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-              }
-            </button>
-            <textarea
-              className="message-input"
-              placeholder={editingMsgId ? 'Изменить сообщение...' : 'Сообщение...'}
-              value={editingMsgId ? editText : text}
-              onChange={editingMsgId
-                ? (e) => { setEditText(e.target.value); autoResize(e.target); }
-                : handleInput
-              }
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  editingMsgId ? saveEdit() : sendMessage();
-                }
-                if (e.key === 'Escape' && editingMsgId) cancelEdit();
-              }}
-              onFocus={() => setTimeout(scrollToBottomInstant, 300)}
-              rows={1}
-            />
-            <button
-              className="send-btn"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={(e) => {
-                if (editingMsgId) {
-                  saveEdit();
-                } else if (!text.trim() && pendingFiles.length === 0) {
-                  e.preventDefault();
-                  startRecording();
-                } else {
-                  sendMessage();
-                }
-              }}
-              disabled={editingMsgId ? !editText.trim() : (fileUploading || isPreparingRecording)}
-              aria-label={editingMsgId ? 'Сохранить' : (!text.trim() && pendingFiles.length === 0) ? 'Голосовое сообщение' : 'Отправить'}
-            >
-              {editingMsgId ? (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              ) : (!text.trim() && pendingFiles.length === 0) ? (
-                <svg fill="currentColor" viewBox="0 0 24 24" width="24" height="24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-              ) : (
+          {isRecording ? (
+            <div className="voice-recording-wrap">
+              <div className="voice-recording-indicator">
+                <span className="voice-recording-dot" />
+                <span className="voice-recording-time">{formatRecordingTime(recordingSeconds)}</span>
+              </div>
+              <button
+                className="send-btn"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => stopRecording(true)}
+                disabled={fileUploading || isPreparingRecording}
+                title="Отправить голосовое сообщение"
+                aria-label="Отправить голосовое сообщение"
+              >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-              )}
-            </button>
-          </>
-        )}
-      </div>
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                className="attach-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={fileUploading}
+                title="Прикрепить файл"
+              >
+                {fileUploading
+                  ? <span className="attach-spinner" />
+                  : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                }
+              </button>
+              <textarea
+                className="message-input"
+                placeholder={editingMsgId ? 'Изменить сообщение...' : 'Сообщение...'}
+                value={editingMsgId ? editText : text}
+                onChange={editingMsgId
+                  ? (e) => { setEditText(e.target.value); autoResize(e.target); }
+                  : handleInput
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    editingMsgId ? saveEdit() : sendMessage();
+                  }
+                  if (e.key === 'Escape' && editingMsgId) cancelEdit();
+                }}
+                onFocus={() => setTimeout(scrollToBottomInstant, 300)}
+                rows={1}
+              />
+              <button
+                className="send-btn"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  if (editingMsgId) {
+                    saveEdit();
+                  } else if (!text.trim() && pendingFiles.length === 0) {
+                    e.preventDefault();
+                    startRecording();
+                  } else {
+                    sendMessage();
+                  }
+                }}
+                disabled={editingMsgId ? !editText.trim() : (fileUploading || isPreparingRecording)}
+                aria-label={editingMsgId ? 'Сохранить' : (!text.trim() && pendingFiles.length === 0) ? 'Голосовое сообщение' : 'Отправить'}
+              >
+                {editingMsgId ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                ) : (!text.trim() && pendingFiles.length === 0) ? (
+                  <svg fill="currentColor" viewBox="0 0 24 24" width="24" height="24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                )}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Delete message confirm dialog */}
       {deleteDialog && (

@@ -99,6 +99,12 @@ export default function Register() {
       localStorage.setItem('token', data.token);
       localStorage.setItem('me', JSON.stringify(data.user));
       localStorage.setItem('newUser', '1');
+      if (data?.premium_granted_days) {
+        localStorage.setItem('premiumGrantedAtRegistration', '1');
+        if (data.user?.premium_until) {
+          localStorage.setItem('premiumGrantedUntil', data.user.premium_until);
+        }
+      }
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Ошибка соединения');

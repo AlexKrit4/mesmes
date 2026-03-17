@@ -103,6 +103,7 @@ export default function Home() {
   const [myAvatar, setMyAvatar] = useState(me.avatar || null);
   const [showProfile, setShowProfile] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(() => localStorage.getItem('newUser') === '1');
+  const [showPremiumGrantedPrompt, setShowPremiumGrantedPrompt] = useState(() => localStorage.getItem('premiumGrantedAtRegistration') === '1');
   const [isAdmin, setIsAdmin] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
   const [showAddPanel, setShowAddPanel] = useState(false);
@@ -349,6 +350,12 @@ export default function Home() {
     localStorage.removeItem('newUser');
   };
 
+  const dismissPremiumGrantedPrompt = () => {
+    setShowPremiumGrantedPrompt(false);
+    localStorage.removeItem('premiumGrantedAtRegistration');
+    localStorage.removeItem('premiumGrantedUntil');
+  };
+
   const createChannel = async () => {
     if (!chName.trim() || chCreating) return;
     setChCreating(true);
@@ -374,6 +381,26 @@ export default function Home() {
 
   return (
     <div className="app-layout" ref={layoutRef}>
+      {showPremiumGrantedPrompt && (
+        <div className="modal-overlay" onClick={dismissPremiumGrantedPrompt}>
+          <div className="modal-card push-prompt-card" onClick={(e) => e.stopPropagation()}>
+            <div className="premium-grant-icon">⭐</div>
+            <div className="modal-name">Вам начислен mes-premium</div>
+            <div className="push-prompt-text">
+              Добро пожаловать! Новому аккаунту начислено 3 дня Premium.
+              {localStorage.getItem('premiumGrantedUntil') ? (
+                <div className="premium-grant-date">
+                  Действует до {new Date(localStorage.getItem('premiumGrantedUntil')).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+              ) : null}
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-accent" onClick={dismissPremiumGrantedPrompt}>Отлично</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Push notifications prompt for new users */}
       {showPushPrompt && (
         <div className="modal-overlay" onClick={dismissPush}>

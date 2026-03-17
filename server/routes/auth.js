@@ -212,9 +212,10 @@ router.post('/register', async (req, res) => {
     } catch { /* already exists */ }
 
     const passwordHash = await bcrypt.hash(password, 10);
+    const premiumUntil = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
     const result = db.prepare(
-      'INSERT INTO users (username, public_id, password_hash, email) VALUES (?, ?, ?, ?)'
-    ).run(display_name, public_id, passwordHash, email);
+      'INSERT INTO users (username, public_id, password_hash, email, premium_until) VALUES (?, ?, ?, ?, ?)'
+    ).run(display_name, public_id, passwordHash, email, premiumUntil);
 
     // Mark code as used only after successful registration
     db.prepare('UPDATE email_verifications SET used = 1 WHERE id = ?').run(verification.id);
@@ -223,7 +224,8 @@ router.post('/register', async (req, res) => {
     createSession(result.lastInsertRowid, token, req);
     return res.json({
       token,
-      user: { id: result.lastInsertRowid, username: display_name, public_id, avatar: null, premium_until: null, hide_last_seen: 0 },
+      premium_granted_days: 3,
+      user: { id: result.lastInsertRowid, username: display_name, public_id, avatar: null, premium_until: premiumUntil, hide_last_seen: 0 },
     });
   } catch (e) {
     console.error('[register error]', e.message, e.stack);
