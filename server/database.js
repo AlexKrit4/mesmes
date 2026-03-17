@@ -351,3 +351,8 @@ try {
 
 // Migration: password_changed_at — rate-limit (once per day)
 try { db.exec(`ALTER TABLE users ADD COLUMN password_changed_at DATETIME DEFAULT NULL`); } catch (e) {}
+
+// Migration: TOTP 2FA fields
+try { db.exec(`ALTER TABLE users ADD COLUMN twofa_enabled INTEGER DEFAULT 0`); } catch (e) {}
+try { db.exec(`ALTER TABLE users ADD COLUMN twofa_secret TEXT DEFAULT NULL`); } catch (e) {}
+try { db.exec(`ALTER TABLE users ADD COLUMN twofa_temp_secret TEXT DEFAULT NULL`); } catch (e) {}

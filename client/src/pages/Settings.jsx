@@ -15,6 +15,12 @@ export default function Settings() {
   const [hideLastSeen, setHideLastSeen] = useState(!!me.hide_last_seen);
   const [meData, setMeData] = useState(me);
   const [sessions, setSessions] = useState([]);
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
+  const [twoFALoading, setTwoFALoading] = useState(false);
+  const [twoFASetup, setTwoFASetup] = useState(null);
+  const [twoFAEnableCode, setTwoFAEnableCode] = useState('');
+  const [twoFADisableCode, setTwoFADisableCode] = useState('');
+  const [twoFADisablePassword, setTwoFADisablePassword] = useState('');
 
   // Fetch fresh me data
   useEffect(() => {
@@ -26,6 +32,10 @@ export default function Settings() {
 
     api.get('/users/sessions').then(({ data }) => {
       setSessions(data);
+    }).catch(() => {});
+
+    api.get('/auth/2fa/status').then(({ data }) => {
+      setTwoFAEnabled(!!data.enabled);
     }).catch(() => {});
   }, []);
 
@@ -51,6 +61,54 @@ export default function Settings() {
       localStorage.setItem('me', JSON.stringify(stored));
     } catch (err) {
       alert(err.response?.data?.error || 'Ошибка');
+    }
+  };
+
+  const startTwoFASetup = async () => {
+    setTwoFALoading(true);
+    try {
+      const { data } = await api.post('/auth/2fa/setup');
+      setTwoFASetup(data);
+      setTwoFAEnableCode('');
+    } catch (err) {
+      alert(err.response?.data?.error || 'Не удалось начать настройку 2FA');
+    } finally {
+      setTwoFALoading(false);
+    }
+  };
+
+  const enableTwoFA = async () => {
+    if (twoFAEnableCode.length !== 6) return;
+    setTwoFALoading(true);
+    try {
+      await api.post('/auth/2fa/enable', { code: twoFAEnableCode });
+      setTwoFAEnabled(true);
+      setTwoFASetup(null);
+      setTwoFAEnableCode('');
+      alert('2FA успешно подключена');
+    } catch (err) {
+      alert(err.response?.data?.error || 'Не удалось подключить 2FA');
+    } finally {
+      setTwoFALoading(false);
+    }
+  };
+
+  const disableTwoFA = async () => {
+    if (!twoFADisablePassword || twoFADisableCode.length !== 6) return;
+    setTwoFALoading(true);
+    try {
+      await api.post('/auth/2fa/disable', {
+        password: twoFADisablePassword,
+        code: twoFADisableCode,
+      });
+      setTwoFAEnabled(false);
+      setTwoFADisableCode('');
+      setTwoFADisablePassword('');
+      alert('2FA отключена');
+    } catch (err) {
+      alert(err.response?.data?.error || 'Не удалось отключить 2FA');
+    } finally {
+      setTwoFALoading(false);
     }
   };
 
@@ -125,6 +183,79 @@ export default function Settings() {
               <div className="settings-toggle-knob" />
             </div>
           </div>
+        </div>
+
+        <div className="settings-divider" />
+
+        {/* Two-factor authentication */}
+        <div className="settings-section">
+          <div className="settings-section-title">Двухфакторная аутентификация (2FA)</div>
+          <p className="settings-msg" style={{ color: 'var(--text2)', lineHeight: 1.5 }}>
+            Защитите вход в аккаунт кодом из Google Authenticator, 1Password, Microsoft Authenticator и других TOTP-приложений.
+          </p>
+
+          {!twoFAEnabled ? (
+            <>
+              {!twoFASetup ? (
+                <button className="settings-action-btn" onClick={startTwoFASetup} disabled={twoFALoading}>
+                  {twoFALoading ? 'Готовим QR...' : 'Подключить 2FA'}
+                </button>
+              ) : (
+                <div style={{ marginTop: 10, padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg2)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+                    <img src={twoFASetup.qr_data_url} alt="QR 2FA" style={{ width: 180, height: 180, borderRadius: 8, background: '#fff', padding: 6 }} />
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 6 }}>Если QR не сканируется, введите ключ вручную:</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--text)', wordBreak: 'break-all', marginBottom: 10 }}>{twoFASetup.secret}</div>
+                  <input
+                    type="text"
+                    placeholder="Код из приложения (6 цифр)"
+                    value={twoFAEnableCode}
+                    onChange={(e) => setTwoFAEnableCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                    style={{ width: '100%', marginBottom: 10 }}
+                  />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn btn-accent" onClick={enableTwoFA} disabled={twoFALoading || twoFAEnableCode.length !== 6} style={{ flex: 1 }}>
+                      {twoFALoading ? 'Проверяем...' : 'Подтвердить'}
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => { setTwoFASetup(null); setTwoFAEnableCode(''); }}
+                      disabled={twoFALoading}
+                      style={{ flex: 1 }}
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ marginTop: 10, padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg2)' }}>
+              <div style={{ color: 'var(--accent)', fontWeight: 600, marginBottom: 8 }}>2FA включена</div>
+              <input
+                type="password"
+                placeholder="Текущий пароль"
+                value={twoFADisablePassword}
+                onChange={(e) => setTwoFADisablePassword(e.target.value)}
+                style={{ width: '100%', marginBottom: 8 }}
+              />
+              <input
+                type="text"
+                placeholder="Код из приложения (6 цифр)"
+                value={twoFADisableCode}
+                onChange={(e) => setTwoFADisableCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                style={{ width: '100%', marginBottom: 8 }}
+              />
+              <button
+                className="settings-action-btn danger"
+                onClick={disableTwoFA}
+                disabled={twoFALoading || !twoFADisablePassword || twoFADisableCode.length !== 6}
+              >
+                {twoFALoading ? 'Отключаем...' : 'Отключить 2FA'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="settings-divider" />

@@ -2,10 +2,14 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../database');
+const { authenticator } = require('otplib');
+const QRCode = require('qrcode');
+const { auth } = require('./users');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret_in_production';
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || '';
+authenticator.options = { step: 30, window: 1 };
 
 // --- helpers ---
 async function verifyTurnstile(token) {
@@ -55,6 +59,25 @@ function createSession(userId, token, req) {
   } catch (e) {
     console.error('[auth] session create error:', e.message);
   }
+}
+
+function normalizeTwoFACode(code) {
+  return String(code || '').replace(/\s+/g, '').replace(/-/g, '').trim();
+}
+
+function getActiveBan(userId) {
+  const ban = db.prepare(
+    'SELECT id, reason, expires_at, banned_at FROM bans WHERE user_id = ? AND active = 1 ORDER BY id DESC LIMIT 1'
+  ).get(userId);
+
+  if (!ban) return null;
+
+  if (ban.expires_at && new Date(ban.expires_at) < new Date()) {
+    db.prepare('UPDATE bans SET active = 0 WHERE id = ?').run(ban.id);
+    return null;
+  }
+
+  return ban;
 }
 
 // Diagnostic: check env vars are set (temporary — remove later)
@@ -256,22 +279,33 @@ router.post('/login', async (req, res) => {
   }
 
   // Check active ban
-  const ban = db.prepare(
-    'SELECT id, reason, expires_at, banned_at FROM bans WHERE user_id = ? AND active = 1 ORDER BY id DESC LIMIT 1'
-  ).get(user.id);
+  const ban = getActiveBan(user.id);
   if (ban) {
-    // If ban has expiry, check if it's still valid
-    if (ban.expires_at && new Date(ban.expires_at) < new Date()) {
-      // Ban expired — deactivate
-      db.prepare('UPDATE bans SET active = 0 WHERE id = ?').run(ban.id);
-    } else {
-      return res.status(403).json({
-        error: 'banned',
-        reason: ban.reason,
-        expires_at: ban.expires_at,
-        banned_at: ban.banned_at,
-      });
-    }
+    return res.status(403).json({
+      error: 'banned',
+      reason: ban.reason,
+      expires_at: ban.expires_at,
+      banned_at: ban.banned_at,
+    });
+  }
+
+  // Optional 2FA second step
+  if (user.twofa_enabled && user.twofa_secret) {
+    const twofaToken = jwt.sign(
+      { userId: user.id, purpose: 'login-2fa' },
+      JWT_SECRET,
+      { expiresIn: '10m' }
+    );
+    return res.json({
+      requires_2fa: true,
+      twofa_token: twofaToken,
+      user: {
+        id: user.id,
+        username: user.username,
+        public_id: user.public_id,
+        avatar: user.avatar,
+      },
+    });
   }
 
   db.prepare('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
@@ -282,6 +316,146 @@ router.post('/login', async (req, res) => {
     token,
     user: { id: user.id, username: user.username, public_id: user.public_id, avatar: user.avatar, premium_until: user.premium_until || null, hide_last_seen: user.hide_last_seen || 0 },
   });
+});
+
+// POST /api/auth/login/2fa — finalize login with TOTP code
+router.post('/login/2fa', (req, res) => {
+  const { twofa_token, code } = req.body || {};
+  const normalizedCode = normalizeTwoFACode(code);
+
+  if (!twofa_token || !normalizedCode) {
+    return res.status(400).json({ error: 'Токен и код 2FA обязательны' });
+  }
+
+  if (!/^\d{6}$/.test(normalizedCode)) {
+    return res.status(400).json({ error: 'Код 2FA должен состоять из 6 цифр' });
+  }
+
+  let payload;
+  try {
+    payload = jwt.verify(twofa_token, JWT_SECRET);
+  } catch {
+    return res.status(400).json({ error: 'Срок действия шага 2FA истёк. Войдите заново.' });
+  }
+
+  if (!payload?.userId || payload?.purpose !== 'login-2fa') {
+    return res.status(400).json({ error: 'Некорректный токен 2FA' });
+  }
+
+  const user = db.prepare(
+    'SELECT id, username, public_id, avatar, premium_until, hide_last_seen, twofa_enabled, twofa_secret FROM users WHERE id = ?'
+  ).get(payload.userId);
+  if (!user) return res.status(401).json({ error: 'Пользователь не найден' });
+  if (!user.twofa_enabled || !user.twofa_secret) {
+    return res.status(400).json({ error: '2FA не включена для этого аккаунта' });
+  }
+
+  const validCode = authenticator.verify({ token: normalizedCode, secret: user.twofa_secret });
+  if (!validCode) {
+    return res.status(400).json({ error: 'Неверный код 2FA' });
+  }
+
+  const ban = getActiveBan(user.id);
+  if (ban) {
+    return res.status(403).json({
+      error: 'banned',
+      reason: ban.reason,
+      expires_at: ban.expires_at,
+      banned_at: ban.banned_at,
+    });
+  }
+
+  db.prepare('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+  const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+  createSession(user.id, token, req);
+
+  return res.json({
+    token,
+    user: {
+      id: user.id,
+      username: user.username,
+      public_id: user.public_id,
+      avatar: user.avatar,
+      premium_until: user.premium_until || null,
+      hide_last_seen: user.hide_last_seen || 0,
+    },
+  });
+});
+
+// GET /api/auth/2fa/status — current 2FA state
+router.get('/2fa/status', auth, (req, res) => {
+  const row = db.prepare('SELECT twofa_enabled FROM users WHERE id = ?').get(req.userId);
+  if (!row) return res.status(404).json({ error: 'Пользователь не найден' });
+  res.json({ enabled: !!row.twofa_enabled });
+});
+
+// POST /api/auth/2fa/setup — generate new TOTP secret + QR for account
+router.post('/2fa/setup', auth, async (req, res) => {
+  const user = db.prepare('SELECT public_id, twofa_enabled FROM users WHERE id = ?').get(req.userId);
+  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (user.twofa_enabled) return res.status(409).json({ error: '2FA уже подключена' });
+
+  const secret = authenticator.generateSecret();
+  const otpauthUrl = authenticator.keyuri(user.public_id, 'MesMes', secret);
+
+  try {
+    const qrDataUrl = await QRCode.toDataURL(otpauthUrl, { width: 220, margin: 1 });
+    db.prepare('UPDATE users SET twofa_temp_secret = ? WHERE id = ?').run(secret, req.userId);
+    res.json({ secret, otpauth_url: otpauthUrl, qr_data_url: qrDataUrl });
+  } catch (e) {
+    console.error('[2fa/setup error]', e.message);
+    res.status(500).json({ error: 'Не удалось сгенерировать QR-код' });
+  }
+});
+
+// POST /api/auth/2fa/enable — verify code and enable 2FA
+router.post('/2fa/enable', auth, (req, res) => {
+  const normalizedCode = normalizeTwoFACode(req.body?.code);
+  if (!/^\d{6}$/.test(normalizedCode)) {
+    return res.status(400).json({ error: 'Введите корректный 6-значный код' });
+  }
+
+  const user = db.prepare('SELECT twofa_enabled, twofa_temp_secret FROM users WHERE id = ?').get(req.userId);
+  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (user.twofa_enabled) return res.status(409).json({ error: '2FA уже подключена' });
+  if (!user.twofa_temp_secret) {
+    return res.status(400).json({ error: 'Сначала начните подключение 2FA' });
+  }
+
+  const validCode = authenticator.verify({ token: normalizedCode, secret: user.twofa_temp_secret });
+  if (!validCode) return res.status(400).json({ error: 'Неверный код подтверждения' });
+
+  db.prepare('UPDATE users SET twofa_enabled = 1, twofa_secret = ?, twofa_temp_secret = NULL WHERE id = ?')
+    .run(user.twofa_temp_secret, req.userId);
+
+  res.json({ success: true, enabled: true });
+});
+
+// POST /api/auth/2fa/disable — disable 2FA with password + TOTP code
+router.post('/2fa/disable', auth, async (req, res) => {
+  const normalizedCode = normalizeTwoFACode(req.body?.code);
+  const password = String(req.body?.password || '');
+
+  if (!password || !/^\d{6}$/.test(normalizedCode)) {
+    return res.status(400).json({ error: 'Введите пароль и корректный 6-значный код' });
+  }
+
+  const user = db.prepare('SELECT password_hash, twofa_enabled, twofa_secret FROM users WHERE id = ?').get(req.userId);
+  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (!user.twofa_enabled || !user.twofa_secret) {
+    return res.status(400).json({ error: '2FA уже отключена' });
+  }
+
+  const passwordValid = await bcrypt.compare(password, user.password_hash);
+  if (!passwordValid) return res.status(400).json({ error: 'Неверный пароль' });
+
+  const validCode = authenticator.verify({ token: normalizedCode, secret: user.twofa_secret });
+  if (!validCode) return res.status(400).json({ error: 'Неверный код 2FA' });
+
+  db.prepare('UPDATE users SET twofa_enabled = 0, twofa_secret = NULL, twofa_temp_secret = NULL WHERE id = ?')
+    .run(req.userId);
+
+  res.json({ success: true, enabled: false });
 });
 
 // POST /api/auth/forgot-password — запрос на восстановление пароля
