@@ -102,10 +102,12 @@ export default function Chat() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxScale, setLightboxScale] = useState(1);
   const [fileUploading, setFileUploading] = useState(false);
+
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [audioChunks, setAudioChunks] = useState([]);
   const audioChunksRef = React.useRef([]);
+
 
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState(null);
