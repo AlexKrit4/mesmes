@@ -807,6 +807,37 @@ router.delete('/sessions/:id', auth, (req, res) => {
   res.json({ success: true });
 });
 
+// POST /api/users/report -> create user report
+router.post('/report', auth, (req, res) => {
+  const { reported_id, reason, comment } = req.body;
+  if (!reported_id || !reason) {
+    return res.status(400).json({ error: 'Необходимо указать ID пользователя и причину(reason)' });
+  }
+
+  // Check if same user reported this user in last hour
+  const lastHourReport = db.prepare(`
+    SELECT id FROM reports 
+    WHERE reporter_id = ? AND reported_id = ? 
+    AND created_at >= datetime('now', '-1 hour')
+  `).get(req.userId, reported_id);
+
+  if (lastHourReport) {
+    return res.status(429).json({ error: 'Вы уже отправляли жалобу на этого пользователя в течение последнего часа.' });
+  }
+
+  try {
+    const result = db.prepare(`
+      INSERT INTO reports (reporter_id, reported_id, reason, comment)
+      VALUES (?, ?, ?, ?)
+    `).run(req.userId, reported_id, reason, comment || '');
+    
+    res.json({ success: true, report_id: result.lastInsertRowid });
+  } catch (error) {
+    console.error('Report error:', error);
+    res.status(500).json({ error: 'Ошибка при отправке жалобы' });
+  }
+});
+
 module.exports = { router, auth };
 
 

@@ -22,6 +22,15 @@ export default function AdminPanel() {
   const [premiumMonths, setPremiumMonths] = useState('1');
   const [premiumMsg, setPremiumMsg] = useState('');
 
+  // Reports
+  const [reports, setReports] = useState([]);
+  const [unreadReports, setUnreadReports] = useState(0);
+  const [mainTab, setMainTab] = useState('users'); // users | reports
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [reportAction, setReportAction] = useState('banned'); // banned | forgiven
+  const [adminComment, setAdminComment] = useState('');
+  const [reportMsg, setReportMsg] = useState('');
+
   // Check admin access
   useEffect(() => {
     (async () => {
@@ -38,11 +47,42 @@ export default function AdminPanel() {
     try {
       const { data } = await api.get('/admin/users');
       setUsers(data);
+      const unread = await api.get('/admin/reports/unread-count');
+      setUnreadReports(unread.data.count || 0);
     } catch { /* */ }
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  const fetchReports = useCallback(async () => {
+    try {
+      const { data } = await api.get('/admin/reports');
+      setReports(data);
+      const unreadCount = data.filter(r => r.status === 'open').length;
+      setUnreadReports(unreadCount);
+    } catch { /* */ }
+  }, []);
+
+  useEffect(() => { 
+    if (mainTab === 'users') fetchUsers(); 
+    else fetchReports();
+  }, [fetchUsers, fetchReports, mainTab]);
+
+  const handleResolveReport = async () => {
+    if (!adminComment) {
+      setReportMsg('Введите комментарий к тикету');
+      return;
+    }
+    try {
+      await api.post(`/admin/reports/${selectedReport.id}/resolve`, {
+        resolution: reportAction,
+        admin_comment: adminComment
+      });
+      setSelectedReport(null);
+      fetchReports();
+    } catch (err) {
+      setReportMsg(err.response?.data?.error || 'Ошибка закрытия тикета');
+    }
+  };
 
   const selectUser = async (user) => {
     setSelectedUser(user);
@@ -129,14 +169,32 @@ export default function AdminPanel() {
 
   return (
     <div className="admin-page">
-      <div className="admin-header">
-        <button className="admin-back" onClick={() => navigate('/')}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        </button>
-        <h1>Админ-панель</h1>
+      <div className="admin-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button className="admin-back" onClick={() => navigate('/')}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          </button>
+          <h1 style={{ margin: 0 }}>Админ-панель</h1>
+        </div>
       </div>
 
-      {!selectedUser ? (
+      <div style={{ display: 'flex', borderBottom: '1px solid #333', marginBottom: '15px' }}>
+        <div 
+          onClick={() => { setMainTab('users'); setSelectedUser(null); setSelectedReport(null); }}
+          style={{ flex: 1, padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'users' ? '2px solid #0088cc' : 'none', color: mainTab === 'users' ? '#0088cc' : '#aaa' }}
+        >Пользователи</div>
+        <div 
+          onClick={() => { setMainTab('reports'); setSelectedUser(null); setSelectedReport(null); }}
+          style={{ flex: 1, padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'reports' ? '2px solid #0088cc' : 'none', color: mainTab === 'reports' ? '#0088cc' : '#aaa', position: 'relative' }}
+        >
+          Репорты
+          {unreadReports > 0 && (
+            <span style={{ background: 'red', color: 'white', padding: '2px 6px', borderRadius: '10px', fontSize: '12px', marginLeft: '8px' }}>{unreadReports}</span>
+          )}
+        </div>
+      </div>
+
+      {mainTab === 'users' && !selectedUser && (
         /* ── User list ── */
         <div className="admin-user-list">
           <input
@@ -318,6 +376,95 @@ export default function AdminPanel() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {mainTab === 'reports' && !selectedReport && (
+        <div className="admin-user-list">
+          {reports.length === 0 ? <div style={{ padding: '20px', textAlign: 'center' }}>Нет репортов</div> : null}
+          {reports.map(r => (
+            <div 
+              key={r.id} 
+              className={`admin-user-card ${r.status !== 'open' ? 'inactive' : ''}`} 
+              onClick={() => { setSelectedReport(r); setAdminComment(''); setReportAction('banned'); setReportMsg(''); }}
+              style={{ opacity: r.status === 'open' ? 1 : 0.6 }}
+            >
+              <div className="admin-uc-info" style={{ width: '100%' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                  <strong>Жалоба на: {r.reported_username}</strong>
+                  <span style={{ fontSize: '12px', color: '#999' }}>{formatDate(r.created_at)}</span>
+                </div>
+                <div style={{ fontSize: '14px', color: '#ccc', marginBottom: '5px' }}>От: {r.reporter_username}</div>
+                <div style={{ fontSize: '14px', color: '#f44336' }}>Причина: {r.reason}</div>
+                {r.status !== 'open' && <div style={{ fontSize: '12px', color: '#4CAF50', marginTop: '5px' }}>Статус: Закрыто</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {mainTab === 'reports' && selectedReport && (
+        <div className="admin-user-details" style={{ backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '12px', margin: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{ margin: 0 }}>Тикет #{selectedReport.id}</h2>
+            <button className="admin-back" onClick={() => setSelectedReport(null)} style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer' }}>Назад к списку</button>
+          </div>
+          
+          <div style={{ background: '#2d2d2d', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
+            <div style={{ marginBottom: '10px' }}><strong>Кем отправлен:</strong> {selectedReport.reporter_username} (@{selectedReport.reporter_public_id})</div>
+            <div style={{ marginBottom: '10px' }}><strong>На кого отправлен:</strong> {selectedReport.reported_username} (@{selectedReport.reported_public_id})</div>
+            <div style={{ marginBottom: '10px', color: '#f44336' }}><strong>Причина:</strong> {selectedReport.reason}</div>
+            <div style={{ background: '#111', padding: '10px', borderRadius: '6px', fontSize: '14px', fontStyle: 'italic', minHeight: '60px' }}>
+              {selectedReport.comment || 'Нет комментария'}
+            </div>
+          </div>
+
+          <div style={{ background: '#2d2d2d', padding: '15px', borderRadius: '8px' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Решение</h3>
+            
+            {selectedReport.status === 'open' ? (
+              <>
+                <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
+                  <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <input type="radio" value="banned" checked={reportAction === 'banned'} onChange={(e) => setReportAction(e.target.value)} />
+                    <span style={{ color: '#f44336' }}>Забанить</span>
+                  </label>
+                  <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <input type="radio" value="forgiven" checked={reportAction === 'forgiven'} onChange={(e) => setReportAction(e.target.value)} />
+                    <span style={{ color: '#4CAF50' }}>Помиловать</span>
+                  </label>
+                </div>
+
+                <div className="admin-field">
+                  <label>Комментарий / Причина</label>
+                  <input
+                    value={adminComment}
+                    onChange={(e) => setAdminComment(e.target.value)}
+                    placeholder={reportAction === 'banned' ? 'Причина бана...' : 'Оставьте комментарий...'}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #444', background: '#111', color: '#fff' }}
+                  />
+                </div>
+
+                {reportMsg && <div style={{ color: '#f44336', marginTop: '10px', marginBottom: '10px' }}>{reportMsg}</div>}
+
+                <button 
+                  className="btn" 
+                  onClick={handleResolveReport}
+                  style={{ width: '100%', marginTop: '10px', background: reportAction === 'banned' ? '#d32f2f' : '#2e7d32', color: 'white', padding: '12px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                  Закрыть тикет
+                </button>
+              </>
+            ) : (
+              <div>
+                <p>Тикет закрыт.</p>
+                <p><strong>Вердикт:</strong> <span style={{ color: selectedReport.resolution === 'banned' ? '#f44336' : '#4CAF50' }}>{selectedReport.resolution === 'banned' ? 'Забанен' : 'Помилован'}</span></p>
+                <div style={{ background: '#111', padding: '10px', borderRadius: '6px', fontSize: '14px' }}>
+                  {selectedReport.admin_comment}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

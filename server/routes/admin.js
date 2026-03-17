@@ -133,4 +133,71 @@ router.post('/premium/revoke', auth, requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// --- REPORTS SYSTEM ---
+
+// GET /api/admin/reports/unread-count
+router.get('/reports/unread-count', auth, requireAdmin, (req, res) => {
+  const { count } = db.prepare("SELECT COUNT(*) as count FROM reports WHERE status = 'open'").get();
+  res.json({ count });
+});
+
+// GET /api/admin/reports
+router.get('/reports', auth, requireAdmin, (req, res) => {
+  const reports = db.prepare(`
+    SELECT r.*, 
+           reporter.username as reporter_username, reporter.public_id as reporter_public_id,
+           reported.username as reported_username, reported.public_id as reported_public_id
+    FROM reports r
+    JOIN users reporter ON r.reporter_id = reporter.id
+    JOIN users reported ON r.reported_id = reported.id
+    ORDER BY CASE WHEN r.status = 'open' THEN 0 ELSE 1 END, r.created_at DESC
+  `).all();
+  res.json(reports);
+});
+
+// POST /api/admin/reports/:id/resolve
+router.post('/reports/:id/resolve', auth, requireAdmin, (req, res) => {
+  const reportId = parseInt(req.params.id);
+  const { resolution, admin_comment } = req.body; // resolution: 'banned', 'forgiven'
+
+  if (!resolution || !admin_comment) {
+    return res.status(400).json({ error: 'Необходимо указать решение и комментарий администратора' });
+  }
+
+  const report = db.prepare("SELECT * FROM reports WHERE id = ?").get(reportId);
+  if (!report) return res.status(404).json({ error: 'Репорт не найден' });
+  if (report.status !== 'open') return res.status(400).json({ error: 'Тикет уже закрыт' });
+
+  // If banned, implement ban logic
+  if (resolution === 'banned') {
+    const target = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(report.reported_id);
+    if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+    if (target.is_admin) return res.status(400).json({ error: 'Нельзя забанить администратора' });
+
+    // Ban permanently
+    db.prepare('UPDATE bans SET active = 0 WHERE user_id = ? AND active = 1').run(report.reported_id);
+    db.prepare(
+      'INSERT INTO bans (user_id, reason, expires_at, banned_by) VALUES (?, ?, ?, ?)'
+    ).run(report.reported_id, admin_comment || 'Жалоба одобрена', null, req.userId);
+
+    // Kick user in real-time if online
+    if (req.io && req.onlineUsers?.has(report.reported_id)) {
+      req.onlineUsers.get(report.reported_id).forEach((sid) => {
+        req.io.to(sid).emit('you_are_banned', {
+          reason: admin_comment || 'Жалоба одобрена',
+          expires_at: null,
+        });
+      });
+    }
+  }
+
+  db.prepare(`
+    UPDATE reports 
+    SET status = 'resolved', resolution = ?, admin_comment = ? 
+    WHERE id = ?
+  `).run(resolution, admin_comment, reportId);
+
+  res.json({ success: true, resolution, admin_comment });
+});
+
 module.exports = router;

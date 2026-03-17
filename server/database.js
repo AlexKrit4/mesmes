@@ -79,6 +79,27 @@ try {
   // ignore
 }
 
+// Migration: add reports table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reporter_id INTEGER NOT NULL,
+      reported_id INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      comment TEXT,
+      status TEXT DEFAULT 'open',
+      resolution TEXT,
+      admin_comment TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (reported_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+} catch (e) {
+  // ignore
+}
+
 // Migration: email verifications table
 try {
   db.exec(`

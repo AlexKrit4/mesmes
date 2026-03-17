@@ -48,6 +48,13 @@ export default function Profile() {
   // Avatar crop
   const [cropFile, setCropFile] = useState(null);
 
+  // Reports
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('Аватарка');
+  const [reportComment, setReportComment] = useState('');
+  const [reportMsg, setReportMsg] = useState(null);
+  const [isReporting, setIsReporting] = useState(false);
+
   // Avatar lightbox
   const [avatarLightbox, setAvatarLightbox] = useState(false);
   const [lightboxScale, setLightboxScale] = useState(1);
@@ -151,6 +158,29 @@ export default function Profile() {
       if (storyPlaying?.id === storyId) setStoryPlaying(null);
     } catch (err) {
       setMsg(err.response?.data?.error || 'Ошибка удаления');
+    }
+  };
+
+  const handleReport = async () => {
+    if (!reportReason) return;
+    setIsReporting(true);
+    setReportMsg(null);
+    try {
+      await api.post('/users/report', {
+        reported_id: profile.id,
+        reason: reportReason,
+        comment: reportComment
+      });
+      setReportMsg({ type: 'success', text: 'Жалоба успешно отправлена' });
+      setTimeout(() => {
+        setShowReportModal(false);
+        setReportMsg(null);
+        setReportComment('');
+      }, 2000);
+    } catch (err) {
+      setReportMsg({ type: 'error', text: err.response?.data?.error || 'Ошибка при отправке жалобы' });
+    } finally {
+      setIsReporting(false);
     }
   };
 
@@ -294,6 +324,19 @@ export default function Profile() {
             <div className="profile-name">
               {profile.username}
               {profile.premium_until && new Date(profile.premium_until) > new Date() && <span className="premium-badge" title="mes-premium">✓</span>}
+              {!isMe && (
+                <button 
+                  className="report-btn" 
+                  onClick={() => setShowReportModal(true)} 
+                  title="Пожаловаться"
+                  style={{ background: 'none', border: 'none', marginLeft: '8px', cursor: 'pointer', verticalAlign: 'middle', padding: 0 }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="red" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                    <line x1="4" y1="22" x2="4" y2="15"></line>
+                  </svg>
+                </button>
+              )}
             </div>
             <div className="profile-id">@{profile.public_id}</div>
             {profile.bio && <div className="profile-bio">{profile.bio}</div>}
@@ -493,6 +536,64 @@ export default function Profile() {
             onClick={(e) => e.stopPropagation()}
             onEnded={() => setStoryPlaying(null)}
           />
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="lightbox-overlay" onClick={() => setShowReportModal(false)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)' }}>
+          <div className="settings-card" onClick={e => e.stopPropagation()} style={{ background: '#fff', padding: '20px', borderRadius: '12px', width: '90%', maxWidth: '400px', color: '#000' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Пожаловаться на пользователя</h3>
+            
+            <div className="settings-field">
+              <label>Причина жалобы</label>
+              <select 
+                value={reportReason} 
+                onChange={(e) => setReportReason(e.target.value)}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', marginBottom: '15px' }}
+              >
+                <option value="Аватарка">Неподобающая аватарка</option>
+                <option value="Имя">Неподобающее имя / био</option>
+                <option value="Спам">Спам / реклама</option>
+                <option value="Оскорбление">Оскорбления / травля</option>
+                <option value="Мошенничество">Мошенничество</option>
+                <option value="Другое">Другое</option>
+              </select>
+            </div>
+
+            <div className="settings-field">
+              <label>Комментарий (опционально)</label>
+              <textarea 
+                value={reportComment} 
+                onChange={(e) => setReportComment(e.target.value)}
+                placeholder="Опишите проблему подробнее..."
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', minHeight: '80px', resize: 'vertical' }}
+              />
+            </div>
+
+            {reportMsg && (
+              <div className={`message ${reportMsg.type}`} style={{ padding: '10px', marginTop: '10px', borderRadius: '8px', background: reportMsg.type === 'error' ? '#ffebee' : '#e8f5e9', color: reportMsg.type === 'error' ? '#c62828' : '#2e7d32' }}>
+                {reportMsg.text}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setShowReportModal(false)}
+                style={{ flex: 1 }}
+                disabled={isReporting}
+              >Отмена</button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleReport}
+                style={{ flex: 1, backgroundColor: '#d32f2f' }}
+                disabled={isReporting}
+              >
+                {isReporting ? 'Отправка...' : 'Отправить'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
