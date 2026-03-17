@@ -65,9 +65,9 @@ function auth(req, res, next) {
        return res.status(401).json({ error: 'Сессия завершена' });
     }
     
-    // update last_active occasionally (e.g. 10% chance to not hammer DB if high load, but for now 100%)
-    if (sessionExists && Math.random() < 0.1) {
-       db.prepare('UPDATE sessions SET last_active = CURRENT_TIMESTAMP WHERE id = ?').run(sessionExists.id);
+    // Keep activity fresh for active-devices screen.
+    if (sessionExists) {
+      db.prepare('UPDATE sessions SET last_active = CURRENT_TIMESTAMP WHERE id = ?').run(sessionExists.id);
     }
 
     req.userId = payload.userId;
@@ -704,21 +704,6 @@ router.delete('/stories/:storyId', auth, (req, res) => {
   const filePath = path.join(uploadDir, path.basename(story.video_url));
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   db.prepare('DELETE FROM stories WHERE id = ?').run(storyId);
-  res.json({ success: true });
-});
-
-
-// GET /api/users/sessions -> list active sessions
-router.get('/sessions', auth, (req, res) => {
-  const token = req.headers.authorization.split(' ')[1];
-  const sessions = db.prepare('SELECT id, device_info, ip_address, last_active, created_at, (token = ?) as is_current FROM sessions WHERE user_id = ? ORDER BY last_active DESC').all(token, req.userId);
-  res.json(sessions);
-});
-
-// DELETE /api/users/sessions/:id -> terminate session
-router.delete('/sessions/:id', auth, (req, res) => {
-  const sessionId = parseInt(req.params.id);
-  db.prepare('DELETE FROM sessions WHERE id = ? AND user_id = ?').run(sessionId, req.userId);
   res.json({ success: true });
 });
 

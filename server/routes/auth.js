@@ -29,6 +29,34 @@ async function verifyTurnstile(token) {
   }
 }
 
+function getClientIp(req) {
+  const xff = req.headers['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.trim()) {
+    return xff.split(',')[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || 'unknown';
+}
+
+function getDeviceInfo(req) {
+  return String(req.headers['user-agent'] || 'Unknown device').slice(0, 255);
+}
+
+function createSession(userId, token, req) {
+  try {
+    db.prepare(`
+      INSERT INTO sessions (user_id, token, device_info, ip_address, last_active)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(token) DO UPDATE SET
+        user_id = excluded.user_id,
+        device_info = excluded.device_info,
+        ip_address = excluded.ip_address,
+        last_active = CURRENT_TIMESTAMP
+    `).run(userId, token, getDeviceInfo(req), getClientIp(req));
+  } catch (e) {
+    console.error('[auth] session create error:', e.message);
+  }
+}
+
 // Diagnostic: check env vars are set (temporary — remove later)
 router.get('/check-env', (req, res) => {
   res.json({
@@ -192,6 +220,7 @@ router.post('/register', async (req, res) => {
     db.prepare('UPDATE email_verifications SET used = 1 WHERE id = ?').run(verification.id);
 
     const token = jwt.sign({ userId: result.lastInsertRowid }, JWT_SECRET, { expiresIn: '30d' });
+    createSession(result.lastInsertRowid, token, req);
     return res.json({
       token,
       user: { id: result.lastInsertRowid, username: display_name, public_id, avatar: null, premium_until: null, hide_last_seen: 0 },
@@ -246,6 +275,7 @@ router.post('/login', async (req, res) => {
   db.prepare('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
 
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+  createSession(user.id, token, req);
   return res.json({
     token,
     user: { id: user.id, username: user.username, public_id: user.public_id, avatar: user.avatar, premium_until: user.premium_until || null, hide_last_seen: user.hide_last_seen || 0 },

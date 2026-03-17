@@ -16,29 +16,57 @@ function Linkify({ children }) {
 
 
 
-function isImage(fileObj) {
+const VIDEO_EXT_RE = /\.(mp4|webm|mov|avi|mkv|3gp)$/i;
+const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a|webm)$/i;
+const IMAGE_EXT_RE = /\.(jpg|jpeg|png|gif|webp)$/i;
+
+function isVideo(fileObj) {
   if (!fileObj) return false;
-  return (!isVideo(fileObj) && !isAudio(fileObj)) && (fileObj.type ? fileObj.type.startsWith('image/') : fileObj.url.match(/\.(jpg|jpeg|png|gif|webp)$/i));
+  if (typeof fileObj === 'string') return VIDEO_EXT_RE.test(fileObj);
+  return (fileObj.type && fileObj.type.startsWith('video/')) || (typeof fileObj.url === 'string' && VIDEO_EXT_RE.test(fileObj.url));
 }
 
 function isAudio(fileObj) {
   if (!fileObj) return false;
-  return (fileObj.type && fileObj.type.startsWith('audio/')) || (fileObj.url && fileObj.url.match(/\.(mp3|wav|ogg|m4a|webm)$/i));
+  if (typeof fileObj === 'string') return AUDIO_EXT_RE.test(fileObj);
+  return (fileObj.type && fileObj.type.startsWith('audio/')) || (typeof fileObj.url === 'string' && AUDIO_EXT_RE.test(fileObj.url));
 }
 
-function parseFileUrls(file_url) {
-  if (!file_url) return [];
-  let parsed = [];
-  if (file_url.startsWith('[')) {
-    try { parsed = JSON.parse(file_url); } catch { return [{url: file_url}]; }
-  } else {
-    parsed = [file_url];
+function isImage(fileObj) {
+  if (!fileObj) return false;
+  if (typeof fileObj === 'string') return IMAGE_EXT_RE.test(fileObj);
+  return (!isVideo(fileObj) && !isAudio(fileObj)) && (fileObj.type ? fileObj.type.startsWith('image/') : (typeof fileObj.url === 'string' && IMAGE_EXT_RE.test(fileObj.url)));
+}
+
+function parseFileUrls(fileUrl) {
+  if (!fileUrl) return [];
+
+  if (Array.isArray(fileUrl)) {
+    return fileUrl
+      .map((entry) => (typeof entry === 'string' ? { url: entry } : entry))
+      .filter((entry) => entry?.url);
   }
-  return parsed.map(p => typeof p === 'string' ? { url: p, type: p.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg' } : p);
-}
 
-function isVideo(url) {
-  return /\.(mp4|webm|mov|avi|mkv|3gp)$/i.test(url);
+  if (typeof fileUrl === 'object') {
+    return fileUrl.url ? [fileUrl] : [];
+  }
+
+  if (typeof fileUrl !== 'string') return [];
+
+  let parsed = [];
+  if (fileUrl.startsWith('[')) {
+    try {
+      parsed = JSON.parse(fileUrl);
+    } catch {
+      return [{ url: fileUrl }];
+    }
+  } else {
+    parsed = [fileUrl];
+  }
+
+  return parsed
+    .map((entry) => (typeof entry === 'string' ? { url: entry } : entry))
+    .filter((entry) => entry?.url);
 }
 
 function parseUTC(dateStr) {
@@ -115,9 +143,13 @@ export default function Chat() {
   const [lightboxScale, setLightboxScale] = useState(1);
   const [fileUploading, setFileUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [mediaRecorder, setMediaRecorder] = useState(null);
-  const [audioChunks, setAudioChunks] = useState([]);
-  const audioChunksRef = React.useRef([]);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isPreparingRecording, setIsPreparingRecording] = useState(false);
+  const audioChunksRef = useRef([]);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const recordingTimerRef = useRef(null);
+  const sendVoiceAfterStopRef = useRef(false);
 
 
 
@@ -398,11 +430,6 @@ export default function Chat() {
           } else {
              alert(err.response?.data?.error || 'Ошибка загрузки файла');
           }
-          if (err.response?.status === 413) {
-             alert(err.response?.data?.error || 'Размер файла превышает допустимый лимит.');
-          } else {
-             alert(err.response?.data?.error || 'Ошибка загрузки файла');
-          }
         } finally {
           setFileUploading(false);
         }
@@ -560,6 +587,150 @@ export default function Chat() {
       socket.emit('stop_typing', { to: friendIdNum });
     }, 2000);
   };
+
+  const stopRecordingTimer = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
+
+  const stopRecordingStream = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  };
+
+  const sendVoiceBlob = async (voiceBlob) => {
+    if (!voiceBlob || !voiceBlob.size) return;
+
+    const currentReplyTo = replyTo;
+    setReplyTo(null);
+    setFileUploading(true);
+    try {
+      const extension = voiceBlob.type.includes('ogg') ? 'ogg' : 'webm';
+      const voiceFile = new File([voiceBlob], `voice_${Date.now()}.${extension}`, {
+        type: voiceBlob.type || 'audio/webm',
+      });
+
+      const formData = new FormData();
+      formData.append('files', voiceFile);
+      const res = await api.post('/users/messages/file', formData);
+      const { file_url } = res.data;
+
+      const socket = getSocket();
+      if (socket) {
+        socket.emit('send_message', {
+          to: friendIdNum,
+          content: '',
+          file_url,
+          reply_to_id: currentReplyTo?.id || null,
+        });
+      }
+    } catch (err) {
+      console.error('Voice upload error', err);
+      if (err.response?.status === 413) {
+        alert(err.response?.data?.error || 'Размер голосового сообщения слишком большой');
+      } else {
+        alert(err.response?.data?.error || 'Ошибка отправки голосового сообщения');
+      }
+    } finally {
+      setFileUploading(false);
+    }
+  };
+
+  const startRecording = async () => {
+    if (isRecording || isPreparingRecording || fileUploading || editingMsgId) return;
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      alert('Ваш браузер не поддерживает запись голосовых сообщений');
+      return;
+    }
+
+    try {
+      setIsPreparingRecording(true);
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+      sendVoiceAfterStopRef.current = false;
+      setRecordingSeconds(0);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const voiceBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const shouldSend = sendVoiceAfterStopRef.current;
+
+        audioChunksRef.current = [];
+        sendVoiceAfterStopRef.current = false;
+        setIsRecording(false);
+        setRecordingSeconds(0);
+        stopRecordingTimer();
+        stopRecordingStream();
+
+        if (shouldSend && voiceBlob.size > 0) {
+          sendVoiceBlob(voiceBlob);
+        }
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Microphone access error', err);
+      alert('Не удалось получить доступ к микрофону');
+      stopRecordingStream();
+    } finally {
+      setIsPreparingRecording(false);
+    }
+  };
+
+  const stopRecording = (shouldSend = false) => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') {
+      setIsRecording(false);
+      setRecordingSeconds(0);
+      stopRecordingTimer();
+      stopRecordingStream();
+      return;
+    }
+    sendVoiceAfterStopRef.current = shouldSend;
+    recorder.stop();
+  };
+
+  const formatRecordingTime = (totalSeconds) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    return () => {
+      try {
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state !== 'inactive') {
+          recorder.onstop = null;
+          recorder.stop();
+        }
+      } catch {
+        // ignore cleanup errors
+      }
+      sendVoiceAfterStopRef.current = false;
+      stopRecordingTimer();
+      stopRecordingStream();
+    };
+  }, []);
 
   const addFiles = (newFiles) => {
     if (!newFiles || fileUploading) return;
@@ -896,66 +1067,80 @@ export default function Chat() {
           style={{ display: 'none' }}
           onChange={(e) => { if (e.target.files.length) addFiles(e.target.files); e.target.value = ''; }}
         />
-        <button
-          className="attach-btn"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={fileUploading}
-          title="Прикрепить файл"
-        >
-          {fileUploading
-            ? <span className="attach-spinner" />
-            : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          }
-        </button>
-        <textarea
-          className="message-input"
-          placeholder={editingMsgId ? 'Изменить сообщение...' : 'Сообщение...'}
-          value={editingMsgId ? editText : text}
-          onChange={editingMsgId
-            ? (e) => { setEditText(e.target.value); autoResize(e.target); }
-            : handleInput
-          }
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              editingMsgId ? saveEdit() : sendMessage();
-            }
-            if (e.key === 'Escape' && editingMsgId) cancelEdit();
-          }}
-          onFocus={() => setTimeout(scrollToBottomInstant, 300)}
-          rows={1}
-        />
+
         {isRecording ? (
-          <button className="send-btn" onClick={stopRecording} title="Остановить запись" style={{background: 'red', animation: 'pulse 1s infinite'}}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
-          </button>
+          <div className="voice-recording-wrap">
+            <div className="voice-recording-indicator">
+              <span className="voice-recording-dot" />
+              <span className="voice-recording-time">{formatRecordingTime(recordingSeconds)}</span>
+            </div>
+            <button
+              className="send-btn"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => stopRecording(true)}
+              disabled={fileUploading || isPreparingRecording}
+              title="Отправить голосовое сообщение"
+              aria-label="Отправить голосовое сообщение"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+          </div>
         ) : (
-          <button
-            className="send-btn"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={(e) => {
-              if (editingMsgId) {
-                saveEdit();
-              } else {
-                if (!text.trim() && pendingFiles.length === 0) {
+          <>
+            <button
+              className="attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={fileUploading}
+              title="Прикрепить файл"
+            >
+              {fileUploading
+                ? <span className="attach-spinner" />
+                : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              }
+            </button>
+            <textarea
+              className="message-input"
+              placeholder={editingMsgId ? 'Изменить сообщение...' : 'Сообщение...'}
+              value={editingMsgId ? editText : text}
+              onChange={editingMsgId
+                ? (e) => { setEditText(e.target.value); autoResize(e.target); }
+                : handleInput
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  editingMsgId ? saveEdit() : sendMessage();
+                }
+                if (e.key === 'Escape' && editingMsgId) cancelEdit();
+              }}
+              onFocus={() => setTimeout(scrollToBottomInstant, 300)}
+              rows={1}
+            />
+            <button
+              className="send-btn"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                if (editingMsgId) {
+                  saveEdit();
+                } else if (!text.trim() && pendingFiles.length === 0) {
                   e.preventDefault();
                   startRecording();
                 } else {
                   sendMessage();
                 }
-              }
-            }}
-            disabled={editingMsgId ? !editText.trim() : false}
-            aria-label={editingMsgId ? 'Сохранить' : (!text.trim() && pendingFiles.length === 0) ? 'Голосовое сообщение' : 'Отправить'}
-          >
-            {editingMsgId ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            ) : (!text.trim() && pendingFiles.length === 0) ? (
-              <svg fill="currentColor" viewBox="0 0 24 24" width="24" height="24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-            ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-            )}
-          </button>
+              }}
+              disabled={editingMsgId ? !editText.trim() : (fileUploading || isPreparingRecording)}
+              aria-label={editingMsgId ? 'Сохранить' : (!text.trim() && pendingFiles.length === 0) ? 'Голосовое сообщение' : 'Отправить'}
+            >
+              {editingMsgId ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              ) : (!text.trim() && pendingFiles.length === 0) ? (
+                <svg fill="currentColor" viewBox="0 0 24 24" width="24" height="24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+              )}
+            </button>
+          </>
         )}
       </div>
 

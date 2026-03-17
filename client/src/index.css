@@ -1082,6 +1082,46 @@ img.avatar {
   animation: spin 0.7s linear infinite;
 }
 
+.voice-recording-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.voice-recording-indicator {
+  flex: 1;
+  height: 42px;
+  border-radius: 22px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+}
+
+.voice-recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff4d4f;
+  animation: voicePulse 1s infinite;
+}
+
+.voice-recording-time {
+  font-size: 15px;
+  color: var(--text);
+  letter-spacing: 0.2px;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes voicePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 /* ─── Image in message bubble ─── */
 .msg-image {
   display: block;

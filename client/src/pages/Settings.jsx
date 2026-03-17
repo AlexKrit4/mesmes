@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { disconnectSocket } from '../socket.js';
@@ -17,7 +17,7 @@ export default function Settings() {
   const [sessions, setSessions] = useState([]);
 
   // Fetch fresh me data
-  useState(() => {
+  useEffect(() => {
     api.get('/users/me').then(({ data }) => {
       setMeData(data);
       setHideLastSeen(!!data.hide_last_seen);
@@ -27,7 +27,7 @@ export default function Settings() {
     api.get('/users/sessions').then(({ data }) => {
       setSessions(data);
     }).catch(() => {});
-  });
+  }, []);
 
   const terminateSession = async (id) => {
     try {
