@@ -2,14 +2,13 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../database');
-const { authenticator } = require('otplib');
+const otplib = require('otplib');
 const QRCode = require('qrcode');
 const { auth } = require('./users');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret_in_production';
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || '';
-authenticator.options = { step: 30, window: 1 };
 
 // --- helpers ---
 async function verifyTurnstile(token) {
@@ -63,6 +62,12 @@ function createSession(userId, token, req) {
 
 function normalizeTwoFACode(code) {
   return String(code || '').replace(/\s+/g, '').replace(/-/g, '').trim();
+}
+
+function verifyTwoFACode(secret, code) {
+  const result = otplib.verifySync({ token: code, secret, afterTimeStep: 1 });
+  if (typeof result === 'boolean') return result;
+  return !!result?.valid;
 }
 
 function getActiveBan(userId) {
@@ -350,7 +355,7 @@ router.post('/login/2fa', (req, res) => {
     return res.status(400).json({ error: '2FA не включена для этого аккаунта' });
   }
 
-  const validCode = authenticator.verify({ token: normalizedCode, secret: user.twofa_secret });
+  const validCode = verifyTwoFACode(user.twofa_secret, normalizedCode);
   if (!validCode) {
     return res.status(400).json({ error: 'Неверный код 2FA' });
   }
@@ -395,8 +400,15 @@ router.post('/2fa/setup', auth, async (req, res) => {
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
   if (user.twofa_enabled) return res.status(409).json({ error: '2FA уже подключена' });
 
-  const secret = authenticator.generateSecret();
-  const otpauthUrl = authenticator.keyuri(user.public_id, 'MesMes', secret);
+  const secret = otplib.generateSecret();
+  const otpauthUrl = otplib.generateURI({
+    strategy: 'totp',
+    issuer: 'MesMes',
+    label: user.public_id,
+    secret,
+    period: 30,
+    digits: 6,
+  });
 
   try {
     const qrDataUrl = await QRCode.toDataURL(otpauthUrl, { width: 220, margin: 1 });
@@ -422,7 +434,7 @@ router.post('/2fa/enable', auth, (req, res) => {
     return res.status(400).json({ error: 'Сначала начните подключение 2FA' });
   }
 
-  const validCode = authenticator.verify({ token: normalizedCode, secret: user.twofa_temp_secret });
+  const validCode = verifyTwoFACode(user.twofa_temp_secret, normalizedCode);
   if (!validCode) return res.status(400).json({ error: 'Неверный код подтверждения' });
 
   db.prepare('UPDATE users SET twofa_enabled = 1, twofa_secret = ?, twofa_temp_secret = NULL WHERE id = ?')
@@ -449,7 +461,7 @@ router.post('/2fa/disable', auth, async (req, res) => {
   const passwordValid = await bcrypt.compare(password, user.password_hash);
   if (!passwordValid) return res.status(400).json({ error: 'Неверный пароль' });
 
-  const validCode = authenticator.verify({ token: normalizedCode, secret: user.twofa_secret });
+  const validCode = verifyTwoFACode(user.twofa_secret, normalizedCode);
   if (!validCode) return res.status(400).json({ error: 'Неверный код 2FA' });
 
   db.prepare('UPDATE users SET twofa_enabled = 0, twofa_secret = NULL, twofa_temp_secret = NULL WHERE id = ?')
