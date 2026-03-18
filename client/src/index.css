@@ -3288,3 +3288,12 @@ img.avatar {
 
 
 .message-text { white-space: pre-wrap; word-break: break-word; }
+
+.pinned-message-bar { display: flex; align-items: center; padding: 8px 12px; background: var(--bg2); border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.2s; z-index: 10; }
+.pinned-message-bar:hover { background: var(--bg3); }
+.pinned-icon { margin-right: 12px; display: flex; align-items: center; justify-content: center; }
+.pinned-content { flex: 1; overflow: hidden; }
+.pinned-title { color: var(--accent); font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.pinned-text { color: var(--text2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pinned-close { background: none; border: none; color: var(--text2); cursor: pointer; padding: 4px; border-radius: 50%; display: flex; transition: 0.2s; }
+.pinned-close:hover { background: var(--border); color: var(--text1); }
