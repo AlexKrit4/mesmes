@@ -272,7 +272,7 @@ export default function Settings() {
 
         {/* Official channel promo */}
         <a
-          href="https://mesmes.ru/join/13982bc70f56"
+          href="https://mesmes.ru/join/436d38fb317e"
           className="settings-promo-btn"
           style={{ textDecoration: 'none' }}
         >
