@@ -178,7 +178,7 @@ router.patch('/:id', auth, (req, res) => {
 router.get('/:id/messages', auth, (req, res) => {
   const chId = parseInt(req.params.id);
   const messages = db.prepare(`
-    SELECT cm.id, cm.channel_id, cm.sender_id, cm.content, cm.file_url, cm.created_at, cm.edited,
+    SELECT cm.id, cm.channel_id, cm.sender_id, cm.content, cm.file_url, cm.created_at, cm.edited, cm.is_pinned,
            u.username as sender_username
     FROM channel_messages cm
     JOIN users u ON cm.sender_id = u.id
@@ -330,6 +330,46 @@ router.delete('/:id/messages/:msgId', auth, (req, res) => {
   }
 
   res.json({ success: true });
+});
+
+// POST /api/channels/:id/messages/:msgId/pin — pin/unpin channel message
+router.post('/:id/messages/:msgId/pin', auth, (req, res) => {
+  const chId = parseInt(req.params.id);
+  const msgId = parseInt(req.params.msgId);
+  const ch = db.prepare('SELECT owner_id FROM channels WHERE id = ?').get(chId);
+  // Optional: check if they are the owner or admin
+  const action = req.body.action || 'pin'; // 'pin' or 'unpin'
+  const isPinned = action === 'pin' ? 1 : 0;
+  log(`[Channels] Setting pin=${isPinned} for msgId=${msgId} in chl ${chId}`);
+
+  const stmt = db.prepare('UPDATE channel_messages SET is_pinned = ? WHERE id = ? AND channel_id = ?');
+  const info = stmt.run(isPinned, msgId, chId);
+  
+  if (info.changes > 0) {
+    const updated = db.prepare(`
+      SELECT 
+        cm.*, 
+        u.username, u.avatar_url,
+        (SELECT COUNT(*) FROM channel_message_reactions cmr WHERE cmr.message_id = cm.id) as reactionCount,
+        (SELECT GROUP_CONCAT(user_id) FROM channel_message_reactions cmr WHERE cmr.message_id = cm.id) as reactedUsers
+      FROM channel_messages cm
+      JOIN users u ON cm.user_id = u.id
+      WHERE cm.id = ?
+    `).get(msgId);
+    
+    // Broadcast
+    const members = db.prepare('SELECT user_id FROM channel_members WHERE channel_id = ?').all(chId);
+    members.forEach(({ user_id }) => {
+      if (req.onlineUsers.has(user_id)) {
+        req.onlineUsers.get(user_id).forEach((sid) => {
+          req.io.to(sid).emit('channel_message_updated', updated);
+        });
+      }
+    });
+    res.json({ success: true, message: updated });
+  } else {
+    res.status(404).json({ error: 'Message not found' });
+  }
 });
 
 // PATCH /api/channels/:id/messages/:msgId — edit channel message (owner only)

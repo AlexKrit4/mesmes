@@ -377,3 +377,7 @@ try { db.exec(`ALTER TABLE users ADD COLUMN password_changed_at DATETIME DEFAULT
 try { db.exec(`ALTER TABLE users ADD COLUMN twofa_enabled INTEGER DEFAULT 0`); } catch (e) {}
 try { db.exec(`ALTER TABLE users ADD COLUMN twofa_secret TEXT DEFAULT NULL`); } catch (e) {}
 try { db.exec(`ALTER TABLE users ADD COLUMN twofa_temp_secret TEXT DEFAULT NULL`); } catch (e) {}
+
+// Migration: add is_pinned to messages and channel_messages
+try { db.exec(`ALTER TABLE messages ADD COLUMN is_pinned INTEGER DEFAULT 0`); } catch (e) {}
+try { db.exec(`ALTER TABLE channel_messages ADD COLUMN is_pinned INTEGER DEFAULT 0`); } catch (e) {}

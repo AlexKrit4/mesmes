@@ -489,7 +489,7 @@ router.get('/messages/:friendId', auth, (req, res) => {
   const friendId = parseInt(req.params.friendId);
   const messages = db.prepare(`
     SELECT m.id, m.sender_id, m.receiver_id, m.content, m.file_url, m.reply_to_id, m.created_at, m.read_at,
-           m.edited, u.username as sender_username
+           m.edited, m.is_pinned, u.username as sender_username
     FROM messages m
     JOIN users u ON m.sender_id = u.id
     WHERE ((m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?))
@@ -540,6 +540,32 @@ router.get('/messages/:friendId', auth, (req, res) => {
   });
 
   res.json(enriched);
+});
+
+// POST /api/users/messages/:messageId/pin — toggle pin message
+router.post('/messages/:messageId/pin', auth, (req, res) => {
+  const msgId = parseInt(req.params.messageId);
+  const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(msgId);
+  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
+
+  // Pinner must be sender or receiver
+  if (msg.sender_id !== req.userId && msg.receiver_id !== req.userId) {
+    return res.status(403).json({ error: 'Нет доступа' });
+  }
+
+  const newState = msg.is_pinned ? 0 : 1;
+  db.prepare('UPDATE messages SET is_pinned = ? WHERE id = ?').run(newState, msgId);
+
+  // Notify both
+  if (req.io) {
+    [msg.sender_id, msg.receiver_id].forEach(uid => {
+      if (req.onlineUsers?.has(uid)) {
+        req.onlineUsers.get(uid).forEach(sid => req.io.to(sid).emit('message_updated', { messageId: msgId, is_pinned: newState }));
+      }
+    });
+  }
+
+  res.json({ success: true, is_pinned: newState });
 });
 
 // PATCH /api/users/messages/:messageId — edit message

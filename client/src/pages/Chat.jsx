@@ -773,9 +773,18 @@ export default function Chat() {
   const reactToMessage = async (messageId, emoji) => {
     try {
       const { data } = await api.post(`/users/messages/${messageId}/react`, { emoji });
-      setMessages((prev) =>
-        prev.map((m) => m.id === messageId ? { ...m, reactions: data.reactions } : m)
-      );
+      setMessages((prev) => prev.map((m) => m.id === messageId ? { ...m, reactions: data.reactions } : m));
+    } catch { /* */ }
+    setContextMenu(null);
+  };
+
+  const pinMessage = async (messageId) => {
+    try {
+      const msgInfo = messages.find(m => m.id === messageId);
+      const isCurrentlyPinned = msgInfo && msgInfo.is_pinned === 1;
+      const action = isCurrentlyPinned ? 'unpin' : 'pin';
+      const { data } = await api.post(`/users/messages/${messageId}/pin`, { action });
+      setMessages((prev) => prev.map((m) => m.id === messageId ? { ...m, is_pinned: data.message.is_pinned } : m));
     } catch { /* */ }
     setContextMenu(null);
   };
@@ -1137,6 +1146,12 @@ export default function Chat() {
                 </button>
               </div>
               <div className={`message ${isOut ? 'out' : 'in'}`} onClick={() => handleDoubleTap(msg.id)}>
+                {msg.is_pinned === 1 && (
+                  <div className="pinned-indicator" style={{ fontSize: '12px', color: 'var(--accent)', marginBottom: '4px', display: 'flex', alignItems: 'center' }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
+                    Закрепленное сообщение
+                  </div>
+                )}
                 {msg.reply_to && (
                   <div className="reply-quote" onClick={() => {
                     const el = document.getElementById(`msg-${msg.reply_to.id}`);
@@ -1150,9 +1165,9 @@ export default function Chat() {
                   if (isAudio(fileObj)) {
                     return <VoiceMessagePlayer key={i} src={fileObj.url} />;
                   } else if (isVideo(fileObj)) {
-                    return <video key={i} src={fileObj.url} className="msg-video" controls playsInline onClick={e => e.stopPropagation()} style={{maxWidth: '100%', borderRadius: '8px'}} />;
+                    return <video key={i} src={fileObj.url} className="msg-video" controls playsInline onClick={e => e.stopPropagation()} onLoadedMetadata={scrollToBottomInstant} style={{maxWidth: '100%', borderRadius: '8px'}} />;
                   } else if (isImage(fileObj)) {
-                    return <img key={i} src={fileObj.url} className="msg-image" alt="" onClick={(e) => {
+                    return <img key={i} src={fileObj.url} onLoad={scrollToBottomInstant} className="msg-image" alt="" onClick={(e) => {
                       e.stopPropagation();
                       const imgUrls = urls.filter(isImage).map(u => u.url);
                       openLightbox(imgUrls, imgUrls.indexOf(fileObj.url));
@@ -1237,6 +1252,13 @@ export default function Chat() {
             <button className="ctx-btn" onClick={() => copyMessage(contextMenu.content)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
               Копировать
+            </button>
+            <button className="ctx-btn" onClick={() => pinMessage(contextMenu.msgId)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
+              {(() => {
+                 const msgInfo = messages.find(m => m.id === contextMenu.msgId);
+                 return msgInfo && msgInfo.is_pinned === 1 ? 'Открепить' : 'Закрепить';
+              })()}
             </button>
             <button className="ctx-btn delete" onClick={() =>
               contextMenu.isOut

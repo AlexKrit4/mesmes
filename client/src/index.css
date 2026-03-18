@@ -102,7 +102,7 @@ a { color: var(--accent); text-decoration: none; }
   background: rgba(16, 12, 30, 0.85);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(108, 92, 231, 0.22);
+  border: none;
   border-radius: var(--radius);
   padding: 32px 28px;
   width: 100%;
@@ -149,7 +149,7 @@ a { color: var(--accent); text-decoration: none; }
   width: 100%;
   padding: 12px 14px;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(108, 92, 231, 0.18);
+  border: none;
   border-radius: var(--radius-sm);
   color: var(--text);
   font-size: 15px;
@@ -209,7 +209,7 @@ a { color: var(--accent); text-decoration: none; }
 .btn-ghost {
   background: transparent;
   color: var(--text2);
-  border: 1px solid var(--border);
+  border: none;
 }
 
 .btn-sm {
@@ -231,7 +231,7 @@ a { color: var(--accent); text-decoration: none; }
 
 .info-box {
   background: rgba(108, 92, 231, 0.1);
-  border: 1px solid rgba(108, 92, 231, 0.3);
+  border: none;
   color: var(--accent2);
   border-radius: var(--radius-sm);
   padding: 10px 14px;
@@ -508,7 +508,7 @@ img.avatar {
   border-radius: var(--radius);
   margin-bottom: 8px;
   cursor: pointer;
-  border: 1px solid var(--border);
+  border: none;
   transition: background 0.2s, border-color 0.2s, transform 0.1s;
 }
 
@@ -616,7 +616,7 @@ img.avatar {
   flex: 1;
   padding: 11px 14px;
   background: var(--bg2);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-sm);
   color: var(--text);
   font-size: 14px;
@@ -636,7 +636,7 @@ img.avatar {
   align-items: stretch;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .phone-input-group:focus-within {
@@ -664,7 +664,7 @@ img.avatar {
 /* ─── My ID box ─── */
 .my-id-box {
   background: linear-gradient(135deg, rgba(108,92,231,0.08) 0%, rgba(168,85,247,0.06) 100%);
-  border: 1px solid rgba(108,92,231,0.2);
+  border: none;
   border-radius: var(--radius);
   padding: 16px;
   margin-bottom: 18px;
@@ -888,7 +888,7 @@ img.avatar {
 
 .message.in {
   background: var(--msg-in);
-  border: 1px solid var(--border);
+  border: none;
   border-bottom-left-radius: 6px;
 }
 
@@ -969,7 +969,7 @@ img.avatar {
   z-index: 100;
   min-width: 178px;
   background: var(--bg2);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-sm);
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
   overflow: hidden;
@@ -1020,7 +1020,7 @@ img.avatar {
   flex: 1;
   padding: 10px 16px;
   background: var(--bg3);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 22px;
   color: var(--text);
   font-size: 15px;
@@ -1095,7 +1095,7 @@ img.avatar {
   height: 42px;
   border-radius: 22px;
   background: var(--bg3);
-  border: 1px solid var(--border);
+  border: none;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1544,7 +1544,7 @@ img.avatar {
 
 .modal-card {
   background: var(--bg2);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 20px;
   padding: 32px 28px;
   width: 100%;
@@ -1655,7 +1655,7 @@ img.avatar {
 
 .settings-section {
   background: var(--bg2);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius);
   padding: 16px;
 }
@@ -1686,7 +1686,7 @@ img.avatar {
   flex: 1;
   padding: 11px 14px;
   background: var(--bg3);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-sm);
   color: var(--text);
   font-size: 15px;
@@ -1737,7 +1737,7 @@ img.avatar {
   width: 100%;
   padding: 16px;
   background: var(--bg2);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius);
   color: var(--text);
   font-size: 15px;
@@ -1815,7 +1815,7 @@ img.avatar {
 .btn-ghost {
   background: var(--bg3);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: none;
   flex: 1;
 }
 
@@ -1853,7 +1853,7 @@ img.avatar {
   top: calc(100% + 4px);
   right: 0;
   background: var(--bg2);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius);
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   min-width: 180px;
@@ -2777,7 +2777,7 @@ img.avatar {
   height: 40px;
   border-radius: 50%;
   background: var(--bg2);
-  border: 1px solid var(--border);
+  border: none;
   color: var(--text);
   display: flex;
   align-items: center;
@@ -2957,7 +2957,7 @@ img.avatar {
   width: 100%;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid var(--border);
+  border: none;
   background: var(--bg2);
   color: var(--text);
   font-size: 0.95rem;
@@ -2985,7 +2985,7 @@ img.avatar {
 .phone-input-wrap {
   display: flex;
   align-items: center;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 10px;
   background: var(--bg2);
   overflow: hidden;
@@ -3117,7 +3117,7 @@ img.avatar {
   padding: 14px;
   background: var(--bg2);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  border: none;
 }
 .premium-priv-icon {
   font-size: 24px;
@@ -3286,3 +3286,5 @@ img.avatar {
   display: block;
 }
 
+
+.message-text { white-space: pre-wrap; word-break: break-word; }

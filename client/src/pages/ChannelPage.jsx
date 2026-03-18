@@ -572,6 +572,18 @@ export default function ChannelPage() {
     }
   };
 
+  const pinChannelMessage = async (msgId) => {
+    try {
+      const msgInfo = messages.find(m => m.id === msgId);
+      const isCurrentlyPinned = msgInfo && msgInfo.is_pinned === 1;
+      const action = isCurrentlyPinned ? 'unpin' : 'pin';
+      const { data } = await api.post(`/channels/${channelId}/messages/${msgId}/pin`, { action });
+      setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, is_pinned: data.message.is_pinned } : m));
+    } catch (err) {
+      console.error('Pinning failed', err);
+    }
+  };
+
   const joinChannel = async () => {
     try {
       await api.post(`/channels/${channelId}/join`);
@@ -691,6 +703,9 @@ export default function ChannelPage() {
               <div className="msg-action-btns channel-action">
                 {isOwner ? (
                   <>
+                    <button className="msg-gear-btn" onClick={() => pinChannelMessage(msg.id)} title={msg.is_pinned ? "Открепить" : "Закрепить"}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
+                    </button>
                     <button className="msg-gear-btn" onClick={() => startEditMsg(msg)} title="Редактировать">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
@@ -716,6 +731,12 @@ export default function ChannelPage() {
               </div>
             )}
             <div className="message out channel-msg">
+              {msg.is_pinned === 1 && (
+                <div className="pinned-indicator" style={{ fontSize: '12px', color: 'var(--accent)', marginBottom: '8px', display: 'flex', alignItems: 'center' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
+                  Закрепленное сообщение
+                </div>
+              )}
               {urls.length > 0 && (
                 <div className="channel-attachments">
                   {urls.map((file, i) => {
@@ -743,6 +764,7 @@ export default function ChannelPage() {
                           className="msg-video"
                           controls
                           playsInline
+                          onLoadedMetadata={scrollToBottomInstant}
                           onClick={(e) => e.stopPropagation()}
                         />
                       );
@@ -756,6 +778,7 @@ export default function ChannelPage() {
                           src={fileUrl}
                           className="msg-image"
                           alt=""
+                          onLoad={scrollToBottomInstant}
                           onClick={(e) => {
                             e.stopPropagation();
                             openLightbox(imageUrls, imageIndex >= 0 ? imageIndex : 0);
