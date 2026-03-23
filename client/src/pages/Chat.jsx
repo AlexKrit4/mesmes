@@ -355,6 +355,7 @@ export default function Chat() {
   const remoteAudioRef = useRef(null);
   const activeCallPeerRef = useRef(null);
   const pendingRemoteCandidatesRef = useRef([]);
+  const earlyIceCandidatesRef = useRef([]);
 
   const stopLocalStream = useCallback(() => {
     if (localStreamRef.current) {
@@ -368,6 +369,7 @@ export default function Chat() {
       peerConnectionRef.current.onicecandidate = null;
       peerConnectionRef.current.ontrack = null;
       peerConnectionRef.current.onconnectionstatechange = null;
+      peerConnectionRef.current.oniceconnectionstatechange = null;
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
@@ -406,7 +408,7 @@ export default function Chat() {
 
     pc.onicecandidate = (event) => {
       if (!event.candidate || !targetUserId) return;
-      socket.emit('call_ice_candidate', { to: targetUserId, candidate: event.candidate });
+      socket.emit('call_ice_candidate', { to: targetUserId, candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate });
     };
 
     pc.ontrack = (event) => {
@@ -420,6 +422,7 @@ export default function Chat() {
       }
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = remoteStreamRef.current;
+        remoteAudioRef.current.play?.().catch(() => {});
       }
       setCallState('in-call');
     };
@@ -432,8 +435,24 @@ export default function Chat() {
       }
     };
 
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        setCallState('in-call');
+      }
+      if (pc.iceConnectionState === 'failed') {
+        showCallError('Не удалось установить аудиосоединение');
+        resetCallState();
+      }
+    };
+
+    const queued = earlyIceCandidatesRef.current.filter((item) => Number(item.from) === Number(targetUserId));
+    if (queued.length > 0) {
+      queued.forEach(({ candidate }) => pendingRemoteCandidatesRef.current.push(candidate));
+      earlyIceCandidatesRef.current = earlyIceCandidatesRef.current.filter((item) => Number(item.from) !== Number(targetUserId));
+    }
+
     return pc;
-  }, [closePeerConnection, resetCallState]);
+  }, [closePeerConnection, resetCallState, showCallError]);
 
   const startVoiceCall = useCallback(async () => {
     if (callState !== 'idle') {
@@ -781,7 +800,11 @@ export default function Chat() {
 
     const onCallIceCandidate = async ({ from, candidate }) => {
       const isCurrentPeer = from === activeCallPeerRef.current || from === incomingCall?.from;
-      if (!candidate || !isCurrentPeer || !peerConnectionRef.current) return;
+      if (!candidate || !isCurrentPeer) return;
+      if (!peerConnectionRef.current) {
+        earlyIceCandidatesRef.current.push({ from, candidate });
+        return;
+      }
       try {
         if (peerConnectionRef.current.remoteDescription?.type) {
           await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
