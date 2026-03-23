@@ -11,7 +11,6 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
   const [recordedMode, setRecordedMode] = useState(mode);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState('');
   const [videoDuration, setVideoDuration] = useState(0);
-  const [videoPosition, setVideoPosition] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
   const mediaRecorderRef = useRef(null);
@@ -78,7 +77,6 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
     const objectUrl = URL.createObjectURL(recordedBlob);
     setRecordedVideoUrl(objectUrl);
     setVideoDuration(0);
-    setVideoPosition(0);
     setIsVideoPlaying(false);
 
     return () => {
@@ -133,7 +131,6 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
         setRecordedBlob(null);
         setRecordingTime(0);
         setVideoDuration(0);
-        setVideoPosition(0);
         setIsVideoPlaying(false);
         return;
       }
@@ -188,7 +185,6 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
       setRecordedBlob(null);
       setRecordingTime(0);
       setVideoDuration(0);
-      setVideoPosition(0);
       setIsVideoPlaying(false);
     } catch (err) {
       console.error('Send error:', err);
@@ -210,7 +206,6 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
     setRecordedBlob(null);
     setRecordingTime(0);
     setVideoDuration(0);
-    setVideoPosition(0);
     setIsVideoPlaying(false);
 
     if (recordedVideoRef.current) {
@@ -236,11 +231,6 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
     setVideoDuration(Number.isFinite(duration) ? duration : 0);
   };
 
-  const onRecordedVideoTimeUpdate = () => {
-    if (!recordedVideoRef.current) return;
-    setVideoPosition(Number(recordedVideoRef.current.currentTime || 0));
-  };
-
   const toggleRecordedVideoPlayback = async () => {
     if (!recordedVideoRef.current) return;
     try {
@@ -256,11 +246,6 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
     }
   };
 
-  const onRecordedVideoSeek = (e) => {
-    const value = Number(e.target.value || 0);
-    setVideoPosition(value);
-    if (recordedVideoRef.current) recordedVideoRef.current.currentTime = value;
-  };
 
   if (!isRecording && !hasRecording) {
     return (
@@ -298,7 +283,6 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
           </div>
           <div className="simple-recorder-player-strip">
             <span className="simple-recorder-dot" />
-            <span className="simple-recorder-strip-time">{formatTime(recordingTime)}</span>
           </div>
           <div className="simple-recorder-action-row">
             <button
@@ -351,7 +335,6 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
             playsInline
             className="simple-recorder-recorded-circle"
             onLoadedMetadata={onRecordedVideoLoaded}
-            onTimeUpdate={onRecordedVideoTimeUpdate}
             onEnded={() => setIsVideoPlaying(false)}
           />
         </div>
@@ -364,18 +347,6 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
           >
             {isVideoPlaying ? '⏸' : '▶'}
           </button>
-          <input
-            className="simple-recorder-seek"
-            type="range"
-            min="0"
-            max={videoDuration || 0}
-            value={Math.min(videoPosition, videoDuration || 0)}
-            step="0.01"
-            onChange={onRecordedVideoSeek}
-          />
-          <span className="simple-recorder-strip-time">
-            {formatTime(Math.floor(videoPosition))} / {formatTime(Math.floor(videoDuration))}
-          </span>
         </div>
 
         <div className="simple-recorder-action-row">

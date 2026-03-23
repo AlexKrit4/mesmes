@@ -1022,6 +1022,7 @@ export default function Chat() {
         {messages.map((msg, idx) => {
           const isOut = msg.sender_id === me.id;
           const urls = parseFileUrls(msg.file_url);
+          const hasOnlyCircleVideo = urls.length === 1 && isCircleVideo(urls[0]) && !msg.content && !msg.reply_to;
           const showDay = idx === 0 || dayKey(msg.created_at) !== dayKey(messages[idx - 1].created_at);
           return (
             <React.Fragment key={msg.id}>
@@ -1054,7 +1055,7 @@ export default function Chat() {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.92c.04-.34.07-.69.07-1.08 0-.39-.03-.74-.07-1.08l2.32-1.81c.21-.16.27-.46.13-.7l-2.2-3.81c-.13-.24-.42-.33-.67-.24l-2.73 1.1c-.57-.43-1.18-.8-1.87-1.07L14.5 2.42C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42L9.13 5.29C8.44 5.56 7.83 5.93 7.26 6.36L4.53 5.26c-.25-.09-.54 0-.67.24L1.66 9.31c-.14.24-.08.54.13.7L4.11 11.82C4.07 12.16 4 12.51 4 12.92c0 .39.03.74.07 1.08l-2.32 1.81c-.21.16-.27.46-.13.7l2.2 3.81c.13.24.42.33.67.24l2.73-1.1c.57.43 1.18.8 1.87 1.07l.37 2.87c.04.24.25.42.5.42h4c.25 0 .46-.18.49-.42l.37-2.87c.69-.27 1.3-.64 1.87-1.07l2.73 1.1c.25.09.54 0 .67-.24l2.2-3.81c.14-.24.08-.54-.13-.7l-2.32-1.81z"/></svg>
                 </button>
               </div>
-              <div className={`message ${isOut ? 'out' : 'in'}`} onClick={() => handleDoubleTap(msg.id)}>
+              <div className={`message ${isOut ? 'out' : 'in'}${hasOnlyCircleVideo ? ' message-circle-only' : ''}`} onClick={() => handleDoubleTap(msg.id)}>
                 {msg.is_pinned === 1 && (
                   <div className="pinned-indicator" style={{ fontSize: '12px', color: 'var(--accent)', marginBottom: '4px', display: 'flex', alignItems: 'center' }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>

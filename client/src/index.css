@@ -3444,8 +3444,8 @@ img.avatar {
 }
 
 .simple-recorder-video-circle {
-  width: 180px;
-  height: 180px;
+  width: 210px;
+  height: 210px;
   border-radius: 50%;
   overflow: hidden;
   border: 2px solid var(--border);
@@ -3474,10 +3474,10 @@ img.avatar {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 7px 9px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
 }
 
 .simple-recorder-dot {
@@ -3651,8 +3651,8 @@ img.avatar {
 }
 
 .msg-circle-video-wrap {
-  width: 180px;
-  height: 180px;
+  width: 210px;
+  height: 210px;
   border-radius: 50%;
   overflow: hidden;
   border: 2px solid var(--border);
@@ -3671,10 +3671,10 @@ img.avatar {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 7px 9px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
 }
 
 .msg-circle-play {
@@ -3703,5 +3703,13 @@ img.avatar {
   min-width: 72px;
   text-align: right;
   font-family: 'Courier New', monospace;
+}
+
+.message.message-circle-only,
+.channel-msg.message-circle-only {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  padding: 0 !important;
 }
 

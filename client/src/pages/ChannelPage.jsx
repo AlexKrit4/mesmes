@@ -867,6 +867,7 @@ export default function ChannelPage() {
         {messages.map((msg, idx) => {
           const urls = parseFileUrls(msg.file_url);
           const imageUrls = urls.filter(isImage).map(getFileUrl).filter(Boolean);
+          const hasOnlyCircleVideo = urls.length === 1 && isCircleVideo(urls[0]) && !msg.content;
           const showDay = idx === 0 || dayKey(msg.created_at) !== dayKey(messages[idx - 1].created_at);
           return (
           <React.Fragment key={msg.id}>
@@ -906,7 +907,7 @@ export default function ChannelPage() {
                 ))}
               </div>
             )}
-            <div className="message out channel-msg">
+            <div className={`message out channel-msg${hasOnlyCircleVideo ? ' message-circle-only' : ''}`}>
               {msg.is_pinned === 1 && (
                 <div className="pinned-indicator" style={{ fontSize: '12px', color: 'var(--accent)', marginBottom: '8px', display: 'flex', alignItems: 'center' }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '4px'}}><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>

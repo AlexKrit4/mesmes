@@ -1,12 +1,5 @@
 import React, { useRef, useState } from 'react';
 
-function formatTime(seconds) {
-  const safe = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
-  const mins = Math.floor(safe / 60);
-  const secs = safe % 60;
-  return `${mins}:${String(secs).padStart(2, '0')}`;
-}
-
 export default function CircleVideoMessage({ src, onLoadedMetadata }) {
   const videoRef = useRef(null);
   const [duration, setDuration] = useState(0);
@@ -67,7 +60,6 @@ export default function CircleVideoMessage({ src, onLoadedMetadata }) {
           step="0.01"
           onChange={handleSeek}
         />
-        <span className="msg-circle-time">{formatTime(position)} / {formatTime(duration)}</span>
       </div>
     </div>
   );
