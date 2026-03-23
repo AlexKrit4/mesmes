@@ -433,6 +433,26 @@ try {
   `);
 } catch (e) {}
 
+// Migration: channel bans (owner can permanently ban/unban subscribers)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channel_bans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      banned_by INTEGER NOT NULL,
+      reason TEXT DEFAULT '',
+      active INTEGER DEFAULT 1,
+      banned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      unbanned_at DATETIME DEFAULT NULL,
+      FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (banned_by) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(channel_id, user_id)
+    )
+  `);
+} catch (e) {}
+
 // Migration: add google_id for Google OAuth support
 try {
   db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT DEFAULT NULL`);

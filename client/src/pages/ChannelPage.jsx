@@ -165,6 +165,10 @@ export default function ChannelPage() {
   const [descDraft, setDescDraft] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [subscribers, setSubscribers] = useState([]);
+  const [bannedUsers, setBannedUsers] = useState([]);
+  const [moderationLoading, setModerationLoading] = useState(false);
+  const [moderationMsg, setModerationMsg] = useState('');
   const [fileUploading, setFileUploading] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -638,7 +642,7 @@ export default function ChannelPage() {
       await api.post(`/channels/${channelId}/join`);
       setChannel((prev) => prev ? { ...prev, is_member: true, member_count: (prev.member_count || 0) + 1 } : prev);
     } catch (err) {
-      console.error(err);
+      alert(err.response?.data?.error || 'Не удалось присоединиться к каналу');
     }
   };
 
@@ -668,6 +672,65 @@ export default function ChannelPage() {
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
     }).catch(() => {});
+  };
+
+  const loadOwnerModerationData = useCallback(async () => {
+    if (!isOwner || !showInfo) return;
+    setModerationLoading(true);
+    setModerationMsg('');
+    try {
+      const [subsRes, bansRes] = await Promise.all([
+        api.get(`/channels/${channelId}/subscribers`),
+        api.get(`/channels/${channelId}/bans`),
+      ]);
+      setSubscribers(Array.isArray(subsRes.data) ? subsRes.data : []);
+      setBannedUsers(Array.isArray(bansRes.data) ? bansRes.data : []);
+    } catch (err) {
+      setModerationMsg(err.response?.data?.error || 'Не удалось загрузить подписчиков');
+    } finally {
+      setModerationLoading(false);
+    }
+  }, [channelId, isOwner, showInfo]);
+
+  useEffect(() => {
+    loadOwnerModerationData();
+  }, [loadOwnerModerationData]);
+
+  const banSubscriber = async (user) => {
+    if (!user || user.is_owner) return;
+    const reason = window.prompt('Причина блокировки (необязательно):', 'Заблокирован владельцем канала');
+    if (reason === null) return;
+
+    try {
+      await api.post(`/channels/${channelId}/subscribers/${user.id}/ban`, { reason });
+      setSubscribers((prev) => prev.filter((u) => u.id !== user.id));
+      setBannedUsers((prev) => [{
+        id: `local-${user.id}`,
+        user_id: user.id,
+        username: user.username,
+        public_id: user.public_id,
+        avatar: user.avatar,
+        reason: reason || 'Заблокирован владельцем канала',
+        active: 1,
+      }, ...prev.filter((u) => u.user_id !== user.id)]);
+      setChannel((prev) => prev ? { ...prev, member_count: Math.max(0, Number(prev.member_count || 0) - 1) } : prev);
+      setModerationMsg(`Пользователь ${user.username} заблокирован в канале`);
+    } catch (err) {
+      setModerationMsg(err.response?.data?.error || 'Не удалось заблокировать подписчика');
+    }
+  };
+
+  const unbanSubscriber = async (entry) => {
+    const userId = entry?.user_id || entry?.id;
+    if (!userId) return;
+
+    try {
+      await api.post(`/channels/${channelId}/subscribers/${userId}/unban`);
+      setBannedUsers((prev) => prev.filter((u) => (u.user_id || u.id) !== userId));
+      setModerationMsg(`Бан снят: ${entry.username}`);
+    } catch (err) {
+      setModerationMsg(err.response?.data?.error || 'Не удалось снять бан');
+    }
   };
 
   if (loading) {
@@ -1145,6 +1208,62 @@ export default function ChannelPage() {
                 </button>
               </div>
             </div>
+
+            {isOwner && (
+              <div className="channel-invite-section" style={{ marginTop: 14 }}>
+                <div className="channel-desc-label">Подписчики ({subscribers.length})</div>
+                {moderationLoading ? (
+                  <div className="channel-desc-text">Загрузка...</div>
+                ) : subscribers.length === 0 ? (
+                  <div className="channel-desc-text">Подписчиков пока нет</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {subscribers.map((u) => (
+                      <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          {u.avatar ? <img src={u.avatar} alt="" className="avatar" style={{ width: 28, height: 28 }} /> : <div className="avatar" style={{ width: 28, height: 28 }}>{(u.username || '?')[0].toUpperCase()}</div>}
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.username}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text2)' }}>@{u.public_id}</div>
+                          </div>
+                        </div>
+                        {!u.is_owner ? (
+                          <button className="btn btn-danger btn-sm" onClick={() => banSubscriber(u)}>Выгнать навсегда</button>
+                        ) : (
+                          <span style={{ fontSize: 12, color: 'var(--accent)' }}>Владелец</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isOwner && (
+              <div className="channel-invite-section" style={{ marginTop: 14 }}>
+                <div className="channel-desc-label">Забаненные ({bannedUsers.length})</div>
+                {bannedUsers.length === 0 ? (
+                  <div className="channel-desc-text">Активных банов нет</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {bannedUsers.map((u) => (
+                      <div key={u.id || u.user_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px' }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.username}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text2)' }}>@{u.public_id}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text2)' }}>Причина: {u.reason || '—'}</div>
+                        </div>
+                        <button className="btn btn-accent btn-sm" onClick={() => unbanSubscriber(u)}>Снять бан</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isOwner && moderationMsg && (
+              <div className="channel-desc-text" style={{ marginTop: 10, color: 'var(--text2)' }}>{moderationMsg}</div>
+            )}
 
             {isMember && (
               <div className="settings-section" style={{ marginTop: 14 }}>

@@ -9,6 +9,20 @@ const { auth } = require('./users');
 
 const router = express.Router();
 
+function getChannelById(channelId) {
+  return db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
+}
+
+function requireChannelOwner(req, res, next) {
+  const chId = parseInt(req.params.id);
+  const ch = getChannelById(chId);
+  if (!ch) return res.status(404).json({ error: 'Канал не найден' });
+  if (ch.owner_id !== req.userId) return res.status(403).json({ error: 'Только владелец' });
+  req.channel = ch;
+  req.channelId = chId;
+  next();
+}
+
 // Channel avatar upload
 const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -182,6 +196,9 @@ router.post('/:id/join', auth, (req, res) => {
   const ch = db.prepare('SELECT id FROM channels WHERE id = ?').get(parseInt(req.params.id));
   if (!ch) return res.status(404).json({ error: 'Канал не найден' });
 
+  const activeBan = db.prepare('SELECT id FROM channel_bans WHERE channel_id = ? AND user_id = ? AND active = 1 LIMIT 1').get(ch.id, req.userId);
+  if (activeBan) return res.status(403).json({ error: 'Вы заблокированы в этом канале' });
+
   const already = db.prepare('SELECT id FROM channel_members WHERE channel_id = ? AND user_id = ?').get(ch.id, req.userId);
   if (already) return res.json({ success: true, already: true });
 
@@ -211,6 +228,83 @@ router.patch('/:id', auth, (req, res) => {
   if (description !== undefined) {
     db.prepare('UPDATE channels SET description = ? WHERE id = ?').run(description.trim(), chId);
   }
+  res.json({ success: true });
+});
+
+// GET /api/channels/:id/subscribers — owner-only list subscribers
+router.get('/:id/subscribers', auth, requireChannelOwner, (req, res) => {
+  const subscribers = db.prepare(`
+    SELECT u.id, u.username, u.public_id, u.avatar, cm.joined_at,
+           CASE WHEN c.owner_id = u.id THEN 1 ELSE 0 END as is_owner
+    FROM channel_members cm
+    JOIN users u ON u.id = cm.user_id
+    JOIN channels c ON c.id = cm.channel_id
+    WHERE cm.channel_id = ?
+    ORDER BY is_owner DESC, cm.joined_at ASC
+  `).all(req.channelId);
+
+  res.json(subscribers);
+});
+
+// GET /api/channels/:id/bans — owner-only list active bans
+router.get('/:id/bans', auth, requireChannelOwner, (req, res) => {
+  const bans = db.prepare(`
+    SELECT cb.id, cb.channel_id, cb.user_id, cb.reason, cb.active, cb.banned_at, cb.unbanned_at,
+           u.username, u.public_id, u.avatar,
+           b.username as banned_by_username
+    FROM channel_bans cb
+    JOIN users u ON u.id = cb.user_id
+    LEFT JOIN users b ON b.id = cb.banned_by
+    WHERE cb.channel_id = ? AND cb.active = 1
+    ORDER BY cb.banned_at DESC
+  `).all(req.channelId);
+
+  res.json(bans);
+});
+
+// POST /api/channels/:id/subscribers/:userId/ban — owner-only permanent ban
+router.post('/:id/subscribers/:userId/ban', auth, requireChannelOwner, (req, res) => {
+  const targetUserId = parseInt(req.params.userId);
+  const reason = String(req.body?.reason || '').trim();
+
+  if (!targetUserId) return res.status(400).json({ error: 'Некорректный userId' });
+  if (targetUserId === req.userId) return res.status(400).json({ error: 'Нельзя заблокировать владельца канала' });
+
+  const target = db.prepare('SELECT id FROM users WHERE id = ?').get(targetUserId);
+  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  db.prepare('DELETE FROM channel_members WHERE channel_id = ? AND user_id = ?').run(req.channelId, targetUserId);
+
+  const existing = db.prepare('SELECT id FROM channel_bans WHERE channel_id = ? AND user_id = ?').get(req.channelId, targetUserId);
+  if (existing) {
+    db.prepare(`
+      UPDATE channel_bans
+      SET active = 1,
+          banned_by = ?,
+          reason = ?,
+          banned_at = CURRENT_TIMESTAMP,
+          unbanned_at = NULL
+      WHERE id = ?
+    `).run(req.userId, reason || 'Заблокирован владельцем канала', existing.id);
+  } else {
+    db.prepare(`
+      INSERT INTO channel_bans (channel_id, user_id, banned_by, reason, active)
+      VALUES (?, ?, ?, ?, 1)
+    `).run(req.channelId, targetUserId, req.userId, reason || 'Заблокирован владельцем канала');
+  }
+
+  res.json({ success: true });
+});
+
+// POST /api/channels/:id/subscribers/:userId/unban — owner-only remove channel ban
+router.post('/:id/subscribers/:userId/unban', auth, requireChannelOwner, (req, res) => {
+  const targetUserId = parseInt(req.params.userId);
+  if (!targetUserId) return res.status(400).json({ error: 'Некорректный userId' });
+
+  const activeBan = db.prepare('SELECT id FROM channel_bans WHERE channel_id = ? AND user_id = ? AND active = 1').get(req.channelId, targetUserId);
+  if (!activeBan) return res.status(404).json({ error: 'Активный бан не найден' });
+
+  db.prepare('UPDATE channel_bans SET active = 0, unbanned_at = CURRENT_TIMESTAMP WHERE id = ?').run(activeBan.id);
   res.json({ success: true });
 });
 
