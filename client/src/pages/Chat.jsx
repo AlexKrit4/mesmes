@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, getSocket } from '../socket.js';
 import SimpleVoiceRecorder from '../components/SimpleVoiceRecorder.jsx';
+import CircleVideoMessage from '../components/CircleVideoMessage.jsx';
 
 const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
 function Linkify({ children }) {
@@ -21,6 +22,7 @@ const VIDEO_EXT_RE = /\.(mp4|webm|mov|avi|mkv|3gp)$/i;
 const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a)$/i;
 const IMAGE_EXT_RE = /\.(jpg|jpeg|png|gif|webp)$/i;
 const VOICE_HINT_RE = /(voice[_-]?\d*|audio[_-]?\d*|record|opus)/i;
+const CIRCLE_VIDEO_HINT_RE = /(video[_-]?circle|ch_video_circle|circle[_-]?video|videonote|video_note|round)/i;
 
 function getFileType(fileObj) {
   return String((typeof fileObj === 'object' && fileObj?.type) ? fileObj.type : '').toLowerCase();
@@ -58,6 +60,12 @@ function isVideo(fileObj) {
   if (!url) return false;
 
   return VIDEO_EXT_RE.test(url) && !isLikelyVoiceWebm(fileObj);
+}
+function isCircleVideo(fileObj) {
+  if (!fileObj || !isVideo(fileObj)) return false;
+  const url = getFileUrl(fileObj);
+  const name = getFileName(fileObj);
+  return CIRCLE_VIDEO_HINT_RE.test(url) || CIRCLE_VIDEO_HINT_RE.test(name);
 }
 
 function isAudio(fileObj) {
@@ -1066,6 +1074,9 @@ export default function Chat() {
                   if (isAudio(fileObj)) {
                     return <VoiceMessagePlayer key={i} src={fileObj.url} />;
                   } else if (isVideo(fileObj)) {
+                                        if (isCircleVideo(fileObj)) {
+                                          return <CircleVideoMessage key={i} src={fileObj.url} onLoadedMetadata={scrollToBottomInstant} />;
+                                        }
                     return <video key={i} src={fileObj.url} className="msg-video" controls playsInline onClick={e => e.stopPropagation()} onLoadedMetadata={scrollToBottomInstant} style={{maxWidth: '100%', borderRadius: '8px'}} />;
                   } else if (isImage(fileObj)) {
                     return <img key={i} src={fileObj.url} onLoad={scrollToBottomInstant} className="msg-image" alt="" onClick={(e) => {
