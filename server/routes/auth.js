@@ -592,6 +592,15 @@ router.post('/reset-password/:token', async (req, res) => {
 // POST /api/auth/google — handle Google OAuth token
 router.post('/google', async (req, res) => {
   try {
+    // Ensure google_id column exists
+    try {
+      db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT DEFAULT NULL UNIQUE`);
+    } catch (e) {
+      if (!e.message?.includes('duplicate column') && !e.message?.includes('already exists')) {
+        console.warn('[google auth] google_id migration skipped:', e.message?.slice(0, 100));
+      }
+    }
+
     const { token: idToken } = req.body;
     if (!idToken) {
       return res.status(400).json({ error: 'Google token обязателен' });
