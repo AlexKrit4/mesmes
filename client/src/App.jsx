@@ -4,6 +4,7 @@ import Register from './pages/Register.jsx';
 import Home from './pages/Home.jsx';
 import Chat from './pages/Chat.jsx';
 import ChannelPage from './pages/ChannelPage.jsx';
+import ChannelPostComments from './pages/ChannelPostComments.jsx';
 import JoinChannel from './pages/JoinChannel.jsx';
 import Settings from './pages/Settings.jsx';
 import AdminPanel from './pages/AdminPanel.jsx';
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
         <Route path="/chat/:friendId" element={<PrivateRoute><Chat /></PrivateRoute>} />
         <Route path="/channel/:id" element={<PrivateRoute><ChannelPage /></PrivateRoute>} />
+        <Route path="/channel/:id/post/:postId" element={<PrivateRoute><ChannelPostComments /></PrivateRoute>} />
         <Route path="/join/:code" element={<PrivateRoute><JoinChannel /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute><AdminPanel /></PrivateRoute>} />

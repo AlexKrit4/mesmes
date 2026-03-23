@@ -88,6 +88,8 @@ export default function Home() {
   const me = JSON.parse(localStorage.getItem('me') || '{}');
   const fileInputRef = useRef(null);
   const layoutRef = useRef(null);
+  const channelsRef = useRef([]);
+  const baseTitleRef = useRef(typeof document !== 'undefined' ? document.title : 'МесМес');
 
   const [tab, setTab] = useState('chats');
   const [friends, setFriends] = useState([]);
@@ -115,6 +117,28 @@ export default function Home() {
 
   // Avatar crop modal
   const [avatarCropFile, setAvatarCropFile] = useState(null);
+
+  const playIncomingSound = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.2);
+      osc.onended = () => ctx.close().catch(() => {});
+    } catch {
+      // ignore audio errors
+    }
+  }, []);
 
   // Handle mobile viewport resize (keyboard etc.)
   useEffect(() => {
@@ -167,6 +191,21 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    channelsRef.current = channels;
+  }, [channels]);
+
+  const totalChatUnread = friends.reduce((sum, f) => sum + Number(f.unread_count || 0), 0);
+  const totalChannelUnread = channels.reduce((sum, ch) => sum + Number(ch.unread_count || 0), 0);
+
+  useEffect(() => {
+    const hasUnread = (totalChatUnread + totalChannelUnread) > 0;
+    document.title = hasUnread ? 'Новое сообщение!' : baseTitleRef.current;
+    return () => {
+      document.title = baseTitleRef.current;
+    };
+  }, [totalChatUnread, totalChannelUnread]);
+
+  useEffect(() => {
     fetchFriends();
     fetchRequests();
     fetchChannels();
@@ -207,7 +246,10 @@ export default function Home() {
     });
 
     // Real-time: new message — re-fetch to update unread counts
-    socket.on('new_message', () => {
+    socket.on('new_message', (message) => {
+      if (message?.receiver_id === me.id && message?.sender_id !== me.id) {
+        playIncomingSound();
+      }
       fetchFriends();
     });
 
@@ -222,7 +264,13 @@ export default function Home() {
     });
 
     // Real-time: new channel message — re-fetch channels for ordering
-    socket.on('channel_message', () => {
+    socket.on('channel_message', (message) => {
+      if (message?.sender_id !== me.id) {
+        const currentChannel = channelsRef.current.find((ch) => ch.id === message?.channel_id);
+        if (!currentChannel || currentChannel.notifications_enabled !== 0) {
+          playIncomingSound();
+        }
+      }
       fetchChannels();
     });
 
@@ -243,7 +291,7 @@ export default function Home() {
       socket.off('channel_message');
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [fetchFriends, fetchRequests, fetchChannels]);
+  }, [fetchFriends, fetchRequests, fetchChannels, me.id, playIncomingSound]);
 
   // Search users by public_id
   useEffect(() => {
@@ -463,6 +511,9 @@ export default function Home() {
         <button className={`tab ${tab === 'chats' ? 'active' : ''}`} onClick={() => setTab('chats')}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           Чаты
+          {totalChatUnread > 0 && (
+            <span className="tab-unread-badge">{totalChatUnread > 99 ? '99+' : totalChatUnread}</span>
+          )}
         </button>
         <button className={`tab ${tab === 'channels' ? 'active' : ''}`} onClick={() => setTab('channels')}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -550,7 +601,11 @@ export default function Home() {
                       }
                     </div>
                   </div>
-                  <svg className="friend-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  {ch.unread_count > 0 ? (
+                    <span className="unread-badge">{ch.unread_count > 99 ? '99+' : ch.unread_count}</span>
+                  ) : (
+                    <svg className="friend-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  )}
                 </div>
               ))
             )}

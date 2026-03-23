@@ -401,3 +401,24 @@ try {
     )
   `);
 } catch (e) {}
+
+// Migration: channel member read/notification preferences
+try { db.exec(`ALTER TABLE channel_members ADD COLUMN last_read_at DATETIME DEFAULT NULL`); } catch (e) {}
+try { db.exec(`ALTER TABLE channel_members ADD COLUMN notifications_enabled INTEGER DEFAULT 1`); } catch (e) {}
+
+// Migration: comments for channel posts
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channel_post_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id INTEGER NOT NULL,
+      message_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+      FOREIGN KEY (message_id) REFERENCES channel_messages(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+} catch (e) {}

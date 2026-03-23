@@ -153,6 +153,7 @@ export default function ChannelPage() {
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [fileUploading, setFileUploading] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -192,6 +193,14 @@ export default function ChannelPage() {
   const isOwner = channel?.owner_id === me.id;
   const isMember = channel?.is_member;
 
+  const markChannelRead = useCallback(async () => {
+    try {
+      await api.post(`/channels/${channelId}/read`);
+    } catch {
+      // ignore read-mark errors
+    }
+  }, [channelId]);
+
   const scrollToBottomInstant = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'instant' });
   }, []);
@@ -228,14 +237,18 @@ export default function ChannelPage() {
           api.get(`/channels/${channelId}/messages`),
         ]);
         setChannel(chRes.data);
+        setNotificationsEnabled(chRes.data?.notifications_enabled !== 0);
         setMessages(msgsRes.data);
+        if (chRes.data?.is_member) {
+          markChannelRead();
+        }
       } catch (e) {
         console.error(e);
       } finally {
         setLoading(false);
       }
     })();
-  }, [channelId]);
+  }, [channelId, markChannelRead]);
 
   const hasInitiallyScrolled = useRef(false);
   const anchorScrollRef = useRef(false); // true while we must keep bottom pinned
@@ -288,6 +301,7 @@ export default function ChannelPage() {
           if (prev.find((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
         });
+        markChannelRead();
       }
     };
 
@@ -309,7 +323,19 @@ export default function ChannelPage() {
       socket.off('channel_message_edited', onChannelMsgEdited);
       socket.off('channel_message_deleted', onChannelMsgDeleted);
     };
-  }, [channelId]);
+  }, [channelId, markChannelRead]);
+
+  const toggleChannelNotifications = async () => {
+    const next = !notificationsEnabled;
+    try {
+      const { data } = await api.patch(`/channels/${channelId}/notification`, { enabled: next });
+      const isEnabled = data?.notifications_enabled !== 0;
+      setNotificationsEnabled(isEnabled);
+      setChannel((prev) => prev ? { ...prev, notifications_enabled: isEnabled ? 1 : 0 } : prev);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Не удалось обновить уведомления');
+    }
+  };
 
   // Close reaction picker on outside click
   useEffect(() => {
@@ -833,6 +859,14 @@ export default function ChannelPage() {
                 </div>
               )}
               {msg.content && <div className="message-text"><Linkify>{msg.content}</Linkify></div>}
+              <div className="channel-post-actions">
+                <button
+                  className="channel-comment-btn"
+                  onClick={() => navigate(`/channel/${channelId}/post/${msg.id}`)}
+                >
+                  Комментарии
+                </button>
+              </div>
               {/* Reactions display */}
               {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                 <div className="reactions-row">
@@ -1088,6 +1122,20 @@ export default function ChannelPage() {
                 </button>
               </div>
             </div>
+
+            {isMember && (
+              <div className="settings-section" style={{ marginTop: 14 }}>
+                <div className="settings-toggle-row" onClick={toggleChannelNotifications} style={{ cursor: 'pointer' }}>
+                  <div>
+                    <div className="settings-toggle-label">Уведомления канала</div>
+                    <div className="settings-toggle-hint">Включайте или отключайте уведомления для этого канала</div>
+                  </div>
+                  <div className={`settings-toggle ${notificationsEnabled ? 'on' : ''}`}>
+                    <div className="settings-toggle-knob" />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

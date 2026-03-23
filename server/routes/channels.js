@@ -94,6 +94,15 @@ router.post('/:id/avatar', auth, (req, res) => {
 router.get('/my', auth, (req, res) => {
   const channels = db.prepare(`
     SELECT c.id, c.name, c.description, c.avatar, c.owner_id, c.invite_code, c.created_at,
+      cm.notifications_enabled,
+      cm.last_read_at,
+      (
+        SELECT COUNT(*)
+        FROM channel_messages cmu
+        WHERE cmu.channel_id = c.id
+          AND cmu.sender_id != ?
+          AND (cm.last_read_at IS NULL OR cmu.created_at > cm.last_read_at)
+      ) as unread_count,
       lm.content as last_message,
       lm.file_url as last_message_file,
       lm.created_at as last_message_at
@@ -106,7 +115,7 @@ router.get('/my', auth, (req, res) => {
     )
     WHERE cm.user_id = ?
     ORDER BY COALESCE(lm.created_at, c.created_at) DESC
-  `).all(req.userId);
+  `).all(req.userId, req.userId);
 
   channels.forEach((channel) => {
     channel.last_message = decryptMessageContent(channel.last_message);
@@ -121,9 +130,40 @@ router.get('/:id', auth, (req, res) => {
   if (!ch) return res.status(404).json({ error: 'Канал не найден' });
 
   const memberCount = db.prepare('SELECT COUNT(*) as cnt FROM channel_members WHERE channel_id = ?').get(ch.id).cnt;
-  const isMember = !!db.prepare('SELECT id FROM channel_members WHERE channel_id = ? AND user_id = ?').get(ch.id, req.userId);
+  const memberRow = db.prepare('SELECT id, notifications_enabled FROM channel_members WHERE channel_id = ? AND user_id = ?').get(ch.id, req.userId);
+  const isMember = !!memberRow;
 
-  res.json({ ...ch, member_count: memberCount, is_member: isMember });
+  res.json({ ...ch, member_count: memberCount, is_member: isMember, notifications_enabled: memberRow?.notifications_enabled ?? 1 });
+});
+
+// POST /api/channels/:id/read — mark channel as read for current user
+router.post('/:id/read', auth, (req, res) => {
+  const chId = parseInt(req.params.id);
+  const member = db.prepare('SELECT id FROM channel_members WHERE channel_id = ? AND user_id = ?').get(chId, req.userId);
+  if (!member) return res.status(403).json({ error: 'Вы не участник канала' });
+
+  const now = new Date().toISOString();
+  db.prepare('UPDATE channel_members SET last_read_at = ? WHERE channel_id = ? AND user_id = ?').run(now, chId, req.userId);
+  res.json({ success: true, read_at: now });
+});
+
+// GET /api/channels/:id/notification — get notification setting for current user
+router.get('/:id/notification', auth, (req, res) => {
+  const chId = parseInt(req.params.id);
+  const member = db.prepare('SELECT notifications_enabled FROM channel_members WHERE channel_id = ? AND user_id = ?').get(chId, req.userId);
+  if (!member) return res.status(403).json({ error: 'Вы не участник канала' });
+  res.json({ notifications_enabled: member.notifications_enabled ? 1 : 0 });
+});
+
+// PATCH /api/channels/:id/notification — set notification setting for current user
+router.patch('/:id/notification', auth, (req, res) => {
+  const chId = parseInt(req.params.id);
+  const member = db.prepare('SELECT id FROM channel_members WHERE channel_id = ? AND user_id = ?').get(chId, req.userId);
+  if (!member) return res.status(403).json({ error: 'Вы не участник канала' });
+
+  const enabled = req.body?.enabled ? 1 : 0;
+  db.prepare('UPDATE channel_members SET notifications_enabled = ? WHERE channel_id = ? AND user_id = ?').run(enabled, chId, req.userId);
+  res.json({ success: true, notifications_enabled: enabled });
 });
 
 // GET /api/channels/invite/:code — get channel by invite code
@@ -438,6 +478,86 @@ router.post('/:id/messages/:msgId/react', auth, (req, res) => {
   });
 
   res.json({ reactions: result });
+});
+
+// GET /api/channels/:id/messages/:msgId/comments — post + comments
+router.get('/:id/messages/:msgId/comments', auth, (req, res) => {
+  const chId = parseInt(req.params.id);
+  const msgId = parseInt(req.params.msgId);
+
+  const member = db.prepare('SELECT id FROM channel_members WHERE channel_id = ? AND user_id = ?').get(chId, req.userId);
+  if (!member) return res.status(403).json({ error: 'Вы не участник канала' });
+
+  const post = db.prepare(`
+    SELECT cm.id, cm.channel_id, cm.sender_id, cm.content, cm.file_url, cm.created_at, cm.edited, cm.is_pinned,
+           u.username as sender_username
+    FROM channel_messages cm
+    JOIN users u ON u.id = cm.sender_id
+    WHERE cm.id = ? AND cm.channel_id = ?
+  `).get(msgId, chId);
+
+  if (!post) return res.status(404).json({ error: 'Пост не найден' });
+  post.content = decryptMessageContent(post.content);
+
+  const comments = db.prepare(`
+    SELECT c.id, c.channel_id, c.message_id, c.user_id, c.content, c.created_at,
+           u.username, u.public_id, u.avatar
+    FROM channel_post_comments c
+    JOIN users u ON u.id = c.user_id
+    WHERE c.channel_id = ? AND c.message_id = ?
+    ORDER BY c.created_at ASC
+  `).all(chId, msgId);
+
+  comments.forEach((comment) => {
+    comment.content = decryptMessageContent(comment.content);
+  });
+
+  res.json({ post, comments });
+});
+
+// POST /api/channels/:id/messages/:msgId/comments — create comment
+router.post('/:id/messages/:msgId/comments', auth, (req, res) => {
+  const chId = parseInt(req.params.id);
+  const msgId = parseInt(req.params.msgId);
+  const content = String(req.body?.content || '').trim();
+
+  if (!content) return res.status(400).json({ error: 'Комментарий пустой' });
+
+  const member = db.prepare('SELECT id FROM channel_members WHERE channel_id = ? AND user_id = ?').get(chId, req.userId);
+  if (!member) return res.status(403).json({ error: 'Вы не участник канала' });
+
+  const post = db.prepare('SELECT id FROM channel_messages WHERE id = ? AND channel_id = ?').get(msgId, chId);
+  if (!post) return res.status(404).json({ error: 'Пост не найден' });
+
+  const now = new Date().toISOString();
+  const result = db.prepare(
+    'INSERT INTO channel_post_comments (channel_id, message_id, user_id, content, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).run(chId, msgId, req.userId, encryptMessageContent(content), now);
+
+  const user = db.prepare('SELECT username, public_id, avatar FROM users WHERE id = ?').get(req.userId);
+  const comment = {
+    id: result.lastInsertRowid,
+    channel_id: chId,
+    message_id: msgId,
+    user_id: req.userId,
+    content,
+    created_at: now,
+    username: user?.username,
+    public_id: user?.public_id,
+    avatar: user?.avatar,
+  };
+
+  if (req.io && req.onlineUsers) {
+    const members = db.prepare('SELECT user_id FROM channel_members WHERE channel_id = ?').all(chId);
+    members.forEach(({ user_id }) => {
+      if (!req.onlineUsers.has(user_id)) return;
+      req.onlineUsers.get(user_id).forEach((sid) => {
+        req.io.to(sid).emit('channel_post_comment', comment);
+      });
+    });
+  }
+
+  res.json(comment);
 });
 
 module.exports = router;
