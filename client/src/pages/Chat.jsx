@@ -5,9 +5,33 @@ import { connectSocket, getSocket } from '../socket.js';
 import SimpleVoiceRecorder from '../components/SimpleVoiceRecorder.jsx';
 import CircleVideoMessage from '../components/CircleVideoMessage.jsx';
 
-const RTC_CONFIG = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-};
+function buildRtcConfig() {
+  const defaultStun = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ];
+
+  const turnUrls = String(import.meta.env.VITE_TURN_URLS || '').split(',').map((v) => v.trim()).filter(Boolean);
+  const turnUsername = String(import.meta.env.VITE_TURN_USERNAME || '').trim();
+  const turnCredential = String(import.meta.env.VITE_TURN_CREDENTIAL || '').trim();
+  const forceRelay = String(import.meta.env.VITE_FORCE_TURN || '0') === '1';
+
+  const iceServers = [...defaultStun];
+  if (turnUrls.length > 0 && turnUsername && turnCredential) {
+    iceServers.push({
+      urls: turnUrls,
+      username: turnUsername,
+      credential: turnCredential,
+    });
+  }
+
+  return {
+    iceServers,
+    iceTransportPolicy: forceRelay ? 'relay' : 'all',
+  };
+}
+
+const RTC_CONFIG = buildRtcConfig();
 const PENDING_INCOMING_CALL_KEY = 'pending_incoming_call';
 
 const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
@@ -356,6 +380,7 @@ export default function Chat() {
   const activeCallPeerRef = useRef(null);
   const pendingRemoteCandidatesRef = useRef([]);
   const earlyIceCandidatesRef = useRef([]);
+  const connectTimeoutRef = useRef(null);
 
   const stopLocalStream = useCallback(() => {
     if (localStreamRef.current) {
@@ -365,6 +390,10 @@ export default function Chat() {
   }, []);
 
   const closePeerConnection = useCallback(() => {
+    if (connectTimeoutRef.current) {
+      clearTimeout(connectTimeoutRef.current);
+      connectTimeoutRef.current = null;
+    }
     if (peerConnectionRef.current) {
       peerConnectionRef.current.onicecandidate = null;
       peerConnectionRef.current.ontrack = null;
@@ -877,6 +906,28 @@ export default function Chat() {
   useEffect(() => {
     activeCallPeerRef.current = activeCallPeer;
   }, [activeCallPeer]);
+
+  useEffect(() => {
+    if (callState !== 'connecting') {
+      if (connectTimeoutRef.current) {
+        clearTimeout(connectTimeoutRef.current);
+        connectTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    connectTimeoutRef.current = setTimeout(() => {
+      showCallError('Соединение не установлено. Нужен TURN-сервер для вашей сети');
+      resetCallState();
+    }, 15000);
+
+    return () => {
+      if (connectTimeoutRef.current) {
+        clearTimeout(connectTimeoutRef.current);
+        connectTimeoutRef.current = null;
+      }
+    };
+  }, [callState, resetCallState, showCallError]);
 
   useEffect(() => {
     return () => {

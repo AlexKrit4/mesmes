@@ -75,6 +75,14 @@ YOOMONEY_RECEIVER=41001XXXXXXXXXXX
 YOOMONEY_TOKEN=your_yoomoney_oauth_token
 YOOMONEY_NOTIFICATION_SECRET=your_notification_secret
 PREMIUM_PRICE_RUB=50
+
+# WebRTC звонки (ОБЯЗАТЕЛЬНО для стабильной связи)
+# укажите TURN, иначе в части сетей звонки зависают на «Соединяем звонок…»
+VITE_TURN_URLS=turn:ваш-домен.ru:3478?transport=udp,turn:ваш-домен.ru:3478?transport=tcp
+VITE_TURN_USERNAME=turnuser
+VITE_TURN_CREDENTIAL=turnpassword
+# принудительно гонять медиа через TURN (рекомендуется в проде)
+VITE_FORCE_TURN=1
 ```
 
 ### 4.1 Настройка оплаты mes-premium через ЮMoney (50 ₽/месяц)
@@ -101,6 +109,41 @@ NODE_ENV=production pm2 start index.js --name "mes-server" --node-args="--no-war
 pm2 save
 pm2 startup
 ```
+
+### 5.1 TURN (coturn) для звонков
+
+Без TURN WebRTC часто не проходит через мобильные/NAT-сети — звонок остаётся в состоянии «Соединяем звонок…».
+
+```bash
+sudo apt update
+sudo apt install -y coturn
+sudo nano /etc/turnserver.conf
+```
+
+Минимальная конфигурация:
+
+```
+listening-port=3478
+fingerprint
+use-auth-secret
+static-auth-secret=CHANGE_ME_LONG_RANDOM_SECRET
+realm=ваш-домен.ru
+total-quota=100
+bps-capacity=0
+no-multicast-peers
+no-tlsv1
+no-tlsv1_1
+```
+
+Запуск:
+
+```bash
+sudo systemctl enable coturn
+sudo systemctl restart coturn
+sudo systemctl status coturn
+```
+
+Откройте порт `3478` в firewall/security-group.
 
 ### 6. Nginx конфиг
 
