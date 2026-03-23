@@ -425,7 +425,7 @@ try {
 
 // Migration: add google_id for Google OAuth support
 try {
-  db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT DEFAULT NULL UNIQUE`);
+  db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT DEFAULT NULL`);
 } catch (e) {
   // Column might already exist or other constraint issue - log for debugging
   if (!e.message?.includes('duplicate column')) {

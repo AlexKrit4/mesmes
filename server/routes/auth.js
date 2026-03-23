@@ -594,7 +594,7 @@ router.post('/google', async (req, res) => {
   try {
     // Ensure google_id column exists
     try {
-      db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT DEFAULT NULL UNIQUE`);
+      db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT DEFAULT NULL`);
     } catch (e) {
       if (!e.message?.includes('duplicate column') && !e.message?.includes('already exists')) {
         console.warn('[google auth] google_id migration skipped:', e.message?.slice(0, 100));
@@ -638,7 +638,7 @@ router.post('/google', async (req, res) => {
       if (e.message && e.message.includes('no such column')) {
         console.warn('[google auth] google_id column missing, attempting migration...');
         try {
-          db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT DEFAULT NULL UNIQUE`);
+          db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT DEFAULT NULL`);
           console.log('[google auth] migration successful');
           user = null; // Column just created, no user yet
         } catch (migrateErr) {
@@ -731,9 +731,15 @@ router.post('/google/complete', async (req, res) => {
     }
 
     // Check if google_id is already used (shouldn't happen, but just in case)
-    const googleUser = db.prepare('SELECT id FROM users WHERE google_id = ?').get(googleId);
-    if (googleUser) {
-      return res.status(400).json({ error: 'Этот Google аккаунт уже привязан' });
+    // Check if this google_id is already used
+    let googleUser;
+    try {
+      googleUser = db.prepare('SELECT id FROM users WHERE google_id = ? AND google_id IS NOT NULL').get(googleId);
+      if (googleUser) {
+        return res.status(400).json({ error: 'Этот Google аккаунт уже привязан' });
+      }
+    } catch (e) {
+      // Column doesn't exist yet, that's fine
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
