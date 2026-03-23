@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, getSocket } from '../socket.js';
-import TelegramVoiceRecorder from '../components/TelegramVoiceRecorder.jsx';
+import SimpleVoiceRecorder from '../components/SimpleVoiceRecorder.jsx';
 
 const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
 function Linkify({ children }) {
@@ -590,6 +590,25 @@ export default function Chat() {
       socket.off('chat_block_status_changed', onBlockStatusChanged);
     };
   }, [friendIdNum, loadBlockState, me.id]);
+
+  const onSendVoice = async (blob, mode, duration) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', blob);
+      formData.append('duration', duration);
+      const res = await api.post('/users/voice-circles/file', formData);
+      const { file_url } = res.data;
+      
+      const socket = getSocket();
+      if (socket) {
+        socket.emit('send_message', { to: friendIdNum, content: '', file_url, reply_to_id: null });
+        scrollToBottomInstant();
+      }
+    } catch (err) {
+      console.error('Voice upload error:', err);
+      alert('Ошибка отправки голосового сообщения');
+    }
+  };
 
   const sendMessage = () => {
     if (hasBlock) return;
@@ -1400,9 +1419,10 @@ export default function Chat() {
                 }
               </button>
               {isPremium && (
-                <TelegramVoiceRecorder
-                  recipientId={friendIdNum}
-                  onSent={() => scrollToBottomInstant()}
+                <SimpleVoiceRecorder
+                  mode="voice"
+                  onSend={onSendVoice}
+                  onCancel={() => {}}
                 />
               )}
               <textarea

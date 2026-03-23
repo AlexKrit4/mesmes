@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, getSocket } from '../socket.js';
-import TelegramVoiceRecorder from '../components/TelegramVoiceRecorder.jsx';
+import SimpleVoiceRecorder from '../components/SimpleVoiceRecorder.jsx';
 
 const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
 function Linkify({ children }) {
@@ -379,6 +379,20 @@ export default function ChannelPage() {
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
   }, [reactionPickerMsgId]);
+
+  const onSendVoiceCircle = async (blob, mode, duration) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', blob);
+      formData.append('duration', duration);
+      await api.post(`/channels/${channelId}/voice-circles/file`, formData);
+      scrollToBottomInstant();
+      // Optionally refresh voice circles list or reload channel messages
+    } catch (err) {
+      console.error('Voice circle upload error:', err);
+      alert('Ошибка отправки голосового сообщения');
+    }
+  };
 
   const sendMessage = async () => {
     if (isRecording || isPreparingRecording) return;
@@ -1072,9 +1086,10 @@ export default function ChannelPage() {
                   </button>
                 )}
                 {!editingMsgId && isPremium && (
-                  <TelegramVoiceRecorder
-                    channelId={channelId}
-                    onSent={() => scrollToBottomInstant()}
+                  <SimpleVoiceRecorder
+                    mode="voice"
+                    onSend={onSendVoiceCircle}
+                    onCancel={() => {}}
                   />
                 )}
                 <textarea
