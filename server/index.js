@@ -101,6 +101,16 @@ function areUsersBlocked(userA, userB) {
   return !!row;
 }
 
+function areUsersFriends(userA, userB) {
+  const row = db.prepare(`
+    SELECT id FROM friends
+    WHERE ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))
+      AND status = 'accepted'
+    LIMIT 1
+  `).get(userA, userB, userB, userA);
+  return !!row;
+}
+
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
   if (!token) return next(new Error('Нет токена'));
@@ -226,6 +236,67 @@ io.on('connection', (socket) => {
 
     socket.emit('message_sent', message);
   });
+
+  // ── Голосовые звонки (WebRTC signaling) ─────────────────────────────────
+  socket.on('call_offer', ({ to, offer }) => {
+    if (!to || !offer || to === uid) return;
+    if (!areUsersFriends(uid, to)) {
+      socket.emit('chat_error', { msg: 'Позвонить можно только друзьям' });
+      return;
+    }
+    if (areUsersBlocked(uid, to)) {
+      socket.emit('chat_error', { msg: 'Звонок недоступен из-за блокировки' });
+      return;
+    }
+    if (!onlineUsers.has(to)) {
+      socket.emit('call_unavailable', { to });
+      return;
+    }
+
+    const caller = db.prepare('SELECT id, username FROM users WHERE id = ?').get(uid);
+    onlineUsers.get(to).forEach((sid) => {
+      io.to(sid).emit('call_offer', {
+        from: uid,
+        from_username: caller?.username || 'Пользователь',
+        offer,
+      });
+    });
+  });
+
+  socket.on('call_answer', ({ to, answer }) => {
+    if (!to || !answer || to === uid) return;
+    if (!areUsersFriends(uid, to) || areUsersBlocked(uid, to)) return;
+    if (!onlineUsers.has(to)) return;
+    onlineUsers.get(to).forEach((sid) => {
+      io.to(sid).emit('call_answer', { from: uid, answer });
+    });
+  });
+
+  socket.on('call_ice_candidate', ({ to, candidate }) => {
+    if (!to || !candidate || to === uid) return;
+    if (!areUsersFriends(uid, to) || areUsersBlocked(uid, to)) return;
+    if (!onlineUsers.has(to)) return;
+    onlineUsers.get(to).forEach((sid) => {
+      io.to(sid).emit('call_ice_candidate', { from: uid, candidate });
+    });
+  });
+
+  socket.on('call_reject', ({ to, reason }) => {
+    if (!to || to === uid) return;
+    if (!onlineUsers.has(to)) return;
+    onlineUsers.get(to).forEach((sid) => {
+      io.to(sid).emit('call_reject', { from: uid, reason: reason || 'rejected' });
+    });
+  });
+
+  socket.on('call_end', ({ to }) => {
+    if (!to || to === uid) return;
+    if (!onlineUsers.has(to)) return;
+    onlineUsers.get(to).forEach((sid) => {
+      io.to(sid).emit('call_end', { from: uid });
+    });
+  });
+
   // ── Удаление сообщения ──────────────────────────────────────────────────────────
   // DB deletion is handled by REST API; socket just propagates the event
   socket.on('delete_message', ({ messageId, friendId, deleteForBoth }) => {

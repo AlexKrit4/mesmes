@@ -1957,6 +1957,100 @@ img.avatar {
 .chat-dropdown-item.danger { color: var(--red); }
 .chat-dropdown-item.danger:hover { background: rgba(255, 107, 107, 0.1); }
 
+/* ─── Voice call panel ─── */
+.call-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+
+.call-panel-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.call-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.call-btn-accept,
+.call-btn-decline {
+  border: none;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.call-btn-accept {
+  background: var(--green);
+  color: #111;
+}
+
+.call-btn-accept:hover {
+  filter: brightness(1.05);
+}
+
+.call-btn-decline {
+  background: rgba(255, 107, 107, 0.18);
+  color: var(--red);
+}
+
+.call-btn-decline:hover {
+  background: rgba(255, 107, 107, 0.25);
+}
+
+.call-panel-error {
+  color: var(--text2);
+  font-size: 12px;
+}
+
+/* ─── Global incoming call overlay ─── */
+.global-call-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.global-call-card {
+  width: min(360px, 100%);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.global-call-title {
+  font-size: 14px;
+  color: var(--text2);
+  margin-bottom: 4px;
+}
+
+.global-call-subtitle {
+  font-size: 18px;
+  color: var(--text);
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.global-call-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* ─── Edit mode bar ─── */
 .edit-bar {
   display: flex;

@@ -5,6 +5,11 @@ import { connectSocket, getSocket } from '../socket.js';
 import SimpleVoiceRecorder from '../components/SimpleVoiceRecorder.jsx';
 import CircleVideoMessage from '../components/CircleVideoMessage.jsx';
 
+const RTC_CONFIG = {
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+};
+const PENDING_INCOMING_CALL_KEY = 'pending_incoming_call';
+
 const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
 function Linkify({ children }) {
   if (!children || typeof children !== 'string') return children;
@@ -312,6 +317,10 @@ export default function Chat() {
   const [isPremium, setIsPremium] = useState(hasActivePremium(me?.premium_until));
   const [recordingMode, setRecordingMode] = useState('voice');
   const [showRecorderPanel, setShowRecorderPanel] = useState(true);
+  const [callState, setCallState] = useState('idle'); // idle | calling | incoming | connecting | in-call
+  const [incomingCall, setIncomingCall] = useState(null); // { from, username, offer }
+  const [activeCallPeer, setActiveCallPeer] = useState(null);
+  const [callError, setCallError] = useState('');
 
 
 
@@ -335,6 +344,167 @@ export default function Chat() {
   const hasInitiallyScrolled = useRef(false);
   const anchorScrollRef = useRef(false);
   const lastTapRef = useRef({ time: 0, msgId: null });
+  const localStreamRef = useRef(null);
+  const peerConnectionRef = useRef(null);
+  const remoteStreamRef = useRef(null);
+  const remoteAudioRef = useRef(null);
+  const activeCallPeerRef = useRef(null);
+  const pendingRemoteCandidatesRef = useRef([]);
+
+  const stopLocalStream = useCallback(() => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+  }, []);
+
+  const closePeerConnection = useCallback(() => {
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.onicecandidate = null;
+      peerConnectionRef.current.ontrack = null;
+      peerConnectionRef.current.onconnectionstatechange = null;
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    pendingRemoteCandidatesRef.current = [];
+    remoteStreamRef.current = null;
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
+  }, []);
+
+  const resetCallState = useCallback((clearIncoming = true) => {
+    closePeerConnection();
+    stopLocalStream();
+    setActiveCallPeer(null);
+    activeCallPeerRef.current = null;
+    setCallState('idle');
+    if (clearIncoming) setIncomingCall(null);
+  }, [closePeerConnection, stopLocalStream]);
+
+  const showCallError = useCallback((msg) => {
+    setCallError(msg);
+    setTimeout(() => setCallError(''), 3000);
+  }, []);
+
+  const ensureLocalAudio = useCallback(async () => {
+    if (localStreamRef.current) return localStreamRef.current;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStreamRef.current = stream;
+    return stream;
+  }, []);
+
+  const createPeerConnection = useCallback((targetUserId, socket) => {
+    closePeerConnection();
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    peerConnectionRef.current = pc;
+
+    pc.onicecandidate = (event) => {
+      if (!event.candidate || !targetUserId) return;
+      socket.emit('call_ice_candidate', { to: targetUserId, candidate: event.candidate });
+    };
+
+    pc.ontrack = (event) => {
+      if (!remoteStreamRef.current) {
+        remoteStreamRef.current = new MediaStream();
+      }
+      const streamTracks = event.streams?.[0]?.getTracks?.() || [];
+      const track = streamTracks[0] || event.track || null;
+      if (track && !remoteStreamRef.current.getTracks().some((t) => t.id === track.id)) {
+        remoteStreamRef.current.addTrack(track);
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = remoteStreamRef.current;
+      }
+      setCallState('in-call');
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connecting') setCallState('connecting');
+      if (pc.connectionState === 'connected') setCallState('in-call');
+      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+        resetCallState();
+      }
+    };
+
+    return pc;
+  }, [closePeerConnection, resetCallState]);
+
+  const startVoiceCall = useCallback(async () => {
+    if (callState !== 'idle' || hasBlock || !friendIdNum) return;
+    const socket = getSocket();
+    if (!socket) return;
+
+    try {
+      setCallError('');
+      const stream = await ensureLocalAudio();
+      const pc = createPeerConnection(friendIdNum, socket);
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      activeCallPeerRef.current = friendIdNum;
+      setActiveCallPeer(friendIdNum);
+      setCallState('calling');
+      socket.emit('call_offer', { to: friendIdNum, offer });
+    } catch (err) {
+      console.error('Call start error:', err);
+      showCallError('Не удалось начать звонок');
+      resetCallState();
+    }
+  }, [callState, createPeerConnection, ensureLocalAudio, friendIdNum, hasBlock, resetCallState, showCallError]);
+
+  const rejectIncomingCall = useCallback(() => {
+    const socket = getSocket();
+    if (socket && incomingCall?.from) {
+      socket.emit('call_reject', { to: incomingCall.from, reason: 'rejected' });
+    }
+    setIncomingCall(null);
+    setCallState('idle');
+  }, [incomingCall]);
+
+  const acceptIncomingCall = useCallback(async () => {
+    if (!incomingCall?.from || !incomingCall?.offer) return;
+    const socket = getSocket();
+    if (!socket) return;
+
+    try {
+      setCallError('');
+      const stream = await ensureLocalAudio();
+      const peerId = incomingCall.from;
+      const pc = createPeerConnection(peerId, socket);
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+      await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+      for (const candidate of pendingRemoteCandidatesRef.current) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+      pendingRemoteCandidatesRef.current = [];
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      activeCallPeerRef.current = peerId;
+      setActiveCallPeer(peerId);
+      setIncomingCall(null);
+      setCallState('connecting');
+      socket.emit('call_answer', { to: peerId, answer });
+    } catch (err) {
+      console.error('Accept call error:', err);
+      showCallError('Не удалось принять звонок');
+      resetCallState();
+    }
+  }, [incomingCall, ensureLocalAudio, createPeerConnection, showCallError, resetCallState]);
+
+  const endCall = useCallback((notify = true) => {
+    const socket = getSocket();
+    const peerId = activeCallPeerRef.current || incomingCall?.from;
+    if (notify && socket && peerId) {
+      socket.emit('call_end', { to: peerId });
+    }
+    resetCallState();
+  }, [incomingCall, resetCallState]);
 
   const scrollToBottomInstant = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'instant' });
@@ -570,6 +740,55 @@ export default function Chat() {
       }
     };
 
+    const onCallAnswer = async ({ from, answer }) => {
+      if (!answer || from !== activeCallPeerRef.current || !peerConnectionRef.current) return;
+      try {
+        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+        for (const candidate of pendingRemoteCandidatesRef.current) {
+          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+        pendingRemoteCandidatesRef.current = [];
+        setCallState('connecting');
+      } catch (err) {
+        console.error('Call answer error:', err);
+        showCallError('Ошибка соединения');
+        resetCallState();
+      }
+    };
+
+    const onCallIceCandidate = async ({ from, candidate }) => {
+      const isCurrentPeer = from === activeCallPeerRef.current || from === incomingCall?.from;
+      if (!candidate || !isCurrentPeer || !peerConnectionRef.current) return;
+      try {
+        if (peerConnectionRef.current.remoteDescription?.type) {
+          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        } else {
+          pendingRemoteCandidatesRef.current.push(candidate);
+        }
+      } catch (err) {
+        console.error('ICE candidate error:', err);
+      }
+    };
+
+    const onCallReject = ({ from, reason }) => {
+      if (from !== activeCallPeerRef.current && from !== friendIdNum) return;
+      const text = reason === 'busy' ? 'Пользователь занят' : 'Звонок отклонён';
+      showCallError(text);
+      resetCallState();
+    };
+
+    const onCallEnd = ({ from }) => {
+      if (from !== activeCallPeerRef.current && from !== friendIdNum) return;
+      showCallError('Звонок завершён');
+      resetCallState();
+    };
+
+    const onCallUnavailable = ({ to }) => {
+      if (to !== friendIdNum) return;
+      showCallError('Пользователь не в сети');
+      resetCallState();
+    };
+
     socket.on('new_message', onNewMsg);
     socket.on('message_sent', onSent);
     socket.on('user_typing', onTyping);
@@ -582,6 +801,11 @@ export default function Chat() {
     socket.on('message_reaction', onMessageReaction);
     socket.on('chat_error', onChatError);
     socket.on('chat_block_status_changed', onBlockStatusChanged);
+    socket.on('call_answer', onCallAnswer);
+    socket.on('call_ice_candidate', onCallIceCandidate);
+    socket.on('call_reject', onCallReject);
+    socket.on('call_end', onCallEnd);
+    socket.on('call_unavailable', onCallUnavailable);
 
     return () => {
       socket.off('new_message', onNewMsg);
@@ -596,8 +820,52 @@ export default function Chat() {
       socket.off('message_reaction', onMessageReaction);
       socket.off('chat_error', onChatError);
       socket.off('chat_block_status_changed', onBlockStatusChanged);
+      socket.off('call_answer', onCallAnswer);
+      socket.off('call_ice_candidate', onCallIceCandidate);
+      socket.off('call_reject', onCallReject);
+      socket.off('call_end', onCallEnd);
+      socket.off('call_unavailable', onCallUnavailable);
     };
-  }, [friendIdNum, loadBlockState, me.id]);
+  }, [friendIdNum, incomingCall, loadBlockState, me.id, resetCallState, showCallError]);
+
+  useEffect(() => {
+    activeCallPeerRef.current = activeCallPeer;
+  }, [activeCallPeer]);
+
+  useEffect(() => {
+    return () => {
+      endCall(false);
+    };
+  }, [endCall]);
+
+  useEffect(() => {
+    let parsed = null;
+    try {
+      const raw = sessionStorage.getItem(PENDING_INCOMING_CALL_KEY);
+      if (!raw) return;
+      parsed = JSON.parse(raw);
+    } catch {
+      sessionStorage.removeItem(PENDING_INCOMING_CALL_KEY);
+      return;
+    }
+
+    if (!parsed?.from || !parsed?.offer || Number(parsed.from) !== friendIdNum) return;
+
+    sessionStorage.removeItem(PENDING_INCOMING_CALL_KEY);
+    setIncomingCall({
+      from: parsed.from,
+      username: parsed.username || friend?.username || 'Пользователь',
+      offer: parsed.offer,
+    });
+    setCallState('incoming');
+
+    if (parsed.autoAccept) {
+      setTimeout(() => {
+        connectSocket();
+        acceptIncomingCall();
+      }, 80);
+    }
+  }, [acceptIncomingCall, friend?.username, friendIdNum]);
 
   const onSendVoice = async (blob, mode, duration) => {
     try {
@@ -934,6 +1202,14 @@ export default function Chat() {
             </div>
           </div>
         </div>
+        <button
+          className="topbar-btn"
+          onClick={startVoiceCall}
+          disabled={hasBlock || !isOnline || ['calling', 'connecting', 'in-call'].includes(callState)}
+          title="Позвонить"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.466 15.466 0 006.59 6.59l2.2-2.2a1 1 0 011.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 011 1V20a1 1 0 01-1 1C10.85 21 3 13.15 3 4a1 1 0 011-1h3.5a1 1 0 011 1c0 1.25.2 2.46.57 3.58a1 1 0 01-.25 1.01l-2.2 2.2z"/></svg>
+        </button>
         {/* Three-dots menu */}
         <div className="chat-menu-wrap">
           <button className="topbar-btn" onClick={(e) => { e.stopPropagation(); setShowChatMenu((v) => !v); }}>
@@ -976,6 +1252,42 @@ export default function Chat() {
         </div>
         <input type="file" accept="image/jpeg,image/png,image/webp" ref={wallpaperInputRef} style={{ display: 'none' }} onChange={uploadWallpaper} />
       </div>
+
+      {(callState !== 'idle' || callError) && (
+        <div className="call-panel">
+          {callState === 'incoming' && incomingCall ? (
+            <>
+              <div className="call-panel-title">Входящий звонок от {incomingCall.username}</div>
+              <div className="call-panel-actions">
+                <button className="call-btn-accept" onClick={acceptIncomingCall}>Принять</button>
+                <button className="call-btn-decline" onClick={rejectIncomingCall}>Отклонить</button>
+              </div>
+            </>
+          ) : callState === 'calling' ? (
+            <>
+              <div className="call-panel-title">Звоним {friend?.username || 'пользователю'}…</div>
+              <div className="call-panel-actions">
+                <button className="call-btn-decline" onClick={() => endCall(true)}>Сбросить</button>
+              </div>
+            </>
+          ) : callState === 'connecting' ? (
+            <>
+              <div className="call-panel-title">Соединяем звонок…</div>
+              <div className="call-panel-actions">
+                <button className="call-btn-decline" onClick={() => endCall(true)}>Завершить</button>
+              </div>
+            </>
+          ) : callState === 'in-call' ? (
+            <>
+              <div className="call-panel-title">Идёт звонок с {friend?.username || 'пользователем'}</div>
+              <div className="call-panel-actions">
+                <button className="call-btn-decline" onClick={() => endCall(true)}>Завершить</button>
+              </div>
+            </>
+          ) : null}
+          {callError && <div className="call-panel-error">{callError}</div>}
+        </div>
+      )}
 
       {/* Pinned message bar */}
       {(() => {
@@ -1413,6 +1725,8 @@ export default function Chat() {
           />
         </div>
       )}
+
+      <audio ref={remoteAudioRef} autoPlay playsInline />
     </div>
   );
 }
