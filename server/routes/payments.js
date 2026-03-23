@@ -21,6 +21,12 @@ function generateLabel(userId) {
 function toNumberSafe(value) {
   if (value === null || value === undefined) return 0;
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'object') {
+    if ('amount' in value) return toNumberSafe(value.amount);
+    if ('value' in value) return toNumberSafe(value.value);
+    if ('sum' in value) return toNumberSafe(value.sum);
+    return 0;
+  }
 
   const normalized = String(value)
     .trim()
@@ -37,6 +43,27 @@ function isPaymentAmountEnough(rawPaidAmount, requiredAmount) {
   const required = toNumberSafe(requiredAmount);
   const epsilon = 0.01;
   return paid + epsilon >= required;
+}
+
+function getOperationAmount(operation) {
+  if (!operation || typeof operation !== 'object') return 0;
+
+  const candidates = [
+    operation.amount,
+    operation.amount_due,
+    operation.deposit,
+    operation.deposition,
+    operation.incoming,
+    operation.sum,
+    operation.value,
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = toNumberSafe(candidate);
+    if (parsed > 0) return parsed;
+  }
+
+  return 0;
 }
 
 function addMonthsIso(baseDate, months) {
@@ -197,7 +224,7 @@ router.post('/premium/confirm', auth, async (req, res) => {
       return res.status(202).json({ success: false, paid: false, message: 'Платёж ещё не подтверждён YooMoney' });
     }
 
-    const opAmount = toNumberSafe(check.operation.amount);
+    const opAmount = getOperationAmount(check.operation);
     if (!isPaymentAmountEnough(opAmount, MIN_ACCEPTABLE_PAYMENT_RUB)) {
       console.warn('[payments] operation amount too small', {
         label,
