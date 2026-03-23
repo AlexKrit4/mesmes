@@ -322,6 +322,11 @@ export default function Chat() {
   const [activeCallPeer, setActiveCallPeer] = useState(null);
   const [callError, setCallError] = useState('');
 
+  const hasBlock = blockState.blockedByMe || blockState.blockedMe;
+  const blockedBannerText = blockState.blockedByMe
+    ? 'Вы заблокировали пользователя'
+    : (blockState.blockedMe ? 'Вы были заблокированы для этого пользователя' : '');
+
 
 
 
@@ -535,11 +540,6 @@ export default function Chat() {
       setBlockState({ blockedByMe: false, blockedMe: false });
     }
   }, [friendIdNum]);
-
-  const hasBlock = blockState.blockedByMe || blockState.blockedMe;
-  const blockedBannerText = blockState.blockedByMe
-    ? 'Вы заблокировали пользователя'
-    : (blockState.blockedMe ? 'Вы были заблокированы для этого пользователя' : '');
 
   // Handle mobile keyboard: resize layout using visualViewport API
   useEffect(() => {
