@@ -656,4 +656,99 @@ router.post('/:id/messages/:msgId/comments', auth, (req, res) => {
   res.json(comment);
 });
 
+// Voice circle upload for channels (premium only)
+const voiceCircleStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.webm';
+    cb(null, `ch_voice_circle_${req.userId}_${Date.now()}${ext}`);
+  },
+});
+const voiceCircleUpload = multer({
+  storage: voiceCircleStorage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+  fileFilter: (req, file, cb) => {
+    const type = String(file.mimetype || '').toLowerCase();
+    if (type.startsWith('video/') || type.startsWith('audio/')) cb(null, true);
+    else cb(new Error('Только видео или аудио файлы'));
+  },
+});
+
+// POST /api/channels/:id/voice-circles/file — upload voice circle to channel
+router.post('/:id/voice-circles/file', auth, (req, res) => {
+  const chId = parseInt(req.params.id);
+  const ch = getChannelById(chId);
+  if (!ch) return res.status(404).json({ error: 'Канал не найден' });
+  
+  // Check if user is a member
+  const isMember = db.prepare('SELECT id FROM channel_members WHERE channel_id = ? AND user_id = ?')
+    .get(chId, req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Вы не являетесь членом этого канала' });
+  
+  // Check premium status
+  const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(req.userId);
+  const hasVoiceCircles = user && user.premium_until && new Date(user.premium_until) > new Date();
+  
+  if (!hasVoiceCircles) {
+    return res.status(403).json({ error: 'Голосовые кружки доступны только премиум пользователям' });
+  }
+  
+  voiceCircleUpload.single('voiceCircle')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'Видео слишком велико (макс. 50 МБ)' });
+      }
+      return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
+    }
+    
+    if (!req.file) return res.status(400).json({ error: 'Выберите видеофайл' });
+    
+    const duration = req.body.duration ? parseFloat(req.body.duration) : 0;
+    
+    try {
+      const result = db.prepare(`
+        INSERT INTO voice_circles (sender_id, channel_id, file_url, duration)
+        VALUES (?, ?, ?, ?)
+      `).run(req.userId, chId, `/uploads/${req.file.filename}`, duration);
+      
+      res.json({
+        id: result.lastInsertRowid,
+        file_url: `/uploads/${req.file.filename}`,
+        duration,
+        created_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      fs.unlink(req.file.path, () => {});
+      console.error('Voice circle insert error:', err);
+      res.status(500).json({ error: 'Ошибка сохранения' });
+    }
+  });
+});
+
+// GET /api/channels/:id/voice-circles — get voice circles in a channel
+router.get('/:id/voice-circles', auth, (req, res) => {
+  const chId = parseInt(req.params.id);
+  const ch = getChannelById(chId);
+  if (!ch) return res.status(404).json({ error: 'Канал не найден' });
+  
+  // Check if user is a member
+  const isMember = db.prepare('SELECT id FROM channel_members WHERE channel_id = ? AND user_id = ?')
+    .get(chId, req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Вы не являетесь членом этого канала' });
+  
+  try {
+    const circles = db.prepare(`
+      SELECT * FROM voice_circles
+      WHERE channel_id = ?
+      ORDER BY created_at DESC
+      LIMIT 100
+    `).all(chId);
+    
+    res.json(circles || []);
+  } catch (err) {
+    console.error('Get voice circles error:', err);
+    res.status(500).json({ error: 'Ошибка получения кружков' });
+  }
+});
+
 module.exports = router;

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, getSocket } from '../socket.js';
+import VoiceCircleRecorder from '../components/VoiceCircleRecorder.jsx';
 
 const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
 function Linkify({ children }) {
@@ -296,6 +297,8 @@ export default function Chat() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxScale, setLightboxScale] = useState(1);
   const [fileUploading, setFileUploading] = useState(false);
+    const [isPremium, setIsPremium] = useState(false);
+    const [showVoiceCircleRecorder, setShowVoiceCircleRecorder] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isPreparingRecording, setIsPreparingRecording] = useState(false);
@@ -1397,6 +1400,18 @@ export default function Chat() {
                   : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                 }
               </button>
+              {isPremium && (
+                <button
+                  className="attach-btn"
+                  onClick={() => setShowVoiceCircleRecorder(true)}
+                  disabled={fileUploading}
+                  title="Голосовой кружок"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><path d="M3.6 9.6A8 8 0 0 1 20.4 14.4"/>
+                  </svg>
+                </button>
+              )}
               <textarea
                 className="message-input"
                 placeholder={editingMsgId ? 'Изменить сообщение...' : 'Сообщение...'}

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, getSocket } from '../socket.js';
+import VoiceCircleRecorder from '../components/VoiceCircleRecorder.jsx';
 
 const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
 function Linkify({ children }) {
@@ -174,6 +175,8 @@ export default function ChannelPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isPreparingRecording, setIsPreparingRecording] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
+  const [showVoiceCircleRecorder, setShowVoiceCircleRecorder] = useState(false);
 
   // Edit channel message state
   const [editingMsgId, setEditingMsgId] = useState(null);
@@ -247,15 +250,21 @@ export default function ChannelPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [chRes, msgsRes, adminRes] = await Promise.all([
+        const [chRes, msgsRes, adminRes, meRes] = await Promise.all([
           api.get(`/channels/${channelId}`),
           api.get(`/channels/${channelId}/messages`),
           api.get('/admin/check').catch(() => ({ data: { isAdmin: false } })),
+          api.get('/users/me').catch(() => ({ data: {} })),
         ]);
         setChannel(chRes.data);
         setIsAdmin(!!adminRes?.data?.isAdmin);
         setNotificationsEnabled(chRes.data?.notifications_enabled !== 0);
         setMessages(msgsRes.data);
+        
+        // Check if user is premium
+        const isPrem = meRes.data?.premium_until && new Date(meRes.data.premium_until) > new Date();
+        setIsPremium(!!isPrem);
+        
         if (chRes.data?.is_member) {
           markChannelRead();
         }
@@ -1063,6 +1072,18 @@ export default function ChannelPage() {
                     }
                   </button>
                 )}
+                {!editingMsgId && isPremium && (
+                  <button
+                    className="attach-btn"
+                    onClick={() => setShowVoiceCircleRecorder(true)}
+                    disabled={fileUploading}
+                    title="Голосовой кружок"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><path d="M3.6 9.6A8 8 0 0 1 20.4 14.4"/>
+                    </svg>
+                  </button>
+                )}
                 <textarea
                   className="message-input"
                   placeholder={editingMsgId ? 'Редактировать...' : 'Написать в канал...'}
@@ -1106,6 +1127,14 @@ export default function ChannelPage() {
           </div>
         </>
       )}
+
+      {/* Voice Circle Recorder */}
+      <VoiceCircleRecorder
+        isOpen={showVoiceCircleRecorder}
+        onClose={() => setShowVoiceCircleRecorder(false)}
+        onSend={() => scrollToBottomInstant()}
+        channelId={channelId}
+      />
 
       {/* Delete message confirm */}
       {deleteConfirmId && (

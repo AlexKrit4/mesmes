@@ -864,6 +864,95 @@ router.post('/report', auth, (req, res) => {
   }
 });
 
+ // POST /api/users/voice-circles/file — upload voice circle (video message, premium only)
+ const voiceCircleStorage = multer.diskStorage({
+   destination: (req, file, cb) => cb(null, uploadDir),
+   filename: (req, file, cb) => {
+     const ext = path.extname(file.originalname) || '.webm';
+     cb(null, `voice_circle_${req.userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
+   },
+ });
+ const voiceCircleUpload = multer({
+   storage: voiceCircleStorage,
+   limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+   fileFilter: (req, file, cb) => {
+     // Accept video and audio formats
+     const type = String(file.mimetype || '').toLowerCase();
+     if (type.startsWith('video/') || type.startsWith('audio/')) cb(null, true);
+     else cb(new Error('Только видео или аудио файлы'));
+   },
+ });
+
+ router.post('/voice-circles/file', auth, (req, res) => {
+   // Check premium status
+   const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(req.userId);
+   const hasVoiceCircles = user && user.premium_until && new Date(user.premium_until) > new Date();
+   
+   if (!hasVoiceCircles) {
+     return res.status(403).json({ error: 'Голосовые кружки доступны только премиум пользователям' });
+   }
+
+   voiceCircleUpload.single('voiceCircle')(req, res, (err) => {
+     if (err) {
+       if (err.code === 'LIMIT_FILE_SIZE') {
+         return res.status(413).json({ error: 'Видео слишком велико (макс. 50 МБ)' });
+       }
+       return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
+     }
+     
+     if (!req.file) return res.status(400).json({ error: 'Выберите видеофайл' });
+     
+     const receiverId = req.body.receiverId ? parseInt(req.body.receiverId) : null;
+     const channelId = req.body.channelId ? parseInt(req.body.channelId) : null;
+     const duration = req.body.duration ? parseFloat(req.body.duration) : 0;
+     
+     if (!receiverId && !channelId) {
+       fs.unlink(req.file.path, () => {});
+       return res.status(400).json({ error: 'Укажите получателя или канал' });
+     }
+     
+     try {
+       const result = db.prepare(`
+         INSERT INTO voice_circles (sender_id, receiver_id, channel_id, file_url, duration)
+         VALUES (?, ?, ?, ?, ?)
+       `).run(req.userId, receiverId, channelId, `/uploads/${req.file.filename}`, duration);
+       
+       res.json({
+         id: result.lastInsertRowid,
+         file_url: `/uploads/${req.file.filename}`,
+         duration,
+         created_at: new Date().toISOString(),
+       });
+     } catch (err) {
+       fs.unlink(req.file.path, () => {});
+       console.error('Voice circle insert error:', err);
+       res.status(500).json({ error: 'Ошибка сохранения' });
+     }
+   });
+ });
+
+ // GET /api/users/messages/:friendId/voice-circles — get voice circles in a chat
+ router.get('/messages/:friendId/voice-circles', auth, (req, res) => {
+   const friendId = parseInt(req.params.friendId);
+   
+   try {
+     const circles = db.prepare(`
+       SELECT * FROM voice_circles
+       WHERE (
+         (sender_id = ? AND receiver_id = ?) OR
+         (sender_id = ? AND receiver_id = ?)
+       )
+       ORDER BY created_at DESC
+       LIMIT 100
+     `).all(req.userId, friendId, friendId, req.userId);
+     
+     res.json(circles || []);
+   } catch (err) {
+     console.error('Get voice circles error:', err);
+     res.status(500).json({ error: 'Ошибка получения кружков' });
+   }
+ });
+
 module.exports = { router, auth };
 
 

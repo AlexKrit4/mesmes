@@ -54,7 +54,6 @@ try {
 } catch (e) {
   // Column already exists — ignore
 }
-
 // Migration: push subscriptions table
 try {
   db.exec(`
@@ -462,3 +461,23 @@ try {
     console.warn('[db migration] google_id migration:', e.message || e);
   }
 }
+
+  // Migration: voice circles (video/audio recordings up to 60 seconds)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS voice_circles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_id INTEGER NOT NULL,
+        receiver_id INTEGER DEFAULT NULL,
+        channel_id INTEGER DEFAULT NULL,
+        file_url TEXT NOT NULL,
+        duration FLOAT DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
+      )
+    `);
+  } catch (e) {}
+
+  module.exports = db;
