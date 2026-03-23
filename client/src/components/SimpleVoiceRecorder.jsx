@@ -21,41 +21,30 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
   const recordedVideoRef = useRef(null);
   const cancelAfterStopRef = useRef(false);
 
+  const stopMediaStream = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
   // Cleanup
   useEffect(() => {
     return () => {
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      }
+      stopMediaStream();
       if (timerRef.current) clearInterval(timerRef.current);
       if (recordedVideoUrl) URL.revokeObjectURL(recordedVideoUrl);
     };
   }, [recordedVideoUrl]);
 
-  // Init camera for video mode
+  // Privacy: close camera/mic when leaving video mode
   useEffect(() => {
-    setError(null);
-    if (mode !== 'video') return;
-
-    (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user' },
-          audio: true,
-        });
-        mediaStreamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      } catch (err) {
-        console.error('Camera error:', err);
-        setError('Нет доступа к камере');
-      }
-    })();
-
+    if (mode !== 'video') stopMediaStream();
     return () => {
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(track => track.stop());
-        mediaStreamRef.current = null;
-      }
+      if (mode === 'video') stopMediaStream();
     };
   }, [mode]);
 
@@ -85,7 +74,20 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
   }, [recordedBlob, recordedMode]);
 
   const startRecording = async () => {
-    if (mode === 'video' && !mediaStreamRef.current) return;
+    if (mode === 'video' && !mediaStreamRef.current) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: true,
+        });
+        mediaStreamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      } catch (err) {
+        console.error('Camera error:', err);
+        setError('Нет доступа к камере');
+        return;
+      }
+    }
     if (mode === 'voice' && !mediaStreamRef.current) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -132,6 +134,7 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
         setRecordingTime(0);
         setVideoDuration(0);
         setIsVideoPlaying(false);
+        stopMediaStream();
         return;
       }
 
@@ -146,6 +149,8 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
       } else {
         setError('Не удалось получить запись');
       }
+
+      stopMediaStream();
     };
 
     mediaRecorderRef.current = mediaRecorder;
@@ -186,6 +191,7 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
       setRecordingTime(0);
       setVideoDuration(0);
       setIsVideoPlaying(false);
+      stopMediaStream();
     } catch (err) {
       console.error('Send error:', err);
       setError('Ошибка отправки');
@@ -200,6 +206,8 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
       mediaRecorderRef.current.stop();
       clearInterval(timerRef.current);
       timerRef.current = null;
+    } else {
+      stopMediaStream();
     }
 
     chunksRef.current = [];
