@@ -661,7 +661,9 @@ const voiceCircleStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname) || '.webm';
-    cb(null, `ch_voice_circle_${req.userId}_${Date.now()}${ext}`);
+    const type = String(file.mimetype || '').toLowerCase();
+    const kind = type.startsWith('audio/') ? 'ch_audio_circle' : 'ch_video_circle';
+    cb(null, `${kind}_${req.userId}_${Date.now()}${ext}`);
   },
 });
 const voiceCircleUpload = multer({

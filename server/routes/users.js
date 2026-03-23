@@ -869,7 +869,9 @@ router.post('/report', auth, (req, res) => {
    destination: (req, file, cb) => cb(null, uploadDir),
    filename: (req, file, cb) => {
      const ext = path.extname(file.originalname) || '.webm';
-     cb(null, `voice_circle_${req.userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
+     const type = String(file.mimetype || '').toLowerCase();
+     const kind = type.startsWith('audio/') ? 'audio_circle' : 'video_circle';
+     cb(null, `${kind}_${req.userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
    },
  });
  const voiceCircleUpload = multer({
