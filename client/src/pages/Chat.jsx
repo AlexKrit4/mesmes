@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket, getSocket } from '../socket.js';
-import VoiceCircleRecorder from '../components/VoiceCircleRecorder.jsx';
+import TelegramVoiceRecorder from '../components/TelegramVoiceRecorder.jsx';
 
 const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
 function Linkify({ children }) {
@@ -297,8 +297,7 @@ export default function Chat() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxScale, setLightboxScale] = useState(1);
   const [fileUploading, setFileUploading] = useState(false);
-    const [isPremium, setIsPremium] = useState(false);
-    const [showVoiceCircleRecorder, setShowVoiceCircleRecorder] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isPreparingRecording, setIsPreparingRecording] = useState(false);
@@ -1401,16 +1400,10 @@ export default function Chat() {
                 }
               </button>
               {isPremium && (
-                <button
-                  className="attach-btn"
-                  onClick={() => setShowVoiceCircleRecorder(true)}
-                  disabled={fileUploading}
-                  title="Голосовой кружок"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><path d="M3.6 9.6A8 8 0 0 1 20.4 14.4"/>
-                  </svg>
-                </button>
+                <TelegramVoiceRecorder
+                  recipientId={friendIdNum}
+                  onSent={() => scrollToBottomInstant()}
+                />
               )}
               <textarea
                 className="message-input"

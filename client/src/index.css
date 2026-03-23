@@ -3380,3 +3380,171 @@ img.avatar {
 .pinned-text { color: var(--text2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pinned-close { background: none; border: none; color: var(--text2); cursor: pointer; padding: 4px; border-radius: 50%; display: flex; transition: 0.2s; }
 .pinned-close:hover { background: var(--border); color: var(--text1); }
+
+/* ─── Telegram Voice Recorder ─── */
+.telegram-voice-recorder {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  padding: 8px;
+  background: transparent;
+}
+
+.mode-selector {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.mode-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg3);
+  color: var(--text2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s all;
+  padding: 0;
+}
+
+.mode-btn:hover:not(:disabled) {
+  background: var(--bg2);
+  border-color: var(--accent);
+}
+
+.mode-btn.active {
+  border-color: var(--accent);
+  background: rgba(108, 92, 231, 0.15);
+  color: var(--accent);
+}
+
+.mode-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.record-btn {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #2d1b69 0%, #1a1145 100%);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s all;
+  font-weight: 600;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);
+  transform-origin: center;
+}
+
+.record-btn:not(:disabled):active {
+  transform: scale(0.95);
+}
+
+.record-btn:not(:disabled):hover {
+  box-shadow: 0 6px 16px rgba(108, 92, 231, 0.5);
+}
+
+.record-btn.recording {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  animation: pulse-record 1s infinite;
+}
+
+@keyframes pulse-record {
+  0%, 100% { box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3); }
+  50% { box-shadow: 0 6px 20px rgba(231, 76, 60, 0.6); }
+}
+
+.record-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.recording-time {
+  font-size: 18px;
+  font-weight: 700;
+  color: white;
+  font-family: 'Courier New', monospace;
+}
+
+.video-preview-overlay {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200px;
+  height: 280px;
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recording-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(231, 76, 60, 0.95);
+  color: white;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 10;
+}
+
+.recording-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: white;
+  border-radius: 50%;
+  animation: blink 1s infinite;
+}
+
+.uploading-indicator {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg2);
+  padding: 16px 24px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  z-index: 500;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.uploading-indicator .spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.uploading-indicator p {
+  font-size: 14px;
+  color: var(--text2);
+  margin: 0;
+}
