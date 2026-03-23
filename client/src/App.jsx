@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Home from './pages/Home.jsx';
@@ -21,25 +22,29 @@ function PublicRoute({ children }) {
   return localStorage.getItem('token') ? <Navigate to="/" replace /> : children;
 }
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-        <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
-        <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
-        <Route path="/reset-password/:token" element={<ResetPassword />} />
-        <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
-        <Route path="/chat/:friendId" element={<PrivateRoute><Chat /></PrivateRoute>} />
-        <Route path="/channel/:id" element={<PrivateRoute><ChannelPage /></PrivateRoute>} />
-        <Route path="/channel/:id/post/:postId" element={<PrivateRoute><ChannelPostComments /></PrivateRoute>} />
-        <Route path="/join/:code" element={<PrivateRoute><JoinChannel /></PrivateRoute>} />
-        <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
-        <Route path="/admin" element={<PrivateRoute><AdminPanel /></PrivateRoute>} />
-        <Route path="/premium" element={<PrivateRoute><PremiumPage /></PrivateRoute>} />
-        <Route path="/:publicId" element={<PrivateRoute><Profile /></PrivateRoute>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+          <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+          <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
+          <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
+          <Route path="/chat/:friendId" element={<PrivateRoute><Chat /></PrivateRoute>} />
+          <Route path="/channel/:id" element={<PrivateRoute><ChannelPage /></PrivateRoute>} />
+          <Route path="/channel/:id/post/:postId" element={<PrivateRoute><ChannelPostComments /></PrivateRoute>} />
+          <Route path="/join/:code" element={<PrivateRoute><JoinChannel /></PrivateRoute>} />
+          <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+          <Route path="/admin" element={<PrivateRoute><AdminPanel /></PrivateRoute>} />
+          <Route path="/premium" element={<PrivateRoute><PremiumPage /></PrivateRoute>} />
+          <Route path="/:publicId" element={<PrivateRoute><Profile /></PrivateRoute>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </GoogleOAuthProvider>
   );
 }

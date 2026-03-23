@@ -422,3 +422,8 @@ try {
     )
   `);
 } catch (e) {}
+
+// Migration: add google_id for Google OAuth support
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT DEFAULT NULL UNIQUE`);
+} catch (e) {}

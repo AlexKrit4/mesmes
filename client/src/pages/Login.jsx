@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { GoogleLogin } from '@react-oauth/google';
 import api from '../api.js';
 
 function formatBanDate(d) {
@@ -31,6 +32,45 @@ export default function Login() {
   });
 
   const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setError('');
+    setBanInfo(null);
+    setLoading(true);
+    try {
+      const { data } = await api.post('/auth/google', { token: credentialResponse.credential });
+      
+      if (data.new_user) {
+        // NEW USER: redirect to register with pre-filled email
+        localStorage.setItem('googleData', JSON.stringify({
+          email: data.email,
+          googleId: data.googleId,
+          name: data.name,
+        }));
+        navigate('/register?google=true');
+        return;
+      }
+      
+      if (!data.ok) {
+        setError(data.message || 'Ошибка входа через Google');
+        return;
+      }
+      
+      // Existing user: login
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('me', JSON.stringify(data.user));
+      navigate('/');
+    } catch (err) {
+      const d = err.response?.data;
+      setError(d?.error || 'Ошибка входа через Google');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleError = () => {
+    setError('Ошибка входа через Google. Попробуйте ещё раз.');
+  };
 
   const resetTwoFA = () => {
     setTwoFAToken('');
@@ -156,6 +196,15 @@ export default function Login() {
                 {loading ? 'Входим...' : 'Войти'}
               </button>
             </form>
+
+            <div style={{ marginTop: 16, textAlign: 'center' }}>
+              <p style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>или</p>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                locale="ru"
+              />
+            </div>
 
             <p className="auth-footer">
               Нет аккаунта? <Link to="/register">Создать</Link>

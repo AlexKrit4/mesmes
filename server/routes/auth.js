@@ -589,4 +589,161 @@ router.post('/reset-password/:token', async (req, res) => {
   }
 });
 
+// POST /api/auth/google — handle Google OAuth token
+router.post('/google', async (req, res) => {
+  try {
+    const { token: idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({ error: 'Google token обязателен' });
+    }
+
+    // Verify Google token using google-auth-library
+    const { OAuth2Client } = require('google-auth-library');
+    const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+    const client = new OAuth2Client(GOOGLE_CLIENT_ID);
+
+    let ticket;
+    try {
+      ticket = await client.verifyIdToken({
+        idToken,
+        audience: GOOGLE_CLIENT_ID,
+      });
+    } catch (e) {
+      console.error('[google auth] token verification failed:', e.message);
+      return res.status(400).json({ error: 'Неверный Google token' });
+    }
+
+    const payload = ticket.getPayload();
+    const googleId = payload.sub;
+    const email = payload.email;
+    const name = payload.name || payload.email.split('@')[0];
+
+    console.log('[google auth] verified:', { googleId, email, name });
+
+    // Check if user with this google_id exists
+    let user = db.prepare('SELECT id, username, public_id, email FROM users WHERE google_id = ?').get(googleId);
+    
+    if (user) {
+      // User exists → login
+      console.log('[google auth] found existing user:', user.id);
+      const authToken = jwt.sign(
+        { userId: user.id, username: user.username },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+      createSession(user.id, authToken, req);
+      return res.json({
+        ok: true,
+        token: authToken,
+        user: {
+          id: user.id,
+          username: user.username,
+          public_id: user.public_id,
+          email: user.email,
+        },
+      });
+    }
+
+    // Check if user with this email exists (not linked to Google yet)
+    user = db.prepare('SELECT id, username, public_id, email, password_hash FROM users WHERE email = ?').get(email);
+    
+    if (user && user.password_hash) {
+      // User with password exists → return "link required" response
+      // User needs to create username if not set, then we'll link Google to existing account
+      return res.json({
+        ok: true,
+        new_user: false,
+        email,
+        user: {
+          id: user.id,
+          username: user.username,
+          public_id: user.public_id,
+        },
+        action: 'link_google_to_existing',
+        message: 'Найден аккаунт с этой почтой. Войди с паролем, чтобы привязать Google.',
+      });
+    }
+
+    // New user → return email, ask for username + password
+    return res.json({
+      ok: true,
+      new_user: true,
+      email,
+      name,
+      googleId,
+      action: 'complete_registration',
+      message: 'Создайте username и пароль для завершения регистрации',
+    });
+  } catch (e) {
+    console.error('[google auth error]', e.message || e);
+    return res.status(500).json({ error: e.message || 'Ошибка сервера' });
+  }
+});
+
+// POST /api/auth/google/complete — complete registration after Google OAuth
+router.post('/google/complete', async (req, res) => {
+  try {
+    const { email, googleId, public_id, password, display_name } = req.body;
+    
+    if (!email || !googleId || !public_id || !password) {
+      return res.status(400).json({ error: 'Все поля обязательны' });
+    }
+
+    // Validate public_id
+    if (public_id.length < 3 || public_id.length > 30) {
+      return res.status(400).json({ error: 'Username должен быть 3-30 символов' });
+    }
+    if (!/^[a-zA-Z0-9_.-]+$/.test(public_id)) {
+      return res.status(400).json({ error: 'Username может содержать только буквы, цифры, . - и _' });
+    }
+
+    // Check if public_id is already taken
+    const existing = db.prepare('SELECT id FROM users WHERE public_id = ?').get(public_id);
+    if (existing) {
+      return res.status(400).json({ error: 'Этот username уже занят' });
+    }
+
+    // Check if google_id is already used (shouldn't happen, but just in case)
+    const googleUser = db.prepare('SELECT id FROM users WHERE google_id = ?').get(googleId);
+    if (googleUser) {
+      return res.status(400).json({ error: 'Этот Google аккаунт уже привязан' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    db.prepare(`
+      INSERT INTO users (username, public_id, password_hash, email, google_id, created_at, last_seen)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      display_name || public_id,
+      public_id,
+      passwordHash,
+      email,
+      googleId
+    );
+
+    const user = db.prepare('SELECT id, username, public_id FROM users WHERE google_id = ?').get(googleId);
+    const authToken = jwt.sign(
+      { userId: user.id, username: user.username },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+    createSession(user.id, authToken, req);
+
+    return res.json({
+      ok: true,
+      token: authToken,
+      user: {
+        id: user.id,
+        username: user.username,
+        public_id: user.public_id,
+        email,
+      },
+    });
+  } catch (e) {
+    console.error('[google/complete error]', e.message || e);
+    return res.status(500).json({ error: e.message || 'Ошибка сервера' });
+  }
+});
+
 module.exports = router;
