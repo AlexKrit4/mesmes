@@ -238,8 +238,8 @@ io.on('connection', (socket) => {
   });
 
   // ── Голосовые звонки (WebRTC signaling) ─────────────────────────────────
-  socket.on('call_offer', ({ to, offer }) => {
-    if (!to || !offer || to === uid) return;
+  socket.on('call_offer', ({ to, offer, callId }) => {
+    if (!to || !offer || !callId || to === uid) return;
     if (!areUsersFriends(uid, to)) {
       socket.emit('chat_error', { msg: 'Позвонить можно только друзьям' });
       return;
@@ -259,41 +259,42 @@ io.on('connection', (socket) => {
         from: uid,
         from_username: caller?.username || 'Пользователь',
         offer,
+        callId,
       });
     });
   });
 
-  socket.on('call_answer', ({ to, answer }) => {
-    if (!to || !answer || to === uid) return;
+  socket.on('call_answer', ({ to, answer, callId }) => {
+    if (!to || !answer || !callId || to === uid) return;
     if (!areUsersFriends(uid, to) || areUsersBlocked(uid, to)) return;
     if (!onlineUsers.has(to)) return;
     onlineUsers.get(to).forEach((sid) => {
-      io.to(sid).emit('call_answer', { from: uid, answer });
+      io.to(sid).emit('call_answer', { from: uid, answer, callId });
     });
   });
 
-  socket.on('call_ice_candidate', ({ to, candidate }) => {
-    if (!to || !candidate || to === uid) return;
+  socket.on('call_ice_candidate', ({ to, candidate, callId }) => {
+    if (!to || !candidate || !callId || to === uid) return;
     if (!areUsersFriends(uid, to) || areUsersBlocked(uid, to)) return;
     if (!onlineUsers.has(to)) return;
     onlineUsers.get(to).forEach((sid) => {
-      io.to(sid).emit('call_ice_candidate', { from: uid, candidate });
+      io.to(sid).emit('call_ice_candidate', { from: uid, candidate, callId });
     });
   });
 
-  socket.on('call_reject', ({ to, reason }) => {
-    if (!to || to === uid) return;
+  socket.on('call_reject', ({ to, reason, callId }) => {
+    if (!to || !callId || to === uid) return;
     if (!onlineUsers.has(to)) return;
     onlineUsers.get(to).forEach((sid) => {
-      io.to(sid).emit('call_reject', { from: uid, reason: reason || 'rejected' });
+      io.to(sid).emit('call_reject', { from: uid, reason: reason || 'rejected', callId });
     });
   });
 
-  socket.on('call_end', ({ to }) => {
-    if (!to || to === uid) return;
+  socket.on('call_end', ({ to, callId }) => {
+    if (!to || !callId || to === uid) return;
     if (!onlineUsers.has(to)) return;
     onlineUsers.get(to).forEach((sid) => {
-      io.to(sid).emit('call_end', { from: uid });
+      io.to(sid).emit('call_end', { from: uid, callId });
     });
   });
 

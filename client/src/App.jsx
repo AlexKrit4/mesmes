@@ -46,17 +46,18 @@ function GlobalIncomingCallOverlay() {
     const socket = connectSocket();
     if (!socket) return;
 
-    const onCallOffer = ({ from, from_username, offer }) => {
-      if (!from || !offer) return;
+    const onCallOffer = ({ from, from_username, offer, callId }) => {
+      if (!from || !offer || !callId) return;
       setIncomingCall((prev) => {
         if (prev?.from && prev.from !== from) {
-          socket.emit('call_reject', { to: from, reason: 'busy' });
+          socket.emit('call_reject', { to: from, reason: 'busy', callId });
           return prev;
         }
         return {
           from,
           username: from_username || 'Пользователь',
           offer,
+          callId,
         };
       });
     };
@@ -80,19 +81,20 @@ function GlobalIncomingCallOverlay() {
   const declineCall = () => {
     const socket = getSocket();
     if (socket && incomingCall?.from) {
-      socket.emit('call_reject', { to: incomingCall.from, reason: 'rejected' });
+      socket.emit('call_reject', { to: incomingCall.from, reason: 'rejected', callId: incomingCall.callId });
     }
     setIncomingCall(null);
   };
 
   const acceptCall = () => {
-    if (!incomingCall?.from || !incomingCall?.offer) return;
+    if (!incomingCall?.from || !incomingCall?.offer || !incomingCall?.callId) return;
     sessionStorage.setItem(
       PENDING_INCOMING_CALL_KEY,
       JSON.stringify({
         from: incomingCall.from,
         username: incomingCall.username,
         offer: incomingCall.offer,
+        callId: incomingCall.callId,
         autoAccept: true,
         createdAt: Date.now(),
       })

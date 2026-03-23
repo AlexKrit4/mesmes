@@ -378,6 +378,7 @@ export default function Chat() {
   const remoteStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const activeCallPeerRef = useRef(null);
+  const activeCallIdRef = useRef(null);
   const pendingRemoteCandidatesRef = useRef([]);
   const earlyIceCandidatesRef = useRef([]);
   const connectTimeoutRef = useRef(null);
@@ -403,6 +404,7 @@ export default function Chat() {
       peerConnectionRef.current = null;
     }
     pendingRemoteCandidatesRef.current = [];
+    earlyIceCandidatesRef.current = [];
     remoteStreamRef.current = null;
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = null;
@@ -414,6 +416,7 @@ export default function Chat() {
     stopLocalStream();
     setActiveCallPeer(null);
     activeCallPeerRef.current = null;
+    activeCallIdRef.current = null;
     setCallState('idle');
     if (clearIncoming) setIncomingCall(null);
   }, [closePeerConnection, stopLocalStream]);
@@ -430,14 +433,18 @@ export default function Chat() {
     return stream;
   }, []);
 
-  const createPeerConnection = useCallback((targetUserId, socket) => {
+  const createPeerConnection = useCallback((targetUserId, socket, callId) => {
     closePeerConnection();
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnectionRef.current = pc;
 
     pc.onicecandidate = (event) => {
-      if (!event.candidate || !targetUserId) return;
-      socket.emit('call_ice_candidate', { to: targetUserId, candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate });
+      if (!event.candidate || !targetUserId || !callId) return;
+      socket.emit('call_ice_candidate', {
+        to: targetUserId,
+        callId,
+        candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate,
+      });
     };
 
     pc.ontrack = (event) => {
@@ -474,10 +481,14 @@ export default function Chat() {
       }
     };
 
-    const queued = earlyIceCandidatesRef.current.filter((item) => Number(item.from) === Number(targetUserId));
+    const queued = earlyIceCandidatesRef.current.filter(
+      (item) => Number(item.from) === Number(targetUserId) && item.callId === callId
+    );
     if (queued.length > 0) {
       queued.forEach(({ candidate }) => pendingRemoteCandidatesRef.current.push(candidate));
-      earlyIceCandidatesRef.current = earlyIceCandidatesRef.current.filter((item) => Number(item.from) !== Number(targetUserId));
+      earlyIceCandidatesRef.current = earlyIceCandidatesRef.current.filter(
+        (item) => !(Number(item.from) === Number(targetUserId) && item.callId === callId)
+      );
     }
 
     return pc;
@@ -505,35 +516,37 @@ export default function Chat() {
 
     try {
       setCallError('');
+      const callId = `call_${me.id}_${friendIdNum}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const stream = await ensureLocalAudio();
-      const pc = createPeerConnection(friendIdNum, socket);
+      const pc = createPeerConnection(friendIdNum, socket, callId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
       activeCallPeerRef.current = friendIdNum;
+      activeCallIdRef.current = callId;
       setActiveCallPeer(friendIdNum);
       setCallState('calling');
-      socket.emit('call_offer', { to: friendIdNum, offer });
+      socket.emit('call_offer', { to: friendIdNum, offer, callId });
     } catch (err) {
       console.error('Call start error:', err);
       showCallError('Не удалось начать звонок');
       resetCallState();
     }
-  }, [callState, createPeerConnection, ensureLocalAudio, friendIdNum, hasBlock, resetCallState, showCallError]);
+  }, [callState, createPeerConnection, ensureLocalAudio, friendIdNum, hasBlock, me.id, resetCallState, showCallError]);
 
   const rejectIncomingCall = useCallback(() => {
     const socket = getSocket();
     if (socket && incomingCall?.from) {
-      socket.emit('call_reject', { to: incomingCall.from, reason: 'rejected' });
+      socket.emit('call_reject', { to: incomingCall.from, reason: 'rejected', callId: incomingCall.callId });
     }
     setIncomingCall(null);
     setCallState('idle');
   }, [incomingCall]);
 
   const acceptIncomingCallData = useCallback(async (callData) => {
-    if (!callData?.from || !callData?.offer) return;
+    if (!callData?.from || !callData?.offer || !callData?.callId) return;
     const socket = getSocket() || connectSocket();
     if (!socket) {
       showCallError('Нет соединения с сервером');
@@ -544,7 +557,8 @@ export default function Chat() {
       setCallError('');
       const stream = await ensureLocalAudio();
       const peerId = Number(callData.from);
-      const pc = createPeerConnection(peerId, socket);
+      const callId = String(callData.callId);
+      const pc = createPeerConnection(peerId, socket, callId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
@@ -557,10 +571,11 @@ export default function Chat() {
       await pc.setLocalDescription(answer);
 
       activeCallPeerRef.current = peerId;
+      activeCallIdRef.current = callId;
       setActiveCallPeer(peerId);
       setIncomingCall(null);
       setCallState('connecting');
-      socket.emit('call_answer', { to: peerId, answer });
+      socket.emit('call_answer', { to: peerId, answer, callId });
     } catch (err) {
       console.error('Accept call error:', err);
       showCallError('Не удалось принять звонок');
@@ -576,8 +591,9 @@ export default function Chat() {
   const endCall = useCallback((notify = true) => {
     const socket = getSocket();
     const peerId = activeCallPeerRef.current || incomingCall?.from;
-    if (notify && socket && peerId) {
-      socket.emit('call_end', { to: peerId });
+    const callId = activeCallIdRef.current || incomingCall?.callId;
+    if (notify && socket && peerId && callId) {
+      socket.emit('call_end', { to: peerId, callId });
     }
     resetCallState();
   }, [incomingCall, resetCallState]);
@@ -811,8 +827,8 @@ export default function Chat() {
       }
     };
 
-    const onCallAnswer = async ({ from, answer }) => {
-      if (!answer || from !== activeCallPeerRef.current || !peerConnectionRef.current) return;
+    const onCallAnswer = async ({ from, answer, callId }) => {
+      if (!answer || !callId || callId !== activeCallIdRef.current || from !== activeCallPeerRef.current || !peerConnectionRef.current) return;
       try {
         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
         for (const candidate of pendingRemoteCandidatesRef.current) {
@@ -827,11 +843,14 @@ export default function Chat() {
       }
     };
 
-    const onCallIceCandidate = async ({ from, candidate }) => {
+    const onCallIceCandidate = async ({ from, candidate, callId }) => {
+      if (!callId) return;
+      const expectedCallId = activeCallIdRef.current || incomingCall?.callId;
+      if (!expectedCallId || callId !== expectedCallId) return;
       const isCurrentPeer = from === activeCallPeerRef.current || from === incomingCall?.from;
       if (!candidate || !isCurrentPeer) return;
       if (!peerConnectionRef.current) {
-        earlyIceCandidatesRef.current.push({ from, candidate });
+        earlyIceCandidatesRef.current.push({ from, callId, candidate });
         return;
       }
       try {
@@ -845,20 +864,23 @@ export default function Chat() {
       }
     };
 
-    const onCallReject = ({ from, reason }) => {
+    const onCallReject = ({ from, reason, callId }) => {
+      if (!callId || callId !== activeCallIdRef.current) return;
       if (from !== activeCallPeerRef.current && from !== friendIdNum) return;
       const text = reason === 'busy' ? 'Пользователь занят' : 'Звонок отклонён';
       showCallError(text);
       resetCallState();
     };
 
-    const onCallEnd = ({ from }) => {
+    const onCallEnd = ({ from, callId }) => {
+      if (!callId || callId !== activeCallIdRef.current) return;
       if (from !== activeCallPeerRef.current && from !== friendIdNum) return;
       showCallError('Звонок завершён');
       resetCallState();
     };
 
-    const onCallUnavailable = ({ to }) => {
+    const onCallUnavailable = ({ to, callId }) => {
+      if (!callId || callId !== activeCallIdRef.current) return;
       if (to !== friendIdNum) return;
       showCallError('Пользователь не в сети');
       resetCallState();
@@ -917,7 +939,7 @@ export default function Chat() {
     }
 
     connectTimeoutRef.current = setTimeout(() => {
-      showCallError('Соединение не установлено. Нужен TURN-сервер для вашей сети');
+      showCallError('Соединение не установлено. Проверь TURN/сеть и попробуй ещё раз');
       resetCallState();
     }, 15000);
 
@@ -954,6 +976,7 @@ export default function Chat() {
         from: parsed.from,
         username: parsed.username || friend?.username || 'Пользователь',
         offer: parsed.offer,
+        callId: parsed.callId,
       };
 
       if (parsed.autoAccept) {
