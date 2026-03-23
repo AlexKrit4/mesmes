@@ -111,6 +111,10 @@ function parseFileUrls(fileUrl) {
     .filter((entry) => entry?.url);
 }
 
+function hasActivePremium(premiumUntil) {
+  return !!(premiumUntil && new Date(premiumUntil) > new Date());
+}
+
 function getAttachmentLabel(fileUrlValue) {
   const first = parseFileUrls(fileUrlValue)[0];
   if (!first) return '📎 Файл';
@@ -297,7 +301,7 @@ export default function Chat() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxScale, setLightboxScale] = useState(1);
   const [fileUploading, setFileUploading] = useState(false);
-  const [isPremium, setIsPremium] = useState(false);
+  const [isPremium, setIsPremium] = useState(hasActivePremium(me?.premium_until));
   const [recordingMode, setRecordingMode] = useState('voice');
 
 
@@ -386,14 +390,16 @@ export default function Chat() {
   useEffect(() => {
     (async () => {
       try {
-        const [friendRes, msgsRes] = await Promise.all([
+        const [friendRes, msgsRes, meRes] = await Promise.all([
           api.get('/users/friends'),
           api.get(`/users/messages/${friendId}`),
+          api.get('/users/me').catch(() => ({ data: {} })),
         ]);
         const friends = friendRes.data;
         const f = friends.find((x) => x.id === friendIdNum);
         setFriend(f || { id: friendIdNum, username: '?', public_id: '?' });
         setMessages(msgsRes.data);
+        setIsPremium(hasActivePremium(meRes?.data?.premium_until));
         // Mark friend's messages as read now that we opened the chat
         const socket = getSocket();
         if (socket) socket.emit('mark_read', { friendId: friendIdNum });
@@ -603,7 +609,7 @@ export default function Chat() {
       }
     } catch (err) {
       console.error('Voice upload error:', err);
-      alert('Ошибка отправки голосового сообщения');
+      alert(err.response?.data?.error || 'Ошибка отправки голосового/видеосообщения');
     }
   };
 

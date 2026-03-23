@@ -394,7 +394,7 @@ export default function ChannelPage() {
       // Optionally refresh voice circles list or reload channel messages
     } catch (err) {
       console.error('Voice circle upload error:', err);
-      alert('Ошибка отправки голосового сообщения');
+      alert(err.response?.data?.error || 'Ошибка отправки голосового/видеосообщения');
     }
   };
 
