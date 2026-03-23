@@ -26,6 +26,7 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
 
   // Init camera for video mode
   useEffect(() => {
+    setError(null);
     if (mode !== 'video') return;
 
     (async () => {
@@ -149,9 +150,9 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
   if (!isRecording && !hasRecording) {
     return (
       <button
-        className="record-start-btn"
+        className="simple-recorder-btn"
         onClick={startRecording}
-        disabled={isUploading || !!error}
+        disabled={isUploading}
         title={mode === 'video' ? 'Запись видео' : 'Запись голоса'}
       >
         {mode === 'video' ? (
@@ -169,17 +170,17 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
 
   if (isRecording) {
     return (
-      <div className="recording-controls">
-        <div className="recording-time">{formatTime(recordingTime)}</div>
+      <div className="simple-recorder-controls">
+        <div className="simple-recorder-timer">{formatTime(recordingTime)}</div>
         <button
-          className="stop-btn"
+          className="simple-recorder-stop"
           onClick={stopRecording}
           title="Остановить запись"
         >
           ⏹️
         </button>
         <button
-          className="cancel-btn"
+          className="simple-recorder-cancel"
           onClick={cancelRecording}
           title="Отменить"
         >
@@ -191,7 +192,7 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
 
   // Showing recording preview
   return (
-    <div className="recording-preview">
+    <div className="simple-recorder-preview">
       {mode === 'video' && (
         <video
           ref={videoRef}
@@ -205,18 +206,18 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
           }}
         />
       )}
-      <div className="preview-info">
+      <div className="simple-recorder-preview-info">
         {mode === 'video' ? '🎥' : '🎤'} {formatTime(recordingTime)}
       </div>
       <button
-        className="send-recorded-btn"
+        className="simple-recorder-send"
         onClick={sendRecording}
         disabled={isUploading}
       >
         {isUploading ? '...' : '📤 Отправить'}
       </button>
       <button
-        className="cancel-btn"
+        className="simple-recorder-cancel"
         onClick={cancelRecording}
         disabled={isUploading}
       >

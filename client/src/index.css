@@ -3526,3 +3526,23 @@ img.avatar {
   color: var(--text);
 }
 
+.record-mode-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  transition: 0.2s;
+}
+
+.record-mode-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
