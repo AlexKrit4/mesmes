@@ -756,7 +756,7 @@ export default function ChannelPage() {
         <button className="topbar-back" onClick={() => navigate('/')}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
-        <div className="chat-topbar-info" onClick={() => setShowInfo(true)} style={{ cursor: 'pointer' }}>
+        <div className="chat-topbar-info" onClick={() => navigate(`/channel/${channelId}/info`)} style={{ cursor: 'pointer' }}>
           {channel.avatar ? (
             <img className="avatar avatar-topbar" src={channel.avatar} alt="" />
           ) : (
@@ -781,7 +781,7 @@ export default function ChannelPage() {
                     Отписаться
                   </button>
                 )}
-                <button className="chat-dropdown-item" onClick={() => { setShowMenu(false); setShowInfo(true); }}>
+                <button className="chat-dropdown-item" onClick={() => { setShowMenu(false); navigate(`/channel/${channelId}/info`); }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                   Информация
                 </button>
