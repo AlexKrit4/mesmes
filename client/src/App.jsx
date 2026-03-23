@@ -97,6 +97,7 @@ function GlobalIncomingCallOverlay() {
         createdAt: Date.now(),
       })
     );
+    window.dispatchEvent(new Event('pending_incoming_call'));
     setIncomingCall(null);
     if (locationRef.current !== `/chat/${incomingCall.from}`) {
       navigate(`/chat/${incomingCall.from}`);

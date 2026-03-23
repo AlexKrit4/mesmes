@@ -484,19 +484,22 @@ export default function Chat() {
     setCallState('idle');
   }, [incomingCall]);
 
-  const acceptIncomingCall = useCallback(async () => {
-    if (!incomingCall?.from || !incomingCall?.offer) return;
-    const socket = getSocket();
-    if (!socket) return;
+  const acceptIncomingCallData = useCallback(async (callData) => {
+    if (!callData?.from || !callData?.offer) return;
+    const socket = getSocket() || connectSocket();
+    if (!socket) {
+      showCallError('Нет соединения с сервером');
+      return;
+    }
 
     try {
       setCallError('');
       const stream = await ensureLocalAudio();
-      const peerId = incomingCall.from;
+      const peerId = Number(callData.from);
       const pc = createPeerConnection(peerId, socket);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+      await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
       for (const candidate of pendingRemoteCandidatesRef.current) {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       }
@@ -515,7 +518,12 @@ export default function Chat() {
       showCallError('Не удалось принять звонок');
       resetCallState();
     }
-  }, [incomingCall, ensureLocalAudio, createPeerConnection, showCallError, resetCallState]);
+  }, [ensureLocalAudio, createPeerConnection, showCallError, resetCallState]);
+
+  const acceptIncomingCall = useCallback(async () => {
+    if (!incomingCall) return;
+    await acceptIncomingCallData(incomingCall);
+  }, [incomingCall, acceptIncomingCallData]);
 
   const endCall = useCallback((notify = true) => {
     const socket = getSocket();
@@ -854,33 +862,45 @@ export default function Chat() {
   }, [endCall]);
 
   useEffect(() => {
-    let parsed = null;
-    try {
-      const raw = sessionStorage.getItem(PENDING_INCOMING_CALL_KEY);
-      if (!raw) return;
-      parsed = JSON.parse(raw);
-    } catch {
+    const consumePendingIncoming = async () => {
+      let parsed = null;
+      try {
+        const raw = sessionStorage.getItem(PENDING_INCOMING_CALL_KEY);
+        if (!raw) return;
+        parsed = JSON.parse(raw);
+      } catch {
+        sessionStorage.removeItem(PENDING_INCOMING_CALL_KEY);
+        return;
+      }
+
+      if (!parsed?.from || !parsed?.offer || Number(parsed.from) !== friendIdNum) return;
+
       sessionStorage.removeItem(PENDING_INCOMING_CALL_KEY);
-      return;
-    }
+      const payload = {
+        from: parsed.from,
+        username: parsed.username || friend?.username || 'Пользователь',
+        offer: parsed.offer,
+      };
 
-    if (!parsed?.from || !parsed?.offer || Number(parsed.from) !== friendIdNum) return;
+      if (parsed.autoAccept) {
+        await acceptIncomingCallData(payload);
+      } else {
+        setIncomingCall(payload);
+        setCallState('incoming');
+      }
+    };
 
-    sessionStorage.removeItem(PENDING_INCOMING_CALL_KEY);
-    setIncomingCall({
-      from: parsed.from,
-      username: parsed.username || friend?.username || 'Пользователь',
-      offer: parsed.offer,
-    });
-    setCallState('incoming');
+    const onPendingIncomingEvent = () => {
+      consumePendingIncoming();
+    };
 
-    if (parsed.autoAccept) {
-      setTimeout(() => {
-        connectSocket();
-        acceptIncomingCall();
-      }, 80);
-    }
-  }, [acceptIncomingCall, friend?.username, friendIdNum]);
+    window.addEventListener('pending_incoming_call', onPendingIncomingEvent);
+    consumePendingIncoming();
+
+    return () => {
+      window.removeEventListener('pending_incoming_call', onPendingIncomingEvent);
+    };
+  }, [acceptIncomingCallData, friend?.username, friendIdNum]);
 
   const onSendVoice = async (blob, mode, duration) => {
     try {
