@@ -554,7 +554,7 @@ export default function AdminPanel() {
           <div className="admin-user-count">Каналов: {channels.length}</div>
           {channels.length === 0 ? <div style={{ padding: '20px', textAlign: 'center' }}>Каналов нет</div> : null}
           {channels.map((ch) => (
-            <div key={ch.id} className="admin-user-card">
+            <div key={ch.id} className="admin-user-card" onClick={() => navigate(`/channel/${ch.id}`)} style={{ cursor: 'pointer' }}>
               <div className="admin-user-avatar">
                 {ch.avatar
                   ? <img src={ch.avatar} alt="" />
@@ -568,6 +568,7 @@ export default function AdminPanel() {
                 <div className="admin-user-meta">Участников: {ch.member_count} · Сообщений: {ch.message_count}</div>
                 <div className="admin-user-meta">Создан: {formatDate(ch.created_at)}</div>
               </div>
+              <svg className="admin-user-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
             </div>
           ))}
         </div>

@@ -157,6 +157,7 @@ export default function ChannelPage() {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showUnsubConfirm, setShowUnsubConfirm] = useState(false);
@@ -242,11 +243,13 @@ export default function ChannelPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [chRes, msgsRes] = await Promise.all([
+        const [chRes, msgsRes, adminRes] = await Promise.all([
           api.get(`/channels/${channelId}`),
           api.get(`/channels/${channelId}/messages`),
+          api.get('/admin/check').catch(() => ({ data: { isAdmin: false } })),
         ]);
         setChannel(chRes.data);
+        setIsAdmin(!!adminRes?.data?.isAdmin);
         setNotificationsEnabled(chRes.data?.notifications_enabled !== 0);
         setMessages(msgsRes.data);
         if (chRes.data?.is_member) {
@@ -916,7 +919,7 @@ export default function ChannelPage() {
       </div>
 
       {/* Join bar for non-members */}
-      {!isMember && (
+      {!isMember && !isAdmin && (
         <div className="channel-join-bar">
           <button className="btn btn-accent" style={{ width: '100%' }} onClick={joinChannel}>
             Присоединиться
