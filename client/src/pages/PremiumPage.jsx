@@ -78,6 +78,11 @@ export default function PremiumPage() {
             return;
           }
 
+          if (data?.check_error) {
+            setStatusText(`Платёж не подтверждён автоматически: ${data.check_error}. Проверь webhook и токен YooMoney.`);
+            return;
+          }
+
           if (attempt < 5) {
             setStatusText('Платёж обрабатывается. Проверяем ещё раз...');
             await sleep(5000);
@@ -124,6 +129,8 @@ export default function PremiumPage() {
       if (data?.paid) {
         await refreshMe();
         setStatusText('✅ Оплата подтверждена. mes-premium активирован.');
+      } else if (data?.check_error) {
+        setStatusText(`Платёж не подтверждён автоматически: ${data.check_error}. Проверь webhook и токен YooMoney.`);
       } else {
         setStatusText('Платёж ещё не подтверждён. Подождите и проверьте снова.');
       }

@@ -163,6 +163,7 @@ router.post('/premium/confirm', auth, async (req, res) => {
   try {
     const check = await fetchSuccessfulOperationByLabel(label);
     if (check.error) {
+      console.warn('[payments] confirm check error:', check.error, 'label=', label);
       const refreshed = db.prepare('SELECT status, paid_at FROM premium_payments WHERE id = ?').get(payment.id);
       if (refreshed?.status === 'paid') {
         const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(req.userId);
@@ -228,7 +229,14 @@ router.post('/yoomoney/webhook', (req, res) => {
       sha1_hash,
     } = req.body || {};
 
-    if (!label || !sha1_hash) return res.status(400).send('missing');
+    if (!label || !sha1_hash) {
+      console.warn('[payments] webhook missing fields', {
+        hasLabel: !!label,
+        hasSha1: !!sha1_hash,
+        notification_type,
+      });
+      return res.status(400).send('missing');
+    }
     if (!YOOMONEY_NOTIFICATION_SECRET) return res.status(500).send('secret-not-configured');
 
     const base = [
@@ -245,11 +253,15 @@ router.post('/yoomoney/webhook', (req, res) => {
 
     const localHash = crypto.createHash('sha1').update(base).digest('hex');
     if (String(localHash).toLowerCase() !== String(sha1_hash).toLowerCase()) {
+      console.warn('[payments] webhook bad signature', { label, operation_id });
       return res.status(403).send('bad-sign');
     }
 
     const payment = db.prepare('SELECT * FROM premium_payments WHERE label = ?').get(label);
-    if (!payment) return res.status(200).send('ok');
+    if (!payment) {
+      console.warn('[payments] webhook payment not found by label', { label, operation_id, amount });
+      return res.status(200).send('ok');
+    }
     if (payment.status === 'paid') return res.status(200).send('ok');
 
     const amountRub = toNumberSafe(amount);
@@ -259,7 +271,12 @@ router.post('/yoomoney/webhook', (req, res) => {
       operationId: operation_id || null,
       paidAt: datetime || new Date().toISOString(),
     });
-    if (!result.ok) return res.status(500).send('error');
+    if (!result.ok) {
+      console.error('[payments] webhook apply premium failed', { label, operation_id, error: result.error });
+      return res.status(500).send('error');
+    }
+
+    console.log('[payments] premium activated via webhook', { label, operation_id, user_id: payment.user_id });
 
     return res.status(200).send('ok');
   } catch {
