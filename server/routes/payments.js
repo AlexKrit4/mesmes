@@ -156,7 +156,19 @@ router.post('/premium/confirm', auth, async (req, res) => {
 
   try {
     const check = await fetchSuccessfulOperationByLabel(label);
-    if (check.error) return res.status(400).json({ error: check.error });
+    if (check.error) {
+      const refreshed = db.prepare('SELECT status, paid_at FROM premium_payments WHERE id = ?').get(payment.id);
+      if (refreshed?.status === 'paid') {
+        const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(req.userId);
+        return res.json({ success: true, paid: true, already_paid: true, premium_until: user?.premium_until || null });
+      }
+      return res.status(202).json({
+        success: false,
+        paid: false,
+        message: 'Платёж ещё не подтверждён. Ожидаем webhook от YooMoney.',
+        check_error: check.error,
+      });
+    }
     if (!check.operation) {
       return res.status(202).json({ success: false, paid: false, message: 'Платёж ещё не подтверждён YooMoney' });
     }
