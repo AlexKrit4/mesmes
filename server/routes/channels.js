@@ -693,15 +693,16 @@ router.post('/:id/voice-circles/file', auth, (req, res) => {
     return res.status(403).json({ error: 'Голосовые кружки доступны только премиум пользователям' });
   }
   
-  voiceCircleUpload.single('voiceCircle')(req, res, (err) => {
+  voiceCircleUpload.fields([{ name: 'voiceCircle', maxCount: 1 }, { name: 'file', maxCount: 1 }])(req, res, (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ error: 'Видео слишком велико (макс. 50 МБ)' });
       }
       return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
     }
-    
-    if (!req.file) return res.status(400).json({ error: 'Выберите видеофайл' });
+
+    const uploadedFile = req.files?.voiceCircle?.[0] || req.files?.file?.[0] || null;
+    if (!uploadedFile) return res.status(400).json({ error: 'Выберите видеофайл' });
     
     const duration = req.body.duration ? parseFloat(req.body.duration) : 0;
     
@@ -709,16 +710,16 @@ router.post('/:id/voice-circles/file', auth, (req, res) => {
       const result = db.prepare(`
         INSERT INTO voice_circles (sender_id, channel_id, file_url, duration)
         VALUES (?, ?, ?, ?)
-      `).run(req.userId, chId, `/uploads/${req.file.filename}`, duration);
+      `).run(req.userId, chId, `/uploads/${uploadedFile.filename}`, duration);
       
       res.json({
         id: result.lastInsertRowid,
-        file_url: `/uploads/${req.file.filename}`,
+        file_url: `/uploads/${uploadedFile.filename}`,
         duration,
         created_at: new Date().toISOString(),
       });
     } catch (err) {
-      fs.unlink(req.file.path, () => {});
+      fs.unlink(uploadedFile.path, () => {});
       console.error('Voice circle insert error:', err);
       res.status(500).json({ error: 'Ошибка сохранения' });
     }

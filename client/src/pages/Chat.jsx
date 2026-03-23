@@ -587,7 +587,11 @@ export default function Chat() {
   const onSendVoice = async (blob, mode, duration) => {
     try {
       const formData = new FormData();
-      formData.append('file', blob);
+      const extension = mode === 'video' ? 'webm' : 'webm';
+      const mime = mode === 'video' ? 'video/webm' : 'audio/webm';
+      const file = new File([blob], `${mode}_${Date.now()}.${extension}`, { type: mime });
+      formData.append('voiceCircle', file);
+      formData.append('receiverId', String(friendIdNum));
       formData.append('duration', duration);
       const res = await api.post('/users/voice-circles/file', formData);
       const { file_url } = res.data;
