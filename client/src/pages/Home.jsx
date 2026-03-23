@@ -107,6 +107,7 @@ export default function Home() {
   const [showPushPrompt, setShowPushPrompt] = useState(() => localStorage.getItem('newUser') === '1');
   const [showPremiumGrantedPrompt, setShowPremiumGrantedPrompt] = useState(() => localStorage.getItem('premiumGrantedAtRegistration') === '1');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [openReportsCount, setOpenReportsCount] = useState(0);
   const [showRequests, setShowRequests] = useState(false);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
@@ -176,7 +177,15 @@ export default function Home() {
     (async () => {
       try {
         const { data } = await api.get('/admin/check');
-        if (data.isAdmin) setIsAdmin(true);
+        if (data.isAdmin) {
+          setIsAdmin(true);
+          try {
+            const unread = await api.get('/admin/reports/unread-count');
+            setOpenReportsCount(Number(unread.data?.count || 0));
+          } catch {
+            // ignore admin badge errors
+          }
+        }
       } catch { /* not admin */ }
       try {
         const { data } = await api.get('/users/me');
@@ -189,6 +198,16 @@ export default function Home() {
     const { data } = await api.get('/users/requests');
     setRequests(data);
   }, []);
+
+  const fetchOpenReportsCount = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const { data } = await api.get('/admin/reports/unread-count');
+      setOpenReportsCount(Number(data?.count || 0));
+    } catch {
+      // ignore admin badge errors
+    }
+  }, [isAdmin]);
 
   useEffect(() => {
     channelsRef.current = channels;
@@ -276,7 +295,11 @@ export default function Home() {
 
     // Re-fetch when tab becomes visible (e.g., returning from chat)
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') { fetchFriends(); fetchChannels(); }
+      if (document.visibilityState === 'visible') {
+        fetchFriends();
+        fetchChannels();
+        fetchOpenReportsCount();
+      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
@@ -291,7 +314,7 @@ export default function Home() {
       socket.off('channel_message');
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [fetchFriends, fetchRequests, fetchChannels, me.id, playIncomingSound]);
+  }, [fetchFriends, fetchRequests, fetchChannels, fetchOpenReportsCount, me.id, playIncomingSound]);
 
   // Search users by public_id
   useEffect(() => {
@@ -475,8 +498,9 @@ export default function Home() {
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
           {isAdmin && (
-            <button className="topbar-btn" onClick={() => navigate('/admin')} title="Админ-панель">
+            <button className="topbar-btn" onClick={() => navigate('/admin')} title="Админ-панель" style={{ position: 'relative' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              {openReportsCount > 0 && <span className="topbar-badge">{openReportsCount > 99 ? '99+' : openReportsCount}</span>}
             </button>
           )}
           <button className="topbar-btn" onClick={() => setShowRequests(true)} title="Заявки" style={{ position: 'relative' }}>
@@ -518,6 +542,9 @@ export default function Home() {
         <button className={`tab ${tab === 'channels' ? 'active' : ''}`} onClick={() => setTab('channels')}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           Каналы
+          {totalChannelUnread > 0 && (
+            <span className="tab-unread-badge">{totalChannelUnread > 99 ? '99+' : totalChannelUnread}</span>
+          )}
         </button>
       </div>
 
