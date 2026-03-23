@@ -147,7 +147,13 @@ router.post('/premium/confirm', auth, async (req, res) => {
   if (!label) return res.status(400).json({ error: 'label обязателен' });
 
   const payment = db.prepare('SELECT * FROM premium_payments WHERE label = ? AND user_id = ?').get(label, req.userId);
-  if (!payment) return res.status(404).json({ error: 'Платёж не найден' });
+  if (!payment) {
+    return res.status(202).json({
+      success: false,
+      paid: false,
+      message: 'Платёж ещё не найден. Подождите немного и повторите проверку.',
+    });
+  }
 
   if (payment.status === 'paid') {
     const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(req.userId);

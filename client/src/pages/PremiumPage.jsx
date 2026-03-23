@@ -36,6 +36,7 @@ export default function PremiumPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [me, setMe] = useState(JSON.parse(localStorage.getItem('me') || '{}'));
+  const isPaymentReturn = searchParams.get('payment') === 'return';
 
   const hasPremium = useMemo(
     () => !!(me?.premium_until && new Date(me.premium_until) > new Date()),
@@ -59,26 +60,36 @@ export default function PremiumPage() {
     const label = searchParams.get('label');
     if (paymentFlag !== 'return' || !label) return;
 
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
     const confirmPayment = async () => {
       setIsLoading(true);
       setStatusText('Проверяем оплату в ЮMoney...');
       try {
-        const { data } = await api.post('/payments/premium/confirm', { label });
-        if (data?.paid) {
-          await refreshMe();
-          setStatusText('✅ Оплата подтверждена. mes-premium активирован на 1 месяц.');
-          const next = new URLSearchParams(searchParams);
-          next.delete('payment');
-          next.delete('label');
-          setSearchParams(next, { replace: true });
-          return;
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const { data } = await api.post('/payments/premium/confirm', { label });
+          if (data?.paid) {
+            await refreshMe();
+            setStatusText('✅ Оплата подтверждена. mes-premium активирован на 1 месяц.');
+            const next = new URLSearchParams(searchParams);
+            next.delete('payment');
+            next.delete('label');
+            setSearchParams(next, { replace: true });
+            return;
+          }
+
+          if (attempt < 5) {
+            setStatusText('Платёж обрабатывается. Проверяем ещё раз...');
+            await sleep(5000);
+          }
         }
-        setStatusText('Платёж пока не найден. Попробуйте проверить ещё раз через 10–30 секунд.');
+
+        setStatusText('Платёж ещё обрабатывается. Подождите 10–30 секунд и нажмите «Проверить оплату».');
       } catch (err) {
         if (err.response?.status === 202) {
           setStatusText('Платёж ещё обрабатывается ЮMoney. Нажмите «Проверить оплату» чуть позже.');
         } else {
-          setStatusText(err.response?.data?.error || 'Не удалось подтвердить оплату');
+          setStatusText(err.response?.data?.error || 'Не удалось проверить оплату. Подождите и повторите.');
         }
       } finally {
         setIsLoading(false);
@@ -130,7 +141,7 @@ export default function PremiumPage() {
   return (
     <div className="premium-page">
       <div className="topbar">
-        <button className="topbar-btn" onClick={() => navigate(-1)}>
+        <button className="topbar-btn" onClick={() => (isPaymentReturn ? navigate('/settings') : navigate(-1))}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
         <span className="topbar-title">mes-premium</span>
