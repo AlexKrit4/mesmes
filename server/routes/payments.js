@@ -133,6 +133,29 @@ function applyPremiumByPayment(payment, operationInfo = {}) {
       return { ok: true, alreadyPaid: true, premiumUntil: user?.premium_until || null };
     }
 
+    if (operationInfo.operationId) {
+      const duplicateOp = db.prepare(`
+        SELECT id, user_id
+        FROM premium_payments
+        WHERE provider = ?
+          AND provider_operation_id = ?
+          AND status = 'paid'
+          AND id != ?
+        LIMIT 1
+      `).get(current.provider || 'yoomoney', operationInfo.operationId, current.id);
+
+      if (duplicateOp) {
+        const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(current.user_id);
+        db.exec('COMMIT');
+        return {
+          ok: true,
+          alreadyPaid: true,
+          duplicateOperation: true,
+          premiumUntil: user?.premium_until || null,
+        };
+      }
+    }
+
     const user = db.prepare('SELECT premium_until FROM users WHERE id = ?').get(current.user_id);
     const baseDate = user?.premium_until && new Date(user.premium_until) > new Date()
       ? new Date(user.premium_until)

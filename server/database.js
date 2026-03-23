@@ -407,6 +407,11 @@ try {
   `);
 } catch (e) {}
 
+// Migration: unique payment operation id (prevent duplicate credits from same provider operation)
+try {
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_premium_payments_provider_op_unique ON premium_payments(provider, provider_operation_id) WHERE provider_operation_id IS NOT NULL`);
+} catch (e) {}
+
 // Migration: channel member read/notification preferences
 try { db.exec(`ALTER TABLE channel_members ADD COLUMN last_read_at DATETIME DEFAULT NULL`); } catch (e) {}
 try { db.exec(`ALTER TABLE channel_members ADD COLUMN notifications_enabled INTEGER DEFAULT 1`); } catch (e) {}

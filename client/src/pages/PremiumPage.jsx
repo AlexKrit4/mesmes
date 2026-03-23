@@ -70,7 +70,7 @@ export default function PremiumPage() {
           const { data } = await api.post('/payments/premium/confirm', { label });
           if (data?.paid) {
             await refreshMe();
-            setStatusText('✅ Оплата подтверждена. mes-premium активирован на 1 месяц.');
+            setStatusText('✅ Оплата подтверждена. Срок mes-premium продлён.');
             const next = new URLSearchParams(searchParams);
             next.delete('payment');
             next.delete('label');
