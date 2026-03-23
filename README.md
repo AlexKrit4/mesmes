@@ -69,7 +69,28 @@ PORT=3001
 JWT_SECRET=ваш_длинный_случайный_секрет_минимум_32_символа
 CLIENT_ORIGIN=https://ваш-домен.ru
 NODE_ENV=production
+
+# YooMoney (mes-premium)
+YOOMONEY_RECEIVER=41001XXXXXXXXXXX
+YOOMONEY_TOKEN=your_yoomoney_oauth_token
+YOOMONEY_NOTIFICATION_SECRET=your_notification_secret
+PREMIUM_PRICE_RUB=50
 ```
+
+### 4.1 Настройка оплаты mes-premium через ЮMoney (50 ₽/месяц)
+
+1. Войдите в кошелёк ЮMoney и включите HTTP-уведомления.
+2. Укажите URL уведомлений: `https://ваш-домен.ru/api/payments/yoomoney/webhook`
+3. Укажите секрет уведомлений и сохраните его в `YOOMONEY_NOTIFICATION_SECRET`.
+4. Получите OAuth-токен YooMoney API (нужен для проверки `operation-history`) и сохраните в `YOOMONEY_TOKEN`.
+5. В `YOOMONEY_RECEIVER` укажите номер кошелька получателя.
+
+После этого в приложении на странице `/premium` появится кнопка оплаты:
+- `Оплатить 50 ₽ / месяц через ЮMoney`
+- после возврата из ЮMoney подписка активируется автоматически;
+- если webhook задержался, можно нажать `Проверить оплату`.
+
+> Важно: текущая интеграция продлевает подписку на 1 месяц за каждый успешный платёж. Это помесячная оплата (не автосписание). Для автосписаний обычно используют ЮKassa с рекуррентными платежами.
 
 ### 5. Запустите с PM2
 

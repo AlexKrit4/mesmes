@@ -1,4 +1,6 @@
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import api from '../api.js';
 
 const privileges = [
   {
@@ -30,6 +32,100 @@ const privileges = [
 
 export default function PremiumPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [isLoading, setIsLoading] = useState(false);
+  const [statusText, setStatusText] = useState('');
+  const [me, setMe] = useState(JSON.parse(localStorage.getItem('me') || '{}'));
+
+  const hasPremium = useMemo(
+    () => !!(me?.premium_until && new Date(me.premium_until) > new Date()),
+    [me]
+  );
+
+  const refreshMe = async () => {
+    try {
+      const { data } = await api.get('/users/me');
+      setMe(data);
+      localStorage.setItem('me', JSON.stringify(data));
+    } catch {}
+  };
+
+  useEffect(() => {
+    refreshMe();
+  }, []);
+
+  useEffect(() => {
+    const paymentFlag = searchParams.get('payment');
+    const label = searchParams.get('label');
+    if (paymentFlag !== 'return' || !label) return;
+
+    const confirmPayment = async () => {
+      setIsLoading(true);
+      setStatusText('Проверяем оплату в ЮMoney...');
+      try {
+        const { data } = await api.post('/payments/premium/confirm', { label });
+        if (data?.paid) {
+          await refreshMe();
+          setStatusText('✅ Оплата подтверждена. mes-premium активирован на 1 месяц.');
+          const next = new URLSearchParams(searchParams);
+          next.delete('payment');
+          next.delete('label');
+          setSearchParams(next, { replace: true });
+          return;
+        }
+        setStatusText('Платёж пока не найден. Попробуйте проверить ещё раз через 10–30 секунд.');
+      } catch (err) {
+        if (err.response?.status === 202) {
+          setStatusText('Платёж ещё обрабатывается ЮMoney. Нажмите «Проверить оплату» чуть позже.');
+        } else {
+          setStatusText(err.response?.data?.error || 'Не удалось подтвердить оплату');
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    confirmPayment();
+  }, [searchParams, setSearchParams]);
+
+  const startPayment = async () => {
+    setIsLoading(true);
+    setStatusText('Создаём ссылку оплаты...');
+    try {
+      const { data } = await api.post('/payments/premium/create');
+      if (!data?.payment_url) throw new Error('Ссылка оплаты не получена');
+      window.location.href = data.payment_url;
+    } catch (err) {
+      setStatusText(err.response?.data?.error || err.message || 'Ошибка создания платежа');
+      setIsLoading(false);
+    }
+  };
+
+  const checkPaymentAgain = async () => {
+    const label = searchParams.get('label');
+    if (!label) {
+      setStatusText('Нет идентификатора платежа для проверки. Начните оплату заново.');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { data } = await api.post('/payments/premium/confirm', { label });
+      if (data?.paid) {
+        await refreshMe();
+        setStatusText('✅ Оплата подтверждена. mes-premium активирован.');
+      } else {
+        setStatusText('Платёж ещё не подтверждён. Подождите и проверьте снова.');
+      }
+    } catch (err) {
+      if (err.response?.status === 202) {
+        setStatusText('Платёж ещё обрабатывается, попробуйте через несколько секунд.');
+      } else {
+        setStatusText(err.response?.data?.error || 'Ошибка проверки платежа');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="premium-page">
@@ -45,7 +141,7 @@ export default function PremiumPage() {
         <div className="premium-hero">
           <div className="premium-hero-icon">⭐</div>
           <h1 className="premium-hero-title">mes-premium</h1>
-          <p className="premium-hero-sub">Раскройте все возможности мессенджера</p>
+          <p className="premium-hero-sub">50 ₽ / месяц • оплата через ЮMoney</p>
         </div>
 
         <div className="premium-privileges">
@@ -61,7 +157,23 @@ export default function PremiumPage() {
         </div>
 
         <div className="premium-cta">
-          <p className="premium-cta-text">Для получения Premium обратитесь к администратору мессенджера.</p>
+          {hasPremium ? (
+            <p className="premium-cta-text" style={{ color: 'var(--accent)' }}>
+              Premium активен до {new Date(me.premium_until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          ) : (
+            <button className="btn btn-accent" onClick={startPayment} disabled={isLoading}>
+              {isLoading ? 'Подождите...' : 'Оплатить 50 ₽ / месяц через ЮMoney'}
+            </button>
+          )}
+
+          {searchParams.get('label') && !hasPremium && (
+            <button className="btn btn-ghost" onClick={checkPaymentAgain} disabled={isLoading} style={{ marginTop: 10 }}>
+              Проверить оплату
+            </button>
+          )}
+
+          {!!statusText && <p className="premium-cta-text" style={{ marginTop: 12 }}>{statusText}</p>}
         </div>
       </div>
     </div>

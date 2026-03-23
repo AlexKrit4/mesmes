@@ -381,3 +381,23 @@ try { db.exec(`ALTER TABLE users ADD COLUMN twofa_temp_secret TEXT DEFAULT NULL`
 // Migration: add is_pinned to messages and channel_messages
 try { db.exec(`ALTER TABLE messages ADD COLUMN is_pinned INTEGER DEFAULT 0`); } catch (e) {}
 try { db.exec(`ALTER TABLE channel_messages ADD COLUMN is_pinned INTEGER DEFAULT 0`); } catch (e) {}
+
+// Migration: premium payments table (YooMoney)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS premium_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      label TEXT NOT NULL UNIQUE,
+      amount_rub INTEGER NOT NULL,
+      months INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'pending',
+      provider TEXT NOT NULL DEFAULT 'yoomoney',
+      provider_operation_id TEXT DEFAULT NULL,
+      paid_at DATETIME DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+} catch (e) {}
