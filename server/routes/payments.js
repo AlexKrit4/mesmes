@@ -7,6 +7,7 @@ const router = express.Router();
 
 const PREMIUM_PRICE_RUB = Number(process.env.PREMIUM_PRICE_RUB || 50);
 const PREMIUM_MONTHS = 1;
+const MIN_ACCEPTABLE_PAYMENT_RUB = Number(process.env.PREMIUM_MIN_ACCEPTED_RUB || PREMIUM_PRICE_RUB);
 
 const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '';
 const YOOMONEY_TOKEN = process.env.YOOMONEY_TOKEN || '';
@@ -18,8 +19,24 @@ function generateLabel(userId) {
 }
 
 function toNumberSafe(value) {
-  const num = Number(value);
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+
+  const normalized = String(value)
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(',', '.')
+    .replace(/[^0-9.-]/g, '');
+
+  const num = Number(normalized);
   return Number.isFinite(num) ? num : 0;
+}
+
+function isPaymentAmountEnough(rawPaidAmount, requiredAmount) {
+  const paid = toNumberSafe(rawPaidAmount);
+  const required = toNumberSafe(requiredAmount);
+  const epsilon = 0.01;
+  return paid + epsilon >= required;
 }
 
 function addMonthsIso(baseDate, months) {
@@ -181,7 +198,13 @@ router.post('/premium/confirm', auth, async (req, res) => {
     }
 
     const opAmount = toNumberSafe(check.operation.amount);
-    if (opAmount < payment.amount_rub) {
+    if (!isPaymentAmountEnough(opAmount, MIN_ACCEPTABLE_PAYMENT_RUB)) {
+      console.warn('[payments] operation amount too small', {
+        label,
+        opAmount,
+        minRequired: MIN_ACCEPTABLE_PAYMENT_RUB,
+        price: payment.amount_rub,
+      });
       return res.status(400).json({ error: `Оплаченная сумма меньше требуемой (${payment.amount_rub} ₽)` });
     }
 
@@ -265,7 +288,15 @@ router.post('/yoomoney/webhook', (req, res) => {
     if (payment.status === 'paid') return res.status(200).send('ok');
 
     const amountRub = toNumberSafe(amount);
-    if (amountRub < payment.amount_rub) return res.status(400).send('small-amount');
+    if (!isPaymentAmountEnough(amountRub, MIN_ACCEPTABLE_PAYMENT_RUB)) {
+      console.warn('[payments] webhook amount too small', {
+        label,
+        amountRub,
+        minRequired: MIN_ACCEPTABLE_PAYMENT_RUB,
+        price: payment.amount_rub,
+      });
+      return res.status(400).send('small-amount');
+    }
 
     const result = applyPremiumByPayment(payment, {
       operationId: operation_id || null,

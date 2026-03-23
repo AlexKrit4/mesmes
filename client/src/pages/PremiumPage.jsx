@@ -79,12 +79,12 @@ export default function PremiumPage() {
           }
 
           if (data?.check_error) {
-            setStatusText(`Платёж не подтверждён автоматически: ${data.check_error}. Проверь webhook и токен YooMoney.`);
-            return;
+            setStatusText(`ЮMoney API временно недоступен (${data.check_error}). Ожидаем webhook...`);
+          } else if (attempt < 5) {
+            setStatusText('Платёж обрабатывается. Проверяем ещё раз...');
           }
 
           if (attempt < 5) {
-            setStatusText('Платёж обрабатывается. Проверяем ещё раз...');
             await sleep(5000);
           }
         }
