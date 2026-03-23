@@ -3431,26 +3431,96 @@ img.avatar {
   border: 1px solid var(--border);
 }
 
-.simple-recorder-controls.is-video {
+.simple-recorder-video-card {
+  display: flex;
   flex-direction: column;
-  align-items: stretch;
-  min-width: 180px;
-}
-
-.simple-recorder-live-preview {
-  width: 100%;
-  height: 220px;
-  border-radius: 14px;
-  object-fit: cover;
-  transform: scaleX(-1);
+  align-items: center;
+  gap: 10px;
+  background: var(--bg3);
   border: 1px solid var(--border);
-  background: #000;
+  border-radius: 14px;
+  padding: 10px;
+  min-width: 210px;
 }
 
-.simple-recorder-controls.is-video .simple-recorder-timer,
-.simple-recorder-controls.is-video .simple-recorder-stop,
-.simple-recorder-controls.is-video .simple-recorder-cancel {
-  align-self: center;
+.simple-recorder-video-circle {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: #000;
+  position: relative;
+}
+
+.simple-recorder-video-circle.recording {
+  border-color: var(--accent);
+}
+
+.simple-recorder-live-circle,
+.simple-recorder-recorded-circle {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.simple-recorder-live-circle {
+  transform: scaleX(-1);
+}
+
+.simple-recorder-player-strip {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 9px;
+}
+
+.simple-recorder-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff4d4f;
+}
+
+.simple-recorder-play {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg4);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.simple-recorder-seek {
+  flex: 1;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.simple-recorder-strip-time {
+  font-size: 12px;
+  color: var(--text2);
+  min-width: 72px;
+  text-align: right;
+  font-family: 'Courier New', monospace;
+}
+
+.simple-recorder-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
 }
 
 .simple-recorder-timer {
@@ -3504,8 +3574,8 @@ img.avatar {
 }
 
 .simple-recorder-send {
-  width: 40px;
-  height: 40px;
+  width: 130px;
+  height: 36px;
   border-radius: 50%;
   background: var(--green);
   border: none;
@@ -3515,8 +3585,10 @@ img.avatar {
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
-  font-size: 18px;
-  margin-left: auto;
+  font-size: 15px;
+  margin-left: 0;
+  border-radius: 999px;
+  font-weight: 600;
 }
 
 .simple-recorder-send:hover {

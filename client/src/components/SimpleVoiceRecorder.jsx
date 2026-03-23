@@ -9,12 +9,17 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
   const [error, setError] = useState(null);
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordedMode, setRecordedMode] = useState(mode);
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState('');
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [videoPosition, setVideoPosition] = useState(0);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const videoRef = useRef(null);
+  const recordedVideoRef = useRef(null);
   const cancelAfterStopRef = useRef(false);
 
   // Cleanup
@@ -24,8 +29,9 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
       }
       if (timerRef.current) clearInterval(timerRef.current);
+      if (recordedVideoUrl) URL.revokeObjectURL(recordedVideoUrl);
     };
-  }, []);
+  }, [recordedVideoUrl]);
 
   // Init camera for video mode
   useEffect(() => {
@@ -59,6 +65,26 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
       videoRef.current.srcObject = mediaStreamRef.current;
     }
   }, [mode, isRecording]);
+
+  useEffect(() => {
+    if (recordedMode !== 'video' || !recordedBlob) {
+      if (recordedVideoUrl) {
+        URL.revokeObjectURL(recordedVideoUrl);
+      }
+      setRecordedVideoUrl('');
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(recordedBlob);
+    setRecordedVideoUrl(objectUrl);
+    setVideoDuration(0);
+    setVideoPosition(0);
+    setIsVideoPlaying(false);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [recordedBlob, recordedMode]);
 
   const startRecording = async () => {
     if (mode === 'video' && !mediaStreamRef.current) return;
@@ -106,6 +132,9 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
         chunksRef.current = [];
         setRecordedBlob(null);
         setRecordingTime(0);
+        setVideoDuration(0);
+        setVideoPosition(0);
+        setIsVideoPlaying(false);
         return;
       }
 
@@ -158,6 +187,9 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
 
       setRecordedBlob(null);
       setRecordingTime(0);
+      setVideoDuration(0);
+      setVideoPosition(0);
+      setIsVideoPlaying(false);
     } catch (err) {
       console.error('Send error:', err);
       setError('Ошибка отправки');
@@ -177,6 +209,15 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
     chunksRef.current = [];
     setRecordedBlob(null);
     setRecordingTime(0);
+    setVideoDuration(0);
+    setVideoPosition(0);
+    setIsVideoPlaying(false);
+
+    if (recordedVideoRef.current) {
+      recordedVideoRef.current.pause();
+      recordedVideoRef.current.currentTime = 0;
+    }
+
     if (onCancel) onCancel();
   };
 
@@ -188,6 +229,38 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
 
   const hasRecording = !!recordedBlob;
   const isVideoRecording = isRecording && mode === 'video';
+
+  const onRecordedVideoLoaded = () => {
+    if (!recordedVideoRef.current) return;
+    const duration = Number(recordedVideoRef.current.duration || 0);
+    setVideoDuration(Number.isFinite(duration) ? duration : 0);
+  };
+
+  const onRecordedVideoTimeUpdate = () => {
+    if (!recordedVideoRef.current) return;
+    setVideoPosition(Number(recordedVideoRef.current.currentTime || 0));
+  };
+
+  const toggleRecordedVideoPlayback = async () => {
+    if (!recordedVideoRef.current) return;
+    try {
+      if (recordedVideoRef.current.paused) {
+        await recordedVideoRef.current.play();
+        setIsVideoPlaying(true);
+      } else {
+        recordedVideoRef.current.pause();
+        setIsVideoPlaying(false);
+      }
+    } catch {
+      setIsVideoPlaying(false);
+    }
+  };
+
+  const onRecordedVideoSeek = (e) => {
+    const value = Number(e.target.value || 0);
+    setVideoPosition(value);
+    if (recordedVideoRef.current) recordedVideoRef.current.currentTime = value;
+  };
 
   if (!isRecording && !hasRecording) {
     return (
@@ -211,17 +284,44 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
   }
 
   if (isRecording) {
+    if (mode === 'video') {
+      return (
+        <div className="simple-recorder-video-card">
+          <div className="simple-recorder-video-circle recording">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="simple-recorder-live-circle"
+            />
+          </div>
+          <div className="simple-recorder-player-strip">
+            <span className="simple-recorder-dot" />
+            <span className="simple-recorder-strip-time">{formatTime(recordingTime)}</span>
+          </div>
+          <div className="simple-recorder-action-row">
+            <button
+              className="simple-recorder-stop"
+              onClick={stopRecording}
+              title="Остановить запись"
+            >
+              ⏹️
+            </button>
+            <button
+              className="simple-recorder-cancel"
+              onClick={cancelRecording}
+              title="Отменить"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className={`simple-recorder-controls${isVideoRecording ? ' is-video' : ''}`}>
-        {mode === 'video' && (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="simple-recorder-live-preview"
-          />
-        )}
+      <div className="simple-recorder-controls">
         <div className="simple-recorder-timer">{formatTime(recordingTime)}</div>
         <button
           className="simple-recorder-stop"
@@ -237,6 +337,64 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
         >
           ✕
         </button>
+      </div>
+    );
+  }
+
+  if (hasRecording && recordedMode === 'video') {
+    return (
+      <div className="simple-recorder-video-card">
+        <div className="simple-recorder-video-circle">
+          <video
+            ref={recordedVideoRef}
+            src={recordedVideoUrl}
+            playsInline
+            className="simple-recorder-recorded-circle"
+            onLoadedMetadata={onRecordedVideoLoaded}
+            onTimeUpdate={onRecordedVideoTimeUpdate}
+            onEnded={() => setIsVideoPlaying(false)}
+          />
+        </div>
+
+        <div className="simple-recorder-player-strip">
+          <button
+            className="simple-recorder-play"
+            onClick={toggleRecordedVideoPlayback}
+            type="button"
+          >
+            {isVideoPlaying ? '⏸' : '▶'}
+          </button>
+          <input
+            className="simple-recorder-seek"
+            type="range"
+            min="0"
+            max={videoDuration || 0}
+            value={Math.min(videoPosition, videoDuration || 0)}
+            step="0.01"
+            onChange={onRecordedVideoSeek}
+          />
+          <span className="simple-recorder-strip-time">
+            {formatTime(Math.floor(videoPosition))} / {formatTime(Math.floor(videoDuration))}
+          </span>
+        </div>
+
+        <div className="simple-recorder-action-row">
+          <button
+            className="simple-recorder-send"
+            onClick={sendRecording}
+            disabled={isUploading}
+          >
+            {isUploading ? '...' : '📤 Отправить'}
+          </button>
+          <button
+            className="simple-recorder-cancel"
+            onClick={cancelRecording}
+            disabled={isUploading}
+          >
+            ✕
+          </button>
+        </div>
+        {error && <div className="error-msg">{error}</div>}
       </div>
     );
   }
