@@ -14,22 +14,76 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function requireAdminOrModerator(req, res, next) {
+  const user = db.prepare('SELECT is_admin, is_moderator FROM users WHERE id = ?').get(req.userId);
+  if (!user || (!user.is_admin && !user.is_moderator)) {
+    return res.status(403).json({ error: 'Нет доступа' });
+  }
+  req.access = {
+    isAdmin: !!user.is_admin,
+    isModerator: !!user.is_moderator,
+  };
+  next();
+}
+
 // GET /api/admin/check — check if current user is admin
 router.get('/check', auth, (req, res) => {
-  const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.userId);
-  res.json({ isAdmin: !!(user && user.is_admin) });
+  const user = db.prepare('SELECT is_admin, is_moderator FROM users WHERE id = ?').get(req.userId);
+  const isAdmin = !!(user && user.is_admin);
+  const isModerator = !!(user && user.is_moderator);
+  res.json({ isAdmin, isModerator, canAccessAdminPanel: isAdmin || isModerator });
 });
 
 // GET /api/admin/users — list all users
 router.get('/users', auth, requireAdmin, (req, res) => {
   const users = db.prepare(`
-    SELECT u.id, u.username, u.public_id, u.email, u.avatar, u.created_at, u.last_seen, u.is_admin, u.premium_until,
+    SELECT u.id, u.username, u.public_id, u.email, u.avatar, u.created_at, u.last_seen, u.is_admin, u.is_moderator, u.premium_until,
       (SELECT COUNT(*) FROM messages WHERE sender_id = u.id) as message_count,
       (SELECT b.id FROM bans b WHERE b.user_id = u.id AND b.active = 1 LIMIT 1) as active_ban_id
     FROM users u
     ORDER BY u.id ASC
   `).all();
   res.json(users);
+});
+
+// GET /api/admin/channels — list all channels
+router.get('/channels', auth, requireAdmin, (req, res) => {
+  const channels = db.prepare(`
+    SELECT c.id, c.name, c.description, c.avatar, c.owner_id, c.invite_code, c.created_at,
+           u.username as owner_username, u.public_id as owner_public_id,
+           (SELECT COUNT(*) FROM channel_members cm WHERE cm.channel_id = c.id) as member_count,
+           (SELECT COUNT(*) FROM channel_messages m WHERE m.channel_id = c.id) as message_count
+    FROM channels c
+    LEFT JOIN users u ON u.id = c.owner_id
+    ORDER BY c.created_at DESC
+  `).all();
+  res.json(channels);
+});
+
+// POST /api/admin/moderator/grant — grant moderator role
+router.post('/moderator/grant', auth, requireAdmin, (req, res) => {
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id обязателен' });
+
+  const target = db.prepare('SELECT id, is_admin FROM users WHERE id = ?').get(user_id);
+  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (target.is_admin) return res.status(400).json({ error: 'Администратор уже имеет все права' });
+
+  db.prepare('UPDATE users SET is_moderator = 1 WHERE id = ?').run(user_id);
+  res.json({ success: true });
+});
+
+// POST /api/admin/moderator/revoke — revoke moderator role
+router.post('/moderator/revoke', auth, requireAdmin, (req, res) => {
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id обязателен' });
+
+  const target = db.prepare('SELECT id, is_admin FROM users WHERE id = ?').get(user_id);
+  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (target.is_admin) return res.status(400).json({ error: 'Нельзя снимать права администратора через модерацию' });
+
+  db.prepare('UPDATE users SET is_moderator = 0 WHERE id = ?').run(user_id);
+  res.json({ success: true });
 });
 
 // GET /api/admin/users/:userId/messages — all messages by user (including deleted)
@@ -136,13 +190,13 @@ router.post('/premium/revoke', auth, requireAdmin, (req, res) => {
 // --- REPORTS SYSTEM ---
 
 // GET /api/admin/reports/unread-count
-router.get('/reports/unread-count', auth, requireAdmin, (req, res) => {
+router.get('/reports/unread-count', auth, requireAdminOrModerator, (req, res) => {
   const { count } = db.prepare("SELECT COUNT(*) as count FROM reports WHERE status = 'open'").get();
   res.json({ count });
 });
 
 // GET /api/admin/reports
-router.get('/reports', auth, requireAdmin, (req, res) => {
+router.get('/reports', auth, requireAdminOrModerator, (req, res) => {
   const reports = db.prepare(`
     SELECT r.*, 
            reporter.username as reporter_username, reporter.public_id as reporter_public_id,
@@ -156,7 +210,7 @@ router.get('/reports', auth, requireAdmin, (req, res) => {
 });
 
 // POST /api/admin/reports/:id/resolve
-router.post('/reports/:id/resolve', auth, requireAdmin, (req, res) => {
+router.post('/reports/:id/resolve', auth, requireAdminOrModerator, (req, res) => {
   const reportId = parseInt(req.params.id);
   const { resolution, admin_comment } = req.body; // resolution: 'banned', 'forgiven'
 

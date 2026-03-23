@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api.js';
 
 function formatDate(d) {
@@ -10,7 +10,9 @@ function formatDate(d) {
 
 export default function AdminPanel() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [users, setUsers] = useState([]);
+  const [channels, setChannels] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [bans, setBans] = useState([]);
@@ -30,18 +32,33 @@ export default function AdminPanel() {
   const [reportAction, setReportAction] = useState('banned'); // banned | forgiven
   const [adminComment, setAdminComment] = useState('');
   const [reportMsg, setReportMsg] = useState('');
+  const [moderatorMsg, setModeratorMsg] = useState('');
+  const [adminAccess, setAdminAccess] = useState({ isAdmin: false, isModerator: false, canAccessAdminPanel: false });
 
   // Check admin access
   useEffect(() => {
     (async () => {
       try {
         const { data } = await api.get('/admin/check');
-        if (!data.isAdmin) navigate('/');
+        if (!data.canAccessAdminPanel) {
+          navigate('/');
+          return;
+        }
+        setAdminAccess(data);
+
+        const requestedSection = new URLSearchParams(location.search).get('section');
+        const allowedSections = data.isAdmin ? ['users', 'reports', 'channels'] : ['reports'];
+
+        if (requestedSection && allowedSections.includes(requestedSection)) {
+          setMainTab(requestedSection);
+        } else {
+          setMainTab(data.isAdmin ? 'users' : 'reports');
+        }
       } catch {
         navigate('/');
       }
     })();
-  }, [navigate]);
+  }, [navigate, location.search]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -60,12 +77,24 @@ export default function AdminPanel() {
       const unreadCount = data.filter(r => r.status === 'open').length;
       setUnreadReports(unreadCount);
     } catch { /* */ }
+    setLoading(false);
+  }, []);
+
+  const fetchChannels = useCallback(async () => {
+    try {
+      const { data } = await api.get('/admin/channels');
+      setChannels(data);
+    } catch { /* */ }
+    setLoading(false);
   }, []);
 
   useEffect(() => { 
-    if (mainTab === 'users') fetchUsers(); 
+    if (!adminAccess.canAccessAdminPanel) return;
+
+    if (mainTab === 'users' && adminAccess.isAdmin) fetchUsers();
+    else if (mainTab === 'channels' && adminAccess.isAdmin) fetchChannels();
     else fetchReports();
-  }, [fetchUsers, fetchReports, mainTab]);
+  }, [fetchUsers, fetchReports, fetchChannels, mainTab, adminAccess]);
 
   const handleResolveReport = async () => {
     if (!adminComment) {
@@ -88,6 +117,7 @@ export default function AdminPanel() {
     setSelectedUser(user);
     setTab('messages');
     setBanMsg('');
+    setModeratorMsg('');
     try {
       const [msgRes, banRes] = await Promise.all([
         api.get(`/admin/users/${user.id}/messages`),
@@ -155,6 +185,35 @@ export default function AdminPanel() {
     }
   };
 
+  const toggleModerator = async () => {
+    if (!selectedUser) return;
+    setModeratorMsg('');
+
+    if (selectedUser.is_admin) {
+      setModeratorMsg('Администратору не нужно выдавать модерацию');
+      return;
+    }
+
+    const currentUser = users.find((u) => u.id === selectedUser.id) || selectedUser;
+    const isModerator = !!currentUser.is_moderator;
+
+    try {
+      if (isModerator) {
+        await api.post('/admin/moderator/revoke', { user_id: selectedUser.id });
+        setModeratorMsg('Права модератора сняты');
+      } else {
+        await api.post('/admin/moderator/grant', { user_id: selectedUser.id });
+        setModeratorMsg('Права модератора выданы');
+      }
+
+      const nextValue = isModerator ? 0 : 1;
+      setUsers((prev) => prev.map((u) => (u.id === selectedUser.id ? { ...u, is_moderator: nextValue } : u)));
+      setSelectedUser((prev) => (prev ? { ...prev, is_moderator: nextValue } : prev));
+    } catch (err) {
+      setModeratorMsg(err.response?.data?.error || 'Ошибка изменения прав');
+    }
+  };
+
   const filteredUsers = users.filter((u) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
@@ -162,6 +221,7 @@ export default function AdminPanel() {
   });
 
   const isUserBanned = selectedUser && users.find(u => u.id === selectedUser.id)?.active_ban_id;
+  const isUserModerator = selectedUser && users.find(u => u.id === selectedUser.id)?.is_moderator;
   const userPremiumUntil = selectedUser && users.find(u => u.id === selectedUser.id)?.premium_until;
   const isUserPremium = userPremiumUntil && new Date(userPremiumUntil) > new Date();
 
@@ -179,11 +239,15 @@ export default function AdminPanel() {
       </div>
 
       <div style={{ display: 'flex', borderBottom: '1px solid #333', marginBottom: '15px' }}>
-        <div 
-          onClick={() => { setMainTab('users'); setSelectedUser(null); setSelectedReport(null); }}
-          style={{ flex: 1, padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'users' ? '2px solid #0088cc' : 'none', color: mainTab === 'users' ? '#0088cc' : '#aaa' }}
-        >Пользователи</div>
-        <div 
+        {adminAccess.isAdmin && (
+          <>
+            <div
+              onClick={() => { setMainTab('users'); setSelectedUser(null); setSelectedReport(null); }}
+              style={{ flex: 1, padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'users' ? '2px solid #0088cc' : 'none', color: mainTab === 'users' ? '#0088cc' : '#aaa' }}
+            >Пользователи</div>
+          </>
+        )}
+        <div
           onClick={() => { setMainTab('reports'); setSelectedUser(null); setSelectedReport(null); }}
           style={{ flex: 1, padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'reports' ? '2px solid #0088cc' : 'none', color: mainTab === 'reports' ? '#0088cc' : '#aaa', position: 'relative' }}
         >
@@ -192,6 +256,12 @@ export default function AdminPanel() {
             <span style={{ background: 'red', color: 'white', padding: '2px 6px', borderRadius: '10px', fontSize: '12px', marginLeft: '8px' }}>{unreadReports}</span>
           )}
         </div>
+        {adminAccess.isAdmin && (
+          <div
+            onClick={() => { setMainTab('channels'); setSelectedUser(null); setSelectedReport(null); }}
+            style={{ flex: 1, padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'channels' ? '2px solid #0088cc' : 'none', color: mainTab === 'channels' ? '#0088cc' : '#aaa' }}
+          >Каналы</div>
+        )}
       </div>
 
       {mainTab === 'users' && !selectedUser && (
@@ -245,7 +315,17 @@ export default function AdminPanel() {
               <div className="admin-detail-name">{selectedUser.username}</div>
               <div className="admin-detail-id">@{selectedUser.public_id} · ID: {selectedUser.id}</div>
               {selectedUser.email && <div className="admin-detail-email">{selectedUser.email}</div>}
+              {selectedUser.is_admin ? <div className="admin-detail-email" style={{ color: '#4CAF50' }}>Администратор</div> : null}
+              {selectedUser.is_moderator ? <div className="admin-detail-email" style={{ color: '#0088cc' }}>Модератор</div> : null}
             </div>
+          </div>
+
+          <div className="admin-ban-form" style={{ marginBottom: 12 }}>
+            <h3>Права модерации</h3>
+            <button className={`btn ${isUserModerator ? 'btn-danger' : 'btn-primary'}`} onClick={toggleModerator}>
+              {isUserModerator ? 'Снять права модератора' : 'Выдать права модератора'}
+            </button>
+            {moderatorMsg && <div className="admin-ban-msg">{moderatorMsg}</div>}
           </div>
 
           {/* Tabs */}
@@ -466,6 +546,30 @@ export default function AdminPanel() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {mainTab === 'channels' && (
+        <div className="admin-user-list">
+          <div className="admin-user-count">Каналов: {channels.length}</div>
+          {channels.length === 0 ? <div style={{ padding: '20px', textAlign: 'center' }}>Каналов нет</div> : null}
+          {channels.map((ch) => (
+            <div key={ch.id} className="admin-user-card">
+              <div className="admin-user-avatar">
+                {ch.avatar
+                  ? <img src={ch.avatar} alt="" />
+                  : <span>📢</span>
+                }
+              </div>
+              <div className="admin-user-info">
+                <div className="admin-user-name">{ch.name}</div>
+                <div className="admin-user-id">ID: {ch.id} · Код: {ch.invite_code}</div>
+                <div className="admin-user-meta">Владелец: {ch.owner_username || '—'} (@{ch.owner_public_id || '—'})</div>
+                <div className="admin-user-meta">Участников: {ch.member_count} · Сообщений: {ch.message_count}</div>
+                <div className="admin-user-meta">Создан: {formatDate(ch.created_at)}</div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

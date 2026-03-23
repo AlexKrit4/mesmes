@@ -149,6 +149,11 @@ try {
   db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0`);
 } catch (e) {}
 
+// Migration: add is_moderator to users
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN is_moderator INTEGER DEFAULT 0`);
+} catch (e) {}
+
 // Migration: bans table
 try {
   db.exec(`

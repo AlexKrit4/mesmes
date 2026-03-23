@@ -106,8 +106,9 @@ export default function Home() {
   const [showProfile, setShowProfile] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(() => localStorage.getItem('newUser') === '1');
   const [showPremiumGrantedPrompt, setShowPremiumGrantedPrompt] = useState(() => localStorage.getItem('premiumGrantedAtRegistration') === '1');
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminAccess, setAdminAccess] = useState({ isAdmin: false, isModerator: false, canAccessAdminPanel: false });
   const [openReportsCount, setOpenReportsCount] = useState(0);
+  const [showAdminMenu, setShowAdminMenu] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
@@ -177,8 +178,8 @@ export default function Home() {
     (async () => {
       try {
         const { data } = await api.get('/admin/check');
-        if (data.isAdmin) {
-          setIsAdmin(true);
+        if (data?.canAccessAdminPanel) {
+          setAdminAccess(data);
           try {
             const unread = await api.get('/admin/reports/unread-count');
             setOpenReportsCount(Number(unread.data?.count || 0));
@@ -200,14 +201,14 @@ export default function Home() {
   }, []);
 
   const fetchOpenReportsCount = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!adminAccess.canAccessAdminPanel) return;
     try {
       const { data } = await api.get('/admin/reports/unread-count');
       setOpenReportsCount(Number(data?.count || 0));
     } catch {
       // ignore admin badge errors
     }
-  }, [isAdmin]);
+  }, [adminAccess.canAccessAdminPanel]);
 
   useEffect(() => {
     channelsRef.current = channels;
@@ -497,11 +498,31 @@ export default function Home() {
           <span className="topbar-title">МесМес</span>
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
-          {isAdmin && (
-            <button className="topbar-btn" onClick={() => navigate('/admin')} title="Админ-панель" style={{ position: 'relative' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              {openReportsCount > 0 && <span className="topbar-badge">{openReportsCount > 99 ? '99+' : openReportsCount}</span>}
-            </button>
+          {adminAccess.canAccessAdminPanel && (
+            <div style={{ position: 'relative' }}>
+              <button className="topbar-btn" onClick={() => setShowAdminMenu((v) => !v)} title="Админ-панель" style={{ position: 'relative' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                {openReportsCount > 0 && <span className="topbar-badge">{openReportsCount > 99 ? '99+' : openReportsCount}</span>}
+              </button>
+
+              {showAdminMenu && (
+                <div style={{ position: 'absolute', top: '42px', right: 0, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: '10px', minWidth: '170px', zIndex: 60, overflow: 'hidden' }}>
+                  {adminAccess.isAdmin && (
+                    <button className="topbar-btn" style={{ width: '100%', justifyContent: 'flex-start', borderRadius: 0, height: '40px' }} onClick={() => { setShowAdminMenu(false); navigate('/admin?section=users'); }}>
+                      Пользователи
+                    </button>
+                  )}
+                  <button className="topbar-btn" style={{ width: '100%', justifyContent: 'flex-start', borderRadius: 0, height: '40px' }} onClick={() => { setShowAdminMenu(false); navigate('/admin?section=reports'); }}>
+                    Репорты
+                  </button>
+                  {adminAccess.isAdmin && (
+                    <button className="topbar-btn" style={{ width: '100%', justifyContent: 'flex-start', borderRadius: 0, height: '40px' }} onClick={() => { setShowAdminMenu(false); navigate('/admin?section=channels'); }}>
+                      Каналы
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
           <button className="topbar-btn" onClick={() => setShowRequests(true)} title="Заявки" style={{ position: 'relative' }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
