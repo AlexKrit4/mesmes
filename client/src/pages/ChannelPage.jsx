@@ -137,6 +137,16 @@ function formatDayLabel(dateStr) {
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 }
 
+function formatCommentsLabel(count) {
+  const value = Number(count || 0);
+  if (value <= 0) return 'Комментарии';
+  const mod10 = value % 10;
+  const mod100 = value % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${value} комментарий`;
+  if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) return `${value} комментария`;
+  return `${value} комментариев`;
+}
+
 export default function ChannelPage() {
   const { id } = useParams();
   const channelId = parseInt(id);
@@ -299,7 +309,7 @@ export default function ChannelPage() {
       if (msg.channel_id === channelId) {
         setMessages((prev) => {
           if (prev.find((m) => m.id === msg.id)) return prev;
-          return [...prev, msg];
+          return [...prev, { ...msg, comment_count: Number(msg.comment_count || 0) }];
         });
         markChannelRead();
       }
@@ -316,12 +326,22 @@ export default function ChannelPage() {
         setMessages((prev) => prev.filter((m) => m.id !== messageId));
       }
     };
+    const onChannelPostComment = (comment) => {
+      if (comment?.channel_id !== channelId) return;
+      setMessages((prev) => prev.map((m) => (
+        m.id === comment.message_id
+          ? { ...m, comment_count: Number(m.comment_count || 0) + 1 }
+          : m
+      )));
+    };
     socket.on('channel_message_edited', onChannelMsgEdited);
     socket.on('channel_message_deleted', onChannelMsgDeleted);
+    socket.on('channel_post_comment', onChannelPostComment);
     return () => {
       socket.off('channel_message', onChannelMsg);
       socket.off('channel_message_edited', onChannelMsgEdited);
       socket.off('channel_message_deleted', onChannelMsgDeleted);
+      socket.off('channel_post_comment', onChannelPostComment);
     };
   }, [channelId, markChannelRead]);
 
@@ -859,14 +879,6 @@ export default function ChannelPage() {
                 </div>
               )}
               {msg.content && <div className="message-text"><Linkify>{msg.content}</Linkify></div>}
-              <div className="channel-post-actions">
-                <button
-                  className="channel-comment-btn"
-                  onClick={() => navigate(`/channel/${channelId}/post/${msg.id}`)}
-                >
-                  Комментарии
-                </button>
-              </div>
               {/* Reactions display */}
               {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                 <div className="reactions-row">
@@ -882,6 +894,14 @@ export default function ChannelPage() {
                   ))}
                 </div>
               )}
+              <div className="channel-post-actions">
+                <button
+                  className="channel-comment-btn"
+                  onClick={() => navigate(`/channel/${channelId}/post/${msg.id}`)}
+                >
+                  {formatCommentsLabel(msg.comment_count)}
+                </button>
+              </div>
               <div className="message-meta">
                 {msg.edited ? <span className="message-edited">ред.</span> : null}
                 <span className="message-time">{formatTime(msg.created_at)}</span>

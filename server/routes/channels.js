@@ -219,7 +219,8 @@ router.get('/:id/messages', auth, (req, res) => {
   const chId = parseInt(req.params.id);
   const messages = db.prepare(`
     SELECT cm.id, cm.channel_id, cm.sender_id, cm.content, cm.file_url, cm.created_at, cm.edited, cm.is_pinned,
-           u.username as sender_username
+           u.username as sender_username,
+           (SELECT COUNT(*) FROM channel_post_comments cpc WHERE cpc.message_id = cm.id) as comment_count
     FROM channel_messages cm
     JOIN users u ON cm.sender_id = u.id
     WHERE cm.channel_id = ?
@@ -285,6 +286,7 @@ router.post('/:id/messages', auth, (req, res) => {
     content: trimContent,
     file_url: storedFileUrl,
     created_at: now,
+    comment_count: 0,
     sender_username: sender?.username,
   };
 

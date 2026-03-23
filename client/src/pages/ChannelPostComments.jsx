@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 import { connectSocket } from '../socket.js';
 
+const IMAGE_EXT_RE = /\.(jpg|jpeg|png|gif|webp)$/i;
+
 function parseFileUrls(fileUrl) {
   if (!fileUrl) return [];
   if (Array.isArray(fileUrl)) {
@@ -37,6 +39,12 @@ function formatTime(dateStr) {
   return new Date(s).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+function isImage(file) {
+  const type = String(file?.type || '').toLowerCase();
+  const url = String(file?.url || '');
+  return type.startsWith('image/') || IMAGE_EXT_RE.test(url);
+}
+
 export default function ChannelPostComments() {
   const { id, postId } = useParams();
   const channelId = Number(id);
@@ -49,6 +57,7 @@ export default function ChannelPostComments() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState('');
 
   const loadData = useCallback(async () => {
     try {
@@ -137,11 +146,24 @@ export default function ChannelPostComments() {
             {post.content ? <div className="message-text">{post.content}</div> : null}
             {postFiles.length > 0 && (
               <div className="channel-attachments">
-                {postFiles.map((file, index) => (
-                  <a key={index} href={file.url} target="_blank" rel="noreferrer" className="channel-file-link">
-                    {file.name || 'Открыть вложение'}
-                  </a>
-                ))}
+                {postFiles.map((file, index) => {
+                  if (isImage(file)) {
+                    return (
+                      <img
+                        key={index}
+                        src={file.url}
+                        className="msg-image"
+                        alt=""
+                        onClick={() => setLightboxImage(file.url)}
+                      />
+                    );
+                  }
+                  return (
+                    <a key={index} href={file.url} target="_blank" rel="noreferrer" className="channel-file-link">
+                      {file.name || 'Открыть вложение'}
+                    </a>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -182,6 +204,18 @@ export default function ChannelPostComments() {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
       </div>
+
+      {lightboxImage && (
+        <div className="lightbox-overlay" onClick={() => setLightboxImage('')}>
+          <button className="lightbox-close" onClick={(e) => { e.stopPropagation(); setLightboxImage(''); }}>✕</button>
+          <img
+            src={lightboxImage}
+            className="lightbox-img"
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
