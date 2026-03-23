@@ -41,6 +41,7 @@ const io = new Server(server, {
 // Middleware
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 // Serve uploaded avatars
 const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
