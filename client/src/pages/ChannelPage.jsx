@@ -177,6 +177,7 @@ export default function ChannelPage() {
   const [isPreparingRecording, setIsPreparingRecording] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
   const [recordingMode, setRecordingMode] = useState('voice');
+  const [showRecorderPanel, setShowRecorderPanel] = useState(true);
 
   // Edit channel message state
   const [editingMsgId, setEditingMsgId] = useState(null);
@@ -1070,7 +1071,7 @@ export default function ChannelPage() {
                     }
                   </button>
                 )}
-                {!editingMsgId && isPremium && (
+                {!editingMsgId && isPremium && showRecorderPanel && (
                   <>
                     <button
                       className="record-mode-btn"
@@ -1099,7 +1100,11 @@ export default function ChannelPage() {
                       editingMsgId ? saveEditMsg() : sendMessage();
                     }
                   }}
-                  onFocus={() => setTimeout(scrollToBottom, 300)}
+                  onFocus={() => {
+                    setShowRecorderPanel(false);
+                    setTimeout(scrollToBottom, 300);
+                  }}
+                  onBlur={() => setShowRecorderPanel(true)}
                   rows={1}
                 />
                 <button

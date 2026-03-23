@@ -3431,14 +3431,26 @@ img.avatar {
   border: 1px solid var(--border);
 }
 
+.simple-recorder-controls.is-video {
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 180px;
+}
+
 .simple-recorder-live-preview {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
+  width: 100%;
+  height: 220px;
+  border-radius: 14px;
   object-fit: cover;
   transform: scaleX(-1);
   border: 1px solid var(--border);
   background: #000;
+}
+
+.simple-recorder-controls.is-video .simple-recorder-timer,
+.simple-recorder-controls.is-video .simple-recorder-stop,
+.simple-recorder-controls.is-video .simple-recorder-cancel {
+  align-self: center;
 }
 
 .simple-recorder-timer {

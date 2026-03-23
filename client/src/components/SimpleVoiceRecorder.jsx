@@ -74,13 +74,13 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
     }
 
     chunksRef.current = [];
-  cancelAfterStopRef.current = false;
-  setRecordedBlob(null);
-  setRecordedMode(mode);
+    cancelAfterStopRef.current = false;
+    setRecordedBlob(null);
+    setRecordedMode(mode);
     setError(null);
 
-  const currentMode = mode;
-  const mimeType = currentMode === 'video' ? 'video/webm' : 'audio/webm';
+    const currentMode = mode;
+    const mimeType = currentMode === 'video' ? 'video/webm' : 'audio/webm';
     const mediaRecorder = new MediaRecorder(mediaStreamRef.current, { mimeType });
 
     mediaRecorder.ondataavailable = (e) => {
@@ -187,6 +187,7 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
   };
 
   const hasRecording = !!recordedBlob;
+  const isVideoRecording = isRecording && mode === 'video';
 
   if (!isRecording && !hasRecording) {
     return (
@@ -211,7 +212,7 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
 
   if (isRecording) {
     return (
-      <div className="simple-recorder-controls">
+      <div className={`simple-recorder-controls${isVideoRecording ? ' is-video' : ''}`}>
         {mode === 'video' && (
           <video
             ref={videoRef}
