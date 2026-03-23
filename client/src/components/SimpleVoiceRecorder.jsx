@@ -7,12 +7,15 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
   const [recordingTime, setRecordingTime] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
+  const [recordedBlob, setRecordedBlob] = useState(null);
+  const [recordedMode, setRecordedMode] = useState(mode);
 
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const videoRef = useRef(null);
+  const cancelAfterStopRef = useRef(false);
 
   // Cleanup
   useEffect(() => {
@@ -36,9 +39,7 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
           audio: true,
         });
         mediaStreamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
+        if (videoRef.current) videoRef.current.srcObject = stream;
       } catch (err) {
         console.error('Camera error:', err);
         setError('Нет доступа к камере');
@@ -48,9 +49,16 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
     return () => {
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        mediaStreamRef.current = null;
       }
     };
   }, [mode]);
+
+  useEffect(() => {
+    if (mode === 'video' && videoRef.current && mediaStreamRef.current) {
+      videoRef.current.srcObject = mediaStreamRef.current;
+    }
+  }, [mode, isRecording]);
 
   const startRecording = async () => {
     if (mode === 'video' && !mediaStreamRef.current) return;
@@ -66,9 +74,13 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
     }
 
     chunksRef.current = [];
+  cancelAfterStopRef.current = false;
+  setRecordedBlob(null);
+  setRecordedMode(mode);
     setError(null);
 
-    const mimeType = mode === 'video' ? 'video/webm' : 'audio/webm';
+  const currentMode = mode;
+  const mimeType = currentMode === 'video' ? 'video/webm' : 'audio/webm';
     const mediaRecorder = new MediaRecorder(mediaStreamRef.current, { mimeType });
 
     mediaRecorder.ondataavailable = (e) => {
@@ -79,6 +91,35 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
       console.error('Recording error:', e.error);
       setError('Ошибка записи');
       setIsRecording(false);
+    };
+
+    mediaRecorder.onstop = () => {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+
+      const shouldCancel = cancelAfterStopRef.current;
+      cancelAfterStopRef.current = false;
+
+      setIsRecording(false);
+
+      if (shouldCancel) {
+        chunksRef.current = [];
+        setRecordedBlob(null);
+        setRecordingTime(0);
+        return;
+      }
+
+      const blob = new Blob(chunksRef.current, {
+        type: currentMode === 'video' ? 'video/webm' : 'audio/webm',
+      });
+
+      chunksRef.current = [];
+      if (blob.size > 0) {
+        setRecordedBlob(blob);
+        setRecordedMode(currentMode);
+      } else {
+        setError('Не удалось получить запись');
+      }
     };
 
     mediaRecorderRef.current = mediaRecorder;
@@ -101,24 +142,21 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
     if (!mediaRecorderRef.current || !isRecording) return;
 
     clearInterval(timerRef.current);
+    timerRef.current = null;
     mediaRecorderRef.current.stop();
-    setIsRecording(false);
   };
 
   const sendRecording = async () => {
-    if (chunksRef.current.length === 0) return;
+    if (!recordedBlob) return;
 
     try {
       setIsUploading(true);
-      const blob = new Blob(chunksRef.current, {
-        type: mode === 'video' ? 'video/webm' : 'audio/webm',
-      });
 
       if (onSend) {
-        await onSend(blob, mode, recordingTime);
+        await onSend(recordedBlob, recordedMode, recordingTime);
       }
 
-      chunksRef.current = [];
+      setRecordedBlob(null);
       setRecordingTime(0);
     } catch (err) {
       console.error('Send error:', err);
@@ -130,11 +168,14 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
 
   const cancelRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      cancelAfterStopRef.current = true;
       mediaRecorderRef.current.stop();
-      setIsRecording(false);
       clearInterval(timerRef.current);
+      timerRef.current = null;
     }
+
     chunksRef.current = [];
+    setRecordedBlob(null);
     setRecordingTime(0);
     if (onCancel) onCancel();
   };
@@ -145,7 +186,7 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
     return `${mins}:${String(secs).padStart(2, '0')}`;
   };
 
-  const hasRecording = chunksRef.current.length > 0;
+  const hasRecording = !!recordedBlob;
 
   if (!isRecording && !hasRecording) {
     return (
@@ -171,6 +212,15 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
   if (isRecording) {
     return (
       <div className="simple-recorder-controls">
+        {mode === 'video' && (
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="simple-recorder-live-preview"
+          />
+        )}
         <div className="simple-recorder-timer">{formatTime(recordingTime)}</div>
         <button
           className="simple-recorder-stop"
@@ -193,21 +243,8 @@ export default function SimpleVoiceRecorder({ mode = 'voice', onSend, onCancel }
   // Showing recording preview
   return (
     <div className="simple-recorder-preview">
-      {mode === 'video' && (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          style={{
-            maxWidth: '0',
-            maxHeight: '0',
-            display: 'none',
-          }}
-        />
-      )}
       <div className="simple-recorder-preview-info">
-        {mode === 'video' ? '🎥' : '🎤'} {formatTime(recordingTime)}
+        {recordedMode === 'video' ? '🎥' : '🎤'} {formatTime(recordingTime)}
       </div>
       <button
         className="simple-recorder-send"

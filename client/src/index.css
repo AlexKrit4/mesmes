@@ -3431,6 +3431,16 @@ img.avatar {
   border: 1px solid var(--border);
 }
 
+.simple-recorder-live-preview {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  border: 1px solid var(--border);
+  background: #000;
+}
+
 .simple-recorder-timer {
   font-family: 'Courier New', monospace;
   color: var(--text);
