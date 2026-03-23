@@ -621,7 +621,25 @@ router.post('/google', async (req, res) => {
     console.log('[google auth] verified:', { googleId, email, name });
 
     // Check if user with this google_id exists
-    let user = db.prepare('SELECT id, username, public_id, email FROM users WHERE google_id = ?').get(googleId);
+    let user;
+    try {
+      user = db.prepare('SELECT id, username, public_id, email FROM users WHERE google_id = ?').get(googleId);
+    } catch (e) {
+      // google_id column might not exist yet - try to add it
+      if (e.message && e.message.includes('no such column')) {
+        console.warn('[google auth] google_id column missing, attempting migration...');
+        try {
+          db.exec(`ALTER TABLE users ADD COLUMN google_id TEXT DEFAULT NULL UNIQUE`);
+          console.log('[google auth] migration successful');
+          user = null; // Column just created, no user yet
+        } catch (migrateErr) {
+          console.error('[google auth] migration failed:', migrateErr.message);
+          user = null; // Proceed as new user if migration fails
+        }
+      } else {
+        throw e;
+      }
+    }
     
     if (user) {
       // User exists → login
