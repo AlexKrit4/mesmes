@@ -57,6 +57,49 @@ export default function CallPage() {
 
     const callData = JSON.parse(sessionStorage.getItem('activeCall') || '{}');
     const pc = window.currentPeerConnection;
+    
+    if (!pc) {
+      console.log('❌ [CallPage] No peer connection found');
+      return;
+    }
+
+    // Register connection state handlers on PC
+    pc.onconnectionstatechange = () => {
+      console.log('📡 [CallPage] Connection state:', pc.connectionState);
+      if (pc.connectionState === 'connecting') setCallState('connecting');
+      if (pc.connectionState === 'connected') setCallState('in-call');
+      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+        setCallState('ended');
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log('🧊 [CallPage] ICE connection state:', pc.iceConnectionState);
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        setCallState('in-call');
+      }
+      if (pc.iceConnectionState === 'failed') {
+        console.error('❌ [CallPage] ICE connection failed');
+        setCallState('ended');
+      }
+    };
+
+    pc.ontrack = (event) => {
+      console.log('🎵 [CallPage] Remote track received:', event.track.kind);
+      if (remoteAudioRef.current) {
+        if (!remoteAudioRef.current.srcObject) {
+          remoteAudioRef.current.srcObject = new MediaStream();
+        }
+        const streamTracks = event.streams?.[0]?.getTracks?.() || [];
+        const track = streamTracks[0] || event.track || null;
+        if (track && !remoteAudioRef.current.srcObject.getTracks().some((t) => t.id === track.id)) {
+          remoteAudioRef.current.srcObject.addTrack(track);
+        }
+        remoteAudioRef.current.play?.().catch(() => {});
+      }
+    };
+
+    const callData = JSON.parse(sessionStorage.getItem('activeCall') || '{}');
 
     // Handle incoming answer
     const onCallAnswer = async ({ from, answer, callId }) => {

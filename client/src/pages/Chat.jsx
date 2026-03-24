@@ -454,43 +454,8 @@ export default function Chat() {
       });
     };
 
-    pc.ontrack = (event) => {
-      console.log('🎵 Remote track received:', event.track.kind);
-      if (!remoteStreamRef.current) {
-        remoteStreamRef.current = new MediaStream();
-      }
-      const streamTracks = event.streams?.[0]?.getTracks?.() || [];
-      const track = streamTracks[0] || event.track || null;
-      if (track && !remoteStreamRef.current.getTracks().some((t) => t.id === track.id)) {
-        remoteStreamRef.current.addTrack(track);
-      }
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = remoteStreamRef.current;
-        remoteAudioRef.current.play?.().catch(() => {});
-      }
-      setCallState('in-call');
-    };
-
-    pc.onconnectionstatechange = () => {
-      console.log('📡 Connection state:', pc.connectionState);
-      if (pc.connectionState === 'connecting') setCallState('connecting');
-      if (pc.connectionState === 'connected') setCallState('in-call');
-      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
-        resetCallState();
-      }
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log('🧊 ICE connection state:', pc.iceConnectionState, '| Gathering state:', pc.iceGatheringState);
-      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-        setCallState('in-call');
-      }
-      if (pc.iceConnectionState === 'failed') {
-        console.error('❌ ICE connection failed - TURN may not be working');
-        showCallError('Не удалось установить аудиосоединение');
-        resetCallState();
-      }
-    };
+    // Note: ontrack, onconnectionstatechange, oniceconnectionstatechange are now handled in CallPage.jsx
+    // to prevent state updates on unmounted Chat component
 
     const queued = earlyIceCandidatesRef.current.filter(
       (item) => Number(item.from) === Number(targetUserId) && item.callId === callId
