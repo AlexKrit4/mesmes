@@ -521,7 +521,10 @@ export default function Chat() {
 
       console.log('📞 Creating offer...');
       const offer = await pc.createOffer();
-      console.log('📞 Offer created, setting local description...');
+      console.log('📞 Offer created');
+      console.log('📡 OFFER SDP (first 800 chars):', offer.sdp.substring(0, 800));
+      console.log('📡 OFFER media section:', offer.sdp.includes('m=audio') ? '✅ Has m=audio' : '❌ NO m=audio');
+      console.log('📞 Setting local description...');
       await pc.setLocalDescription(offer);
       console.log('📞 Local description set, sending offer to peer');
 
@@ -538,6 +541,7 @@ export default function Chat() {
       }));
       navigate(`/call/${friendIdNum}`);
       
+      console.log('📞 Sending offer to peer via socket');
       socket.emit('call_offer', { to: friendIdNum, offer, callId });
     } catch (err) {
       console.error('Call start error:', err);
@@ -581,7 +585,9 @@ export default function Chat() {
 
       console.log('📞 Got offer, setting remote description...');
       await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
-      console.log('📞 Remote description set, adding queued ICE candidates...');
+      console.log('� RECEIVED OFFER SDP (first 800 chars):', callData.offer.sdp.substring(0, 800));
+      console.log('📡 RECEIVED OFFER media section:', callData.offer.sdp.includes('m=audio') ? '✅ Has m=audio' : '❌ NO m=audio');
+      console.log('�📞 Remote description set, adding queued ICE candidates...');
       for (const candidate of pendingRemoteCandidatesRef.current) {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       }
@@ -589,7 +595,10 @@ export default function Chat() {
 
       console.log('📞 Creating answer...');
       const answer = await pc.createAnswer();
-      console.log('📞 Answer created, setting local description...');
+      console.log('📞 Answer created');
+      console.log('📡 ANSWER SDP (first 800 chars):', answer.sdp.substring(0, 800));
+      console.log('📡 ANSWER media section:', answer.sdp.includes('m=audio') ? '✅ Has m=audio' : '❌ NO m=audio');
+      console.log('📞 Setting local description...');
       await pc.setLocalDescription(answer);
       console.log('📞 Local description set, sending answer to peer');
 
@@ -600,6 +609,7 @@ export default function Chat() {
       setCallState('connecting');
       
       // ВАЖНО: отправить answer ПЕРЕД переходом на другую страницу!
+      console.log('📞 Sending answer to peer via socket');
       socket.emit('call_answer', { to: peerId, answer, callId });
       console.log('📞 Answer sent to peer');
       

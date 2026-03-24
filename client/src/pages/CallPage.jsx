@@ -163,7 +163,9 @@ export default function CallPage() {
       }
 
       try {
-        console.log('📞 [CallPage] Setting remote description from answer...');
+        console.log('� RECEIVED ANSWER SDP (first 800 chars):', answer.sdp.substring(0, 800));
+        console.log('📡 RECEIVED ANSWER media section:', answer.sdp.includes('m=audio') ? '✅ Has m=audio' : '❌ NO m=audio');
+        console.log('�📞 [CallPage] Setting remote description from answer...');
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
         console.log('📞 [CallPage] Remote description set, processing ICE candidates...');
         
