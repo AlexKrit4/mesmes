@@ -94,7 +94,12 @@ export default function CallPage() {
   // Register handlers for RTC answer and ICE candidates
   useEffect(() => {
     const socket = getSocket();
-    if (!socket) return;
+    if (!socket) {
+      console.error('❌ [CallPage] Socket not available');
+      return;
+    }
+
+    console.log('📡 [CallPage] Socket available, ID:', socket.id);
 
     const callData = JSON.parse(sessionStorage.getItem('activeCall') || '{}');
     const pc = window.currentPeerConnection;
@@ -162,7 +167,8 @@ export default function CallPage() {
 
     // Handle incoming answer
     const onCallAnswer = async ({ from, answer, callId }) => {
-      console.log('📞 [CallPage] onCallAnswer received:', { from, callId, hasPC: !!pc });
+      console.log('� [CallPage] ⚠️ onCallAnswer CALLED with:', { from, callId, hasAnswer: !!answer, hasPC: !!pc, socketId: socket?.id });
+      console.log('�📞 [CallPage] onCallAnswer received:', { from, callId, hasPC: !!pc });
       
       if (!answer || !callId || !pc) {
         console.log('❌ [CallPage] Missing answer, callId, or PC');
@@ -209,6 +215,8 @@ export default function CallPage() {
 
     socket.on('call_answer', onCallAnswer);
     socket.on('call_ice_candidate', onCallIceCandidate);
+    
+    console.log('✅ [CallPage] Socket listeners registered for call_answer and call_ice_candidate (Socket ID:', socket.id, ')');
 
     // If PC already has both descriptions (answerer side scenario), manually update UI
     console.log('🔍 [CallPage] Checking if already connected...');
@@ -227,6 +235,7 @@ export default function CallPage() {
     }
 
     return () => {
+      console.log('🧹 [CallPage] Cleaning up socket listeners');
       socket.off('call_answer', onCallAnswer);
       socket.off('call_ice_candidate', onCallIceCandidate);
     };

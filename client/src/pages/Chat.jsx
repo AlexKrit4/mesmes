@@ -547,7 +547,7 @@ export default function Chat() {
       }));
       navigate(`/call/${friendIdNum}`);
       
-      console.log('📞 Sending offer to peer via socket');
+      console.log('📞 Sending offer to peer via socket | Socket ID:', socket.id, '| To:', friendIdNum, '| CallId:', callId);
       socket.emit('call_offer', { to: friendIdNum, offer, callId });
     } catch (err) {
       console.error('Call start error:', err);
@@ -617,7 +617,7 @@ export default function Chat() {
       setCallState('connecting');
       
       // ВАЖНО: отправить answer ПЕРЕД переходом на другую страницу!
-      console.log('📞 Sending answer to peer via socket');
+      console.log('📞 Sending answer to peer via socket | Socket ID:', socket.id, '| To:', peerId, '| CallId:', callId);
       socket.emit('call_answer', { to: peerId, answer, callId });
       console.log('📞 Answer sent to peer');
       
