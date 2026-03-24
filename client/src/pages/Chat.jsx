@@ -11,23 +11,23 @@ function buildRtcConfig() {
     { urls: 'stun:stun1.l.google.com:19302' },
   ];
 
-  const turnUrls = String(import.meta.env.VITE_TURN_URLS || '').split(',').map((v) => v.trim()).filter(Boolean);
-  const turnUsername = String(import.meta.env.VITE_TURN_USERNAME || '').trim();
-  const turnCredential = String(import.meta.env.VITE_TURN_CREDENTIAL || '').trim();
-  const forceRelay = String(import.meta.env.VITE_FORCE_TURN || '0') === '1';
-
-  const iceServers = [...defaultStun];
-  if (turnUrls.length > 0 && turnUsername && turnCredential) {
-    iceServers.push({
-      urls: turnUrls,
-      username: turnUsername,
-      credential: turnCredential,
-    });
-  }
+  // TURN configuration
+  const iceServers = [
+    ...defaultStun,
+    {
+      urls: [
+        'turn:mesmes.ru:3478?transport=udp',
+        'turn:mesmes.ru:3478?transport=tcp',
+        'turns:mesmes.ru:5349?transport=tcp'
+      ],
+      username: 'alexkrit',
+      credential: 'GeometryDash210705',
+    }
+  ];
 
   return {
     iceServers,
-    iceTransportPolicy: forceRelay ? 'relay' : 'all',
+    iceTransportPolicy: 'relay',
   };
 }
 
