@@ -31,7 +31,6 @@ function buildRtcConfig() {
   };
 }
 
-const RTC_CONFIG = buildRtcConfig();
 const PENDING_INCOMING_CALL_KEY = 'pending_incoming_call';
 
 const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
@@ -435,6 +434,7 @@ export default function Chat() {
 
   const createPeerConnection = useCallback((targetUserId, socket, callId) => {
     closePeerConnection();
+    const RTC_CONFIG = buildRtcConfig();
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnectionRef.current = pc;
 
