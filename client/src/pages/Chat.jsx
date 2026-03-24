@@ -438,6 +438,7 @@ export default function Chat() {
     console.log('🔊 Creating RTCPeerConnection with config:', RTC_CONFIG);
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnectionRef.current = pc;
+    window.currentPeerConnection = pc; // Share globally for CallPage component
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
@@ -984,8 +985,6 @@ export default function Chat() {
     socket.on('chat_error', onChatError);
     socket.on('chat_block_status_changed', onBlockStatusChanged);
     socket.on('call_offer', onCallOffer);
-    socket.on('call_answer', onCallAnswer);
-    socket.on('call_ice_candidate', onCallIceCandidate);
     socket.on('call_reject', onCallReject);
     socket.on('call_end', onCallEnd);
     socket.on('call_unavailable', onCallUnavailable);
@@ -1004,8 +1003,6 @@ export default function Chat() {
       socket.off('chat_error', onChatError);
       socket.off('chat_block_status_changed', onBlockStatusChanged);
       socket.off('call_offer', onCallOffer);
-      socket.off('call_answer', onCallAnswer);
-      socket.off('call_ice_candidate', onCallIceCandidate);
       socket.off('call_reject', onCallReject);
       socket.off('call_end', onCallEnd);
       socket.off('call_unavailable', onCallUnavailable);

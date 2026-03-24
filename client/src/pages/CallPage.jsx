@@ -12,6 +12,7 @@ export default function CallPage() {
   const [callState, setCallState] = useState('connecting'); // connecting, in-call, ended
   const timerRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  const pendingRemoteCandidatesRef = useRef([]);
 
   useEffect(() => {
     // Получи информацию о друге из localStorage (передалась при инициировании звонка)
@@ -48,6 +49,66 @@ export default function CallPage() {
     socket.on('callStateChanged', handleConnectionStateChange);
     return () => socket.off('callStateChanged', handleConnectionStateChange);
   }, [friendId, navigate]);
+
+  // Register handlers for RTC answer and ICE candidates
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const callData = JSON.parse(sessionStorage.getItem('activeCall') || '{}');
+    const pc = window.currentPeerConnection;
+
+    // Handle incoming answer
+    const onCallAnswer = async ({ from, answer, callId }) => {
+      console.log('📞 [CallPage] onCallAnswer received:', { from, callId, hasPC: !!pc });
+      
+      if (!answer || !callId || !pc) {
+        console.log('❌ [CallPage] Missing answer, callId, or PC');
+        return;
+      }
+
+      try {
+        console.log('📞 [CallPage] Setting remote description from answer...');
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log('📞 [CallPage] Remote description set, processing ICE candidates...');
+        
+        for (const candidate of pendingRemoteCandidatesRef.current) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+        pendingRemoteCandidatesRef.current = [];
+        setCallState('connecting');
+      } catch (err) {
+        console.error('❌ Call answer error:', err);
+        setCallState('ended');
+      }
+    };
+
+    // Handle incoming ICE candidates
+    const onCallIceCandidate = async ({ from, candidate, callId }) => {
+      if (!callId || !pc) return;
+      if (!candidate) return;
+
+      try {
+        console.log('🧊 [CallPage] Adding remote ICE candidate');
+        if (pc.remoteDescription?.type) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } else {
+          console.log('🧊 [CallPage] Remote description not set yet, queuing candidate...');
+          pendingRemoteCandidatesRef.current.push(candidate);
+        }
+      } catch (err) {
+        console.error('🧊 ICE candidate error:', err);
+      }
+    };
+
+    socket.on('call_answer', onCallAnswer);
+    socket.on('call_ice_candidate', onCallIceCandidate);
+
+    return () => {
+      socket.off('call_answer', onCallAnswer);
+      socket.off('call_ice_candidate', onCallIceCandidate);
+    };
+  }, []);
 
   const toggleMicrophone = () => {
     const socket = getSocket();
