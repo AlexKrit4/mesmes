@@ -49,9 +49,19 @@ export default function CallPage() {
       const audioSenders = senders.filter(sender => sender.track?.kind === 'audio');
       const micAccessible = audioSenders.length > 0;
       
+      let micStatus = '❌ Микрофон не подключен';
+      if (micAccessible) {
+        const trackStatus = audioSenders.map(s => {
+          const track = s.track;
+          const status = track?.enabled ? '✅' : '❌';
+          return `${status} ${track?.readyState || 'unknown'}`;
+        }).join(', ');
+        micStatus = `✅ Микрофон (${audioSenders.length} трек): ${trackStatus}`;
+      }
+      
       setDebugInfo(prev => ({
         ...prev,
-        micAccess: micAccessible ? `✅ Микрофон включен (${audioSenders.length} трек${audioSenders.length !== 1 ? 'и' : ''})` : '❌ Микрофон не подключен'
+        micAccess: micStatus
       }));
     };
 

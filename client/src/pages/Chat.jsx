@@ -513,7 +513,7 @@ export default function Chat() {
       console.log('📞 Adding local audio tracks to peer connection...');
       let addedTracks = 0;
       stream.getTracks().forEach((track) => {
-        console.log('📞 Adding track:', track.kind, 'enabled:', track.enabled);
+        console.log('📞 Adding track:', track.kind, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
         pc.addTrack(track, stream);
         addedTracks++;
       });
@@ -573,7 +573,7 @@ export default function Chat() {
       console.log('📞 Adding local audio tracks to peer connection (answerer side)...');
       let addedTracks = 0;
       stream.getTracks().forEach((track) => {
-        console.log('📞 Adding track:', track.kind, 'enabled:', track.enabled);
+        console.log('📞 Adding track:', track.kind, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
         pc.addTrack(track, stream);
         addedTracks++;
       });
