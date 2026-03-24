@@ -104,7 +104,8 @@ export default function CallPage() {
 
     // Register connection state handlers on PC
     pc.onconnectionstatechange = () => {
-      console.log('📡 [CallPage] Connection state:', pc.connectionState);
+      console.log('📡 [CallPage] ⚠️ CONNECTION STATE:', pc.connectionState, '| ICE:', pc.iceConnectionState, '| Signaling:', pc.signalingState);
+      console.log('📡 [CallPage] Senders:', pc.getSenders().length, '| Receivers:', pc.getReceivers().length);
       setDebugInfo(prev => ({ ...prev, connectionState: `📡 ${pc.connectionState}` }));
       if (pc.connectionState === 'connecting') setCallState('connecting');
       if (pc.connectionState === 'connected') setCallState('in-call');
@@ -114,13 +115,15 @@ export default function CallPage() {
     };
 
     pc.oniceconnectionstatechange = () => {
-      console.log('🧊 [CallPage] ICE connection state:', pc.iceConnectionState);
+      console.log('🧊 [CallPage] ⚠️ ICE STATE:', pc.iceConnectionState, '| Connection:', pc.connectionState, '| Signaling:', pc.signalingState);
+      console.log('🧊 [CallPage] Senders:', pc.getSenders().length, '| Receivers:', pc.getReceivers().length);
       setDebugInfo(prev => ({ ...prev, iceState: `🧊 ${pc.iceConnectionState}` }));
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        console.log('✅ [CallPage] ICE connected!');
         setCallState('in-call');
       }
       if (pc.iceConnectionState === 'failed') {
-        console.error('❌ [CallPage] ICE connection failed');
+        console.error('❌ [CallPage] ICE connection FAILED!');
         setCallState('ended');
       }
     };
@@ -165,8 +168,10 @@ export default function CallPage() {
       try {
         console.log('� RECEIVED ANSWER SDP (first 800 chars):', answer.sdp.substring(0, 800));
         console.log('📡 RECEIVED ANSWER media section:', answer.sdp.includes('m=audio') ? '✅ Has m=audio' : '❌ NO m=audio');
-        console.log('�📞 [CallPage] Setting remote description from answer...');
+        console.log('🔄 [BEFORE setRemoteDescription] Signaling:', pc.signalingState, '| ICE:', pc.iceConnectionState, '| Connection:', pc.connectionState);
+        console.log('📞 [CallPage] Setting remote description from answer...');
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log('🔄 [AFTER setRemoteDescription] Signaling:', pc.signalingState, '| ICE:', pc.iceConnectionState, '| Connection:', pc.connectionState);
         console.log('📞 [CallPage] Remote description set, processing ICE candidates...');
         
         for (const candidate of pendingRemoteCandidatesRef.current) {

@@ -468,6 +468,10 @@ export default function Chat() {
       });
     };
 
+    pc.onicegatheringstatechange = () => {
+      console.log('🧊 [Chat] ICE gathering state:', pc.iceGatheringState);
+    };
+
     // Note: ontrack, onconnectionstatechange, oniceconnectionstatechange are now handled in CallPage.jsx
     // to prevent state updates on unmounted Chat component
 
@@ -525,7 +529,9 @@ export default function Chat() {
       console.log('📡 OFFER SDP (first 800 chars):', offer.sdp.substring(0, 800));
       console.log('📡 OFFER media section:', offer.sdp.includes('m=audio') ? '✅ Has m=audio' : '❌ NO m=audio');
       console.log('📞 Setting local description...');
+      console.log('🔄 [BEFORE setLocalDescription] Signaling:', pc.signalingState, '| ICE:', pc.iceConnectionState, '| Connection:', pc.connectionState);
       await pc.setLocalDescription(offer);
+      console.log('🔄 [AFTER setLocalDescription] Signaling:', pc.signalingState, '| ICE:', pc.iceConnectionState, '| Connection:', pc.connectionState);
       console.log('📞 Local description set, sending offer to peer');
 
       activeCallPeerRef.current = friendIdNum;
@@ -599,7 +605,9 @@ export default function Chat() {
       console.log('📡 ANSWER SDP (first 800 chars):', answer.sdp.substring(0, 800));
       console.log('📡 ANSWER media section:', answer.sdp.includes('m=audio') ? '✅ Has m=audio' : '❌ NO m=audio');
       console.log('📞 Setting local description...');
+      console.log('🔄 [BEFORE setLocalDescription] Signaling:', pc.signalingState, '| ICE:', pc.iceConnectionState, '| Connection:', pc.connectionState);
       await pc.setLocalDescription(answer);
+      console.log('🔄 [AFTER setLocalDescription] Signaling:', pc.signalingState, '| ICE:', pc.iceConnectionState, '| Connection:', pc.connectionState);
       console.log('📞 Local description set, sending answer to peer');
 
       activeCallPeerRef.current = peerId;
