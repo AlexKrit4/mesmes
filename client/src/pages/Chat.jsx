@@ -426,11 +426,25 @@ export default function Chat() {
   }, []);
 
   const ensureLocalAudio = useCallback(async () => {
-    if (localStreamRef.current) return localStreamRef.current;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    localStreamRef.current = stream;
-    return stream;
-  }, []);
+    if (localStreamRef.current) {
+      console.log('🎤 Using existing local audio stream');
+      return localStreamRef.current;
+    }
+    try {
+      console.log('🎤 Requesting microphone access...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('✅ Microphone access granted, stream tracks:', stream.getTracks().length);
+      stream.getTracks().forEach(track => {
+        console.log('🎤 Local audio track:', track.kind, 'enabled:', track.enabled, 'readyState:', track.readyState);
+      });
+      localStreamRef.current = stream;
+      return stream;
+    } catch (err) {
+      console.error('❌ Failed to get microphone access:', err.name, err.message);
+      showCallError(`Микрофон недоступен: ${err.message}`);
+      throw err;
+    }
+  }, [showCallError]);
 
   const createPeerConnection = useCallback((targetUserId, socket, callId) => {
     closePeerConnection();
@@ -495,7 +509,15 @@ export default function Chat() {
       const callId = `call_${me.id}_${friendIdNum}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const stream = await ensureLocalAudio();
       const pc = createPeerConnection(friendIdNum, socket, callId);
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      
+      console.log('📞 Adding local audio tracks to peer connection...');
+      let addedTracks = 0;
+      stream.getTracks().forEach((track) => {
+        console.log('📞 Adding track:', track.kind, 'enabled:', track.enabled);
+        pc.addTrack(track, stream);
+        addedTracks++;
+      });
+      console.log(`✅ Added ${addedTracks} tracks to peer connection`);
 
       console.log('📞 Creating offer...');
       const offer = await pc.createOffer();
@@ -547,7 +569,15 @@ export default function Chat() {
       const peerId = Number(callData.from);
       const callId = String(callData.callId);
       const pc = createPeerConnection(peerId, socket, callId);
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      
+      console.log('📞 Adding local audio tracks to peer connection (answerer side)...');
+      let addedTracks = 0;
+      stream.getTracks().forEach((track) => {
+        console.log('📞 Adding track:', track.kind, 'enabled:', track.enabled);
+        pc.addTrack(track, stream);
+        addedTracks++;
+      });
+      console.log(`✅ Added ${addedTracks} tracks to peer connection`);
 
       console.log('📞 Got offer, setting remote description...');
       await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));

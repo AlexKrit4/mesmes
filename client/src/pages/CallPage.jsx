@@ -85,17 +85,27 @@ export default function CallPage() {
     };
 
     pc.ontrack = (event) => {
-      console.log('🎵 [CallPage] Remote track received:', event.track.kind);
+      console.log('🎵 [CallPage] Remote track received:', event.track.kind, 'enabled:', event.track.enabled, 'readyState:', event.track.readyState);
+      console.log('🎵 [CallPage] Track streams:', event.streams.length);
+      
       if (remoteAudioRef.current) {
+        console.log('🎵 [CallPage] Setting up audio element, current srcObject:', remoteAudioRef.current.srcObject);
         if (!remoteAudioRef.current.srcObject) {
           remoteAudioRef.current.srcObject = new MediaStream();
         }
         const streamTracks = event.streams?.[0]?.getTracks?.() || [];
         const track = streamTracks[0] || event.track || null;
+        console.log('🎵 [CallPage] Adding track to stream:', track?.kind, 'existing tracks:', remoteAudioRef.current.srcObject?.getTracks().length);
         if (track && !remoteAudioRef.current.srcObject.getTracks().some((t) => t.id === track.id)) {
           remoteAudioRef.current.srcObject.addTrack(track);
+          console.log('🎵 [CallPage] Track added, total tracks now:', remoteAudioRef.current.srcObject.getTracks().length);
         }
-        remoteAudioRef.current.play?.().catch(() => {});
+        try {
+          remoteAudioRef.current.play?.();
+          console.log('✅ [CallPage] Audio playback started');
+        } catch (err) {
+          console.error('❌ [CallPage] Audio playback failed:', err);
+        }
       }
     };
 
