@@ -1037,6 +1037,12 @@ export default function Chat() {
 
   useEffect(() => {
     return () => {
+      // Don't close peer connection on unmount if we're actively in a call (on CallPage)
+      // If activeCallPeerRef exists, it means we're in an active call and Phone component will handle cleanup
+      if (activeCallPeerRef.current) {
+        console.log('⏸️ Chat unmounting but call is active, preserving RTCPeerConnection for CallPage');
+        return;
+      }
       endCall(false);
     };
   }, [endCall]);

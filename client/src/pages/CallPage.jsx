@@ -126,9 +126,32 @@ export default function CallPage() {
     if (!socket) return;
 
     socket.emit('end_call', { to: friendId });
+    
+    // Close peer connection when ending call
+    const pc = window.currentPeerConnection;
+    if (pc) {
+      pc.close();
+      window.currentPeerConnection = null;
+    }
+    
     navigate(`/chat/${friendId}`);
     sessionStorage.removeItem('activeCall');
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      const pc = window.currentPeerConnection;
+      if (pc) {
+        try {
+          pc.close();
+        } catch (e) {
+          console.log('PC already closed');
+        }
+        window.currentPeerConnection = null;
+      }
+    };
+  }, []);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
