@@ -99,8 +99,6 @@ export default function CallPage() {
       }
     };
 
-    const callData = JSON.parse(sessionStorage.getItem('activeCall') || '{}');
-
     // Handle incoming answer
     const onCallAnswer = async ({ from, answer, callId }) => {
       console.log('📞 [CallPage] onCallAnswer received:', { from, callId, hasPC: !!pc });
