@@ -435,10 +435,16 @@ export default function Chat() {
   const createPeerConnection = useCallback((targetUserId, socket, callId) => {
     closePeerConnection();
     const RTC_CONFIG = buildRtcConfig();
+    console.log('🔊 Creating RTCPeerConnection with config:', RTC_CONFIG);
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnectionRef.current = pc;
 
     pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('🧊 ICE candidate found:', event.candidate.candidate);
+      } else {
+        console.log('✅ ICE gathering complete');
+      }
       if (!event.candidate || !targetUserId || !callId) return;
       socket.emit('call_ice_candidate', {
         to: targetUserId,
@@ -448,6 +454,7 @@ export default function Chat() {
     };
 
     pc.ontrack = (event) => {
+      console.log('🎵 Remote track received:', event.track.kind);
       if (!remoteStreamRef.current) {
         remoteStreamRef.current = new MediaStream();
       }
@@ -464,6 +471,7 @@ export default function Chat() {
     };
 
     pc.onconnectionstatechange = () => {
+      console.log('📡 Connection state:', pc.connectionState);
       if (pc.connectionState === 'connecting') setCallState('connecting');
       if (pc.connectionState === 'connected') setCallState('in-call');
       if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
@@ -472,10 +480,12 @@ export default function Chat() {
     };
 
     pc.oniceconnectionstatechange = () => {
+      console.log('🧊 ICE connection state:', pc.iceConnectionState, '| Gathering state:', pc.iceGatheringState);
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         setCallState('in-call');
       }
       if (pc.iceConnectionState === 'failed') {
+        console.error('❌ ICE connection failed - TURN may not be working');
         showCallError('Не удалось установить аудиосоединение');
         resetCallState();
       }
@@ -521,8 +531,11 @@ export default function Chat() {
       const pc = createPeerConnection(friendIdNum, socket, callId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
+      console.log('📞 Creating offer...');
       const offer = await pc.createOffer();
+      console.log('📞 Offer created, setting local description...');
       await pc.setLocalDescription(offer);
+      console.log('📞 Local description set, sending offer to peer');
 
       activeCallPeerRef.current = friendIdNum;
       activeCallIdRef.current = callId;
@@ -561,14 +574,19 @@ export default function Chat() {
       const pc = createPeerConnection(peerId, socket, callId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
+      console.log('📞 Got offer, setting remote description...');
       await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
+      console.log('📞 Remote description set, adding queued ICE candidates...');
       for (const candidate of pendingRemoteCandidatesRef.current) {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       }
       pendingRemoteCandidatesRef.current = [];
 
+      console.log('📞 Creating answer...');
       const answer = await pc.createAnswer();
+      console.log('📞 Answer created, setting local description...');
       await pc.setLocalDescription(answer);
+      console.log('📞 Local description set, sending answer to peer');
 
       activeCallPeerRef.current = peerId;
       activeCallIdRef.current = callId;
@@ -850,13 +868,16 @@ export default function Chat() {
       const isCurrentPeer = from === activeCallPeerRef.current || from === incomingCall?.from;
       if (!candidate || !isCurrentPeer) return;
       if (!peerConnectionRef.current) {
+        console.log('🧊 Early ICE candidate (no peer connection yet), queuing...');
         earlyIceCandidatesRef.current.push({ from, callId, candidate });
         return;
       }
       try {
+        console.log('🧊 Adding remote ICE candidate:', candidate?.candidate?.split(' ')[0] || candidate);
         if (peerConnectionRef.current.remoteDescription?.type) {
           await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
         } else {
+          console.log('🧊 Remote description not set yet, queuing candidate...');
           pendingRemoteCandidatesRef.current.push(candidate);
         }
       } catch (err) {
