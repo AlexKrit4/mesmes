@@ -862,6 +862,31 @@ export default function Chat() {
       }
     };
 
+    const onCallOffer = ({ from, from_username, offer, callId }) => {
+      console.log('📞 Incoming call offer from:', from_username);
+      if (from === activeCallPeerRef.current && activeCallIdRef.current === callId) {
+        console.log('🔄 Call already active with this user');
+        return;
+      }
+      if (incomingCall) {
+        console.log('📞 Already have incoming call');
+        return;
+      }
+      setIncomingCall({
+        from,
+        username: from_username,
+        offer,
+        callId,
+      });
+      // Show notification
+      if (Notification?.permission === 'granted') {
+        new Notification(`Входящий звонок от ${from_username}`, {
+          icon: '/icons/favicon.svg',
+          requireInteraction: true,
+        });
+      }
+    };
+
     const onCallAnswer = async ({ from, answer, callId }) => {
       if (!answer || !callId || callId !== activeCallIdRef.current || from !== activeCallPeerRef.current || !peerConnectionRef.current) return;
       try {
@@ -936,6 +961,7 @@ export default function Chat() {
     socket.on('message_reaction', onMessageReaction);
     socket.on('chat_error', onChatError);
     socket.on('chat_block_status_changed', onBlockStatusChanged);
+    socket.on('call_offer', onCallOffer);
     socket.on('call_answer', onCallAnswer);
     socket.on('call_ice_candidate', onCallIceCandidate);
     socket.on('call_reject', onCallReject);
@@ -955,6 +981,7 @@ export default function Chat() {
       socket.off('message_reaction', onMessageReaction);
       socket.off('chat_error', onChatError);
       socket.off('chat_block_status_changed', onBlockStatusChanged);
+      socket.off('call_offer', onCallOffer);
       socket.off('call_answer', onCallAnswer);
       socket.off('call_ice_candidate', onCallIceCandidate);
       socket.off('call_reject', onCallReject);
