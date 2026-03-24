@@ -21,10 +21,19 @@ export default function CallPage() {
   const remoteAudioRef = useRef(null);
   const pendingRemoteCandidatesRef = useRef([]);
 
-  console.log('🎬 [CallPage] COMPONENT MOUNTED with friendId:', friendId);
+  console.log('🎬 [CallPage] COMPONENT RENDER with friendId:', friendId);
 
+  // Track mounts and unmounts with stack trace
   useEffect(() => {
-    // Получи информацию о друге из localStorage (передалась при инициировании звонка)
+    console.log('🎬 [CallPage] COMPONENT MOUNTED with friendId:', friendId);
+    console.trace('🎯 [CallPage] Mount trace');
+    return () => {
+      console.log('🎬 [CallPage] COMPONENT UNMOUNTING');
+    };
+  }, [friendId]);
+
+  // Получи информацию о друге из localStorage (передалась при инициировании звонка)
+  useEffect(() => {
     const callData = JSON.parse(sessionStorage.getItem('activeCall') || '{}');
     console.log('👥 [CallPage] Loading call data:', { friendId: callData.friendId, hasFriend: !!callData.friend, friend: callData.friend });
     if (callData.friendId) {
@@ -91,7 +100,7 @@ export default function CallPage() {
 
     socket.on('callStateChanged', handleConnectionStateChange);
     return () => socket.off('callStateChanged', handleConnectionStateChange);
-  }, [friendId, navigate]);
+  }, [friendId]); // Only depend on friendId, navigate is stable
 
   // Register handlers for RTC answer and ICE candidates
   useEffect(() => {
