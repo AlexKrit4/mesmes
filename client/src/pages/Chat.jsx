@@ -426,25 +426,11 @@ export default function Chat() {
   }, []);
 
   const ensureLocalAudio = useCallback(async () => {
-    if (localStreamRef.current) {
-      console.log('🎤 Using existing local audio stream');
-      return localStreamRef.current;
-    }
-    try {
-      console.log('🎤 Requesting microphone access...');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('✅ Microphone access granted, stream tracks:', stream.getTracks().length);
-      stream.getTracks().forEach(track => {
-        console.log('🎤 Local audio track:', track.kind, 'enabled:', track.enabled, 'readyState:', track.readyState);
-      });
-      localStreamRef.current = stream;
-      return stream;
-    } catch (err) {
-      console.error('❌ Failed to get microphone access:', err.name, err.message);
-      showCallError(`Микрофон недоступен: ${err.message}`);
-      throw err;
-    }
-  }, [showCallError]);
+    if (localStreamRef.current) return localStreamRef.current;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStreamRef.current = stream;
+    return stream;
+  }, []);
 
   const createPeerConnection = useCallback((targetUserId, socket, callId) => {
     closePeerConnection();
@@ -452,7 +438,6 @@ export default function Chat() {
     console.log('🔊 Creating RTCPeerConnection with config:', RTC_CONFIG);
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnectionRef.current = pc;
-    window.currentPeerConnection = pc; // Share globally for CallPage component
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
@@ -468,12 +453,43 @@ export default function Chat() {
       });
     };
 
-    pc.onicegatheringstatechange = () => {
-      console.log('🧊 [Chat] ICE gathering state:', pc.iceGatheringState);
+    pc.ontrack = (event) => {
+      console.log('🎵 Remote track received:', event.track.kind);
+      if (!remoteStreamRef.current) {
+        remoteStreamRef.current = new MediaStream();
+      }
+      const streamTracks = event.streams?.[0]?.getTracks?.() || [];
+      const track = streamTracks[0] || event.track || null;
+      if (track && !remoteStreamRef.current.getTracks().some((t) => t.id === track.id)) {
+        remoteStreamRef.current.addTrack(track);
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = remoteStreamRef.current;
+        remoteAudioRef.current.play?.().catch(() => {});
+      }
+      setCallState('in-call');
     };
 
-    // Note: ontrack, onconnectionstatechange, oniceconnectionstatechange are now handled in CallPage.jsx
-    // to prevent state updates on unmounted Chat component
+    pc.onconnectionstatechange = () => {
+      console.log('📡 Connection state:', pc.connectionState);
+      if (pc.connectionState === 'connecting') setCallState('connecting');
+      if (pc.connectionState === 'connected') setCallState('in-call');
+      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+        resetCallState();
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log('🧊 ICE connection state:', pc.iceConnectionState, '| Gathering state:', pc.iceGatheringState);
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        setCallState('in-call');
+      }
+      if (pc.iceConnectionState === 'failed') {
+        console.error('❌ ICE connection failed - TURN may not be working');
+        showCallError('Не удалось установить аудиосоединение');
+        resetCallState();
+      }
+    };
 
     const queued = earlyIceCandidatesRef.current.filter(
       (item) => Number(item.from) === Number(targetUserId) && item.callId === callId
@@ -513,48 +529,25 @@ export default function Chat() {
       const callId = `call_${me.id}_${friendIdNum}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const stream = await ensureLocalAudio();
       const pc = createPeerConnection(friendIdNum, socket, callId);
-      
-      console.log('📞 Adding local audio tracks to peer connection...');
-      let addedTracks = 0;
-      stream.getTracks().forEach((track) => {
-        console.log('📞 Adding track:', track.kind, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
-        pc.addTrack(track, stream);
-        addedTracks++;
-      });
-      console.log(`✅ Added ${addedTracks} tracks to peer connection`);
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       console.log('📞 Creating offer...');
       const offer = await pc.createOffer();
-      console.log('📞 Offer created');
-      console.log('📡 OFFER SDP (first 800 chars):', offer.sdp.substring(0, 800));
-      console.log('📡 OFFER media section:', offer.sdp.includes('m=audio') ? '✅ Has m=audio' : '❌ NO m=audio');
-      console.log('📞 Setting local description...');
-      console.log('🔄 [BEFORE setLocalDescription] Signaling:', pc.signalingState, '| ICE:', pc.iceConnectionState, '| Connection:', pc.connectionState);
+      console.log('📞 Offer created, setting local description...');
       await pc.setLocalDescription(offer);
-      console.log('🔄 [AFTER setLocalDescription] Signaling:', pc.signalingState, '| ICE:', pc.iceConnectionState, '| Connection:', pc.connectionState);
       console.log('📞 Local description set, sending offer to peer');
 
       activeCallPeerRef.current = friendIdNum;
       activeCallIdRef.current = callId;
       setActiveCallPeer(friendIdNum);
       setCallState('calling');
-      
-      // Сохраняем информацию о звонке в sessionStorage и переходим на страницу звонка
-      sessionStorage.setItem('activeCall', JSON.stringify({
-        friendId: friendIdNum,
-        friend: friend,
-        callId
-      }));
-      navigate(`/call/${friendIdNum}`);
-      
-      console.log('📞 Sending offer to peer via socket | Socket ID:', socket.id, '| To:', friendIdNum, '| CallId:', callId);
       socket.emit('call_offer', { to: friendIdNum, offer, callId });
     } catch (err) {
       console.error('Call start error:', err);
       showCallError('Не удалось начать звонок');
       resetCallState();
     }
-  }, [callState, createPeerConnection, ensureLocalAudio, friendIdNum, hasBlock, me.id, resetCallState, showCallError, friend, navigate]);
+  }, [callState, createPeerConnection, ensureLocalAudio, friendIdNum, hasBlock, me.id, resetCallState, showCallError]);
 
   const rejectIncomingCall = useCallback(() => {
     const socket = getSocket();
@@ -579,21 +572,11 @@ export default function Chat() {
       const peerId = Number(callData.from);
       const callId = String(callData.callId);
       const pc = createPeerConnection(peerId, socket, callId);
-      
-      console.log('📞 Adding local audio tracks to peer connection (answerer side)...');
-      let addedTracks = 0;
-      stream.getTracks().forEach((track) => {
-        console.log('📞 Adding track:', track.kind, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
-        pc.addTrack(track, stream);
-        addedTracks++;
-      });
-      console.log(`✅ Added ${addedTracks} tracks to peer connection`);
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       console.log('📞 Got offer, setting remote description...');
       await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
-      console.log('� RECEIVED OFFER SDP (first 800 chars):', callData.offer.sdp.substring(0, 800));
-      console.log('📡 RECEIVED OFFER media section:', callData.offer.sdp.includes('m=audio') ? '✅ Has m=audio' : '❌ NO m=audio');
-      console.log('�📞 Remote description set, adding queued ICE candidates...');
+      console.log('📞 Remote description set, adding queued ICE candidates...');
       for (const candidate of pendingRemoteCandidatesRef.current) {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       }
@@ -601,13 +584,8 @@ export default function Chat() {
 
       console.log('📞 Creating answer...');
       const answer = await pc.createAnswer();
-      console.log('📞 Answer created');
-      console.log('📡 ANSWER SDP (first 800 chars):', answer.sdp.substring(0, 800));
-      console.log('📡 ANSWER media section:', answer.sdp.includes('m=audio') ? '✅ Has m=audio' : '❌ NO m=audio');
-      console.log('📞 Setting local description...');
-      console.log('🔄 [BEFORE setLocalDescription] Signaling:', pc.signalingState, '| ICE:', pc.iceConnectionState, '| Connection:', pc.connectionState);
+      console.log('📞 Answer created, setting local description...');
       await pc.setLocalDescription(answer);
-      console.log('🔄 [AFTER setLocalDescription] Signaling:', pc.signalingState, '| ICE:', pc.iceConnectionState, '| Connection:', pc.connectionState);
       console.log('📞 Local description set, sending answer to peer');
 
       activeCallPeerRef.current = peerId;
@@ -615,40 +593,17 @@ export default function Chat() {
       setActiveCallPeer(peerId);
       setIncomingCall(null);
       setCallState('connecting');
-      
-      // ВАЖНО: отправить answer ПЕРЕД переходом на другую страницу!
-      console.log('📞 Sending answer to peer via socket | Socket ID:', socket.id, '| To:', peerId, '| CallId:', callId);
       socket.emit('call_answer', { to: peerId, answer, callId });
-      console.log('📞 Answer sent to peer');
-      
-      // Сохраняем информацию о звонке в sessionStorage и переходим на страницу звонка
-      sessionStorage.setItem('activeCall', JSON.stringify({
-        friendId: peerId,
-        friend: callData.friendData || { id: peerId, username: 'User', public_id: 'user' },
-        callId
-      }));
-      navigate(`/call/${peerId}`);
     } catch (err) {
       console.error('Accept call error:', err);
       showCallError('Не удалось принять звонок');
       resetCallState();
     }
-  }, [ensureLocalAudio, createPeerConnection, showCallError, resetCallState, navigate]);
+  }, [ensureLocalAudio, createPeerConnection, showCallError, resetCallState]);
 
   const acceptIncomingCall = useCallback(async () => {
     if (!incomingCall) return;
-    // Добавляем информацию о звонящем перед тем как перейти на CallPage
-    const callerInfo = {
-      ...incomingCall,
-      friendData: {
-        id: incomingCall.from,
-        username: incomingCall.username,
-        public_id: incomingCall.username,
-        name: incomingCall.username,
-        avatar: null // Аватарку можно загрузить позже
-      }
-    };
-    await acceptIncomingCallData(callerInfo);
+    await acceptIncomingCallData(incomingCall);
   }, [incomingCall, acceptIncomingCallData]);
 
   const endCall = useCallback((notify = true) => {
@@ -890,55 +845,10 @@ export default function Chat() {
       }
     };
 
-    const onCallOffer = ({ from, from_username, offer, callId }) => {
-      console.log('📞 Incoming call offer from:', from_username);
-      if (from === activeCallPeerRef.current && activeCallIdRef.current === callId) {
-        console.log('🔄 Call already active with this user');
-        return;
-      }
-      if (incomingCall) {
-        console.log('📞 Already have incoming call');
-        return;
-      }
-      setIncomingCall({
-        from,
-        username: from_username,
-        offer,
-        callId,
-      });
-      // Show notification
-      if (Notification?.permission === 'granted') {
-        new Notification(`Входящий звонок от ${from_username}`, {
-          icon: '/icons/favicon.svg',
-          requireInteraction: true,
-        });
-      }
-    };
-
     const onCallAnswer = async ({ from, answer, callId }) => {
-      console.log('📞 onCallAnswer received:', { from, callId, activeCallId: activeCallIdRef.current, activePeer: activeCallPeerRef.current, hasPC: !!peerConnectionRef.current });
-      
-      if (!answer || !callId) {
-        console.log('❌ No answer or callId');
-        return;
-      }
-      if (callId !== activeCallIdRef.current) {
-        console.log(`❌ callId mismatch: ${callId} !== ${activeCallIdRef.current}`);
-        return;
-      }
-      if (from !== activeCallPeerRef.current) {
-        console.log(`❌ from mismatch: ${from} !== ${activeCallPeerRef.current}`);
-        return;
-      }
-      if (!peerConnectionRef.current) {
-        console.log('❌ No peer connection');
-        return;
-      }
-      
+      if (!answer || !callId || callId !== activeCallIdRef.current || from !== activeCallPeerRef.current || !peerConnectionRef.current) return;
       try {
-        console.log('📞 Setting remote description from answer...');
         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-        console.log('📞 Remote description set, processing ICE candidates...');
         for (const candidate of pendingRemoteCandidatesRef.current) {
           await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
         }
@@ -1009,7 +919,8 @@ export default function Chat() {
     socket.on('message_reaction', onMessageReaction);
     socket.on('chat_error', onChatError);
     socket.on('chat_block_status_changed', onBlockStatusChanged);
-    socket.on('call_offer', onCallOffer);
+    socket.on('call_answer', onCallAnswer);
+    socket.on('call_ice_candidate', onCallIceCandidate);
     socket.on('call_reject', onCallReject);
     socket.on('call_end', onCallEnd);
     socket.on('call_unavailable', onCallUnavailable);
@@ -1027,7 +938,8 @@ export default function Chat() {
       socket.off('message_reaction', onMessageReaction);
       socket.off('chat_error', onChatError);
       socket.off('chat_block_status_changed', onBlockStatusChanged);
-      socket.off('call_offer', onCallOffer);
+      socket.off('call_answer', onCallAnswer);
+      socket.off('call_ice_candidate', onCallIceCandidate);
       socket.off('call_reject', onCallReject);
       socket.off('call_end', onCallEnd);
       socket.off('call_unavailable', onCallUnavailable);
@@ -1062,12 +974,6 @@ export default function Chat() {
 
   useEffect(() => {
     return () => {
-      // Don't close peer connection on unmount if we're actively in a call (on CallPage)
-      // If activeCallPeerRef exists, it means we're in an active call and Phone component will handle cleanup
-      if (activeCallPeerRef.current) {
-        console.log('⏸️ Chat unmounting but call is active, preserving RTCPeerConnection for CallPage');
-        return;
-      }
       endCall(false);
     };
   }, [endCall]);
