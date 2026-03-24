@@ -129,6 +129,7 @@ io.on('connection', (socket) => {
   // Track online
   if (!onlineUsers.has(uid)) onlineUsers.set(uid, new Set());
   onlineUsers.get(uid).add(socket.id);
+  console.log(`✅ User ${uid} connected (socket: ${socket.id}), online users now:`, Array.from(onlineUsers.keys()));
 
   // Track which chat this socket is currently viewing (null = none)
   socket.viewingChat = null;
@@ -240,20 +241,26 @@ io.on('connection', (socket) => {
   // ── Голосовые звонки (WebRTC signaling) ─────────────────────────────────
   socket.on('call_offer', ({ to, offer, callId }) => {
     if (!to || !offer || !callId || to === uid) return;
+    console.log(`📞 call_offer: from=${uid}, to=${to}, callId=${callId}`);
+    
     if (!areUsersFriends(uid, to)) {
+      console.log(`❌ Not friends: ${uid} and ${to}`);
       socket.emit('chat_error', { msg: 'Позвонить можно только друзьям' });
       return;
     }
     if (areUsersBlocked(uid, to)) {
+      console.log(`❌ Users blocked: ${uid} and ${to}`);
       socket.emit('chat_error', { msg: 'Звонок недоступен из-за блокировки' });
       return;
     }
     if (!onlineUsers.has(to)) {
+      console.log(`❌ User not online: ${to}, onlineUsers keys:`, Array.from(onlineUsers.keys()));
       socket.emit('call_unavailable', { to });
       return;
     }
 
     const caller = db.prepare('SELECT id, username FROM users WHERE id = ?').get(uid);
+    console.log(`✅ Sending call_offer to user ${to}, sockets:`, Array.from(onlineUsers.get(to)));
     onlineUsers.get(to).forEach((sid) => {
       io.to(sid).emit('call_offer', {
         from: uid,
@@ -266,8 +273,18 @@ io.on('connection', (socket) => {
 
   socket.on('call_answer', ({ to, answer, callId }) => {
     if (!to || !answer || !callId || to === uid) return;
-    if (!areUsersFriends(uid, to) || areUsersBlocked(uid, to)) return;
-    if (!onlineUsers.has(to)) return;
+    console.log(`📞 call_answer: from=${uid}, to=${to}, callId=${callId}`);
+    
+    if (!areUsersFriends(uid, to) || areUsersBlocked(uid, to)) {
+      console.log(`❌ call_answer: Not friends or blocked`);
+      return;
+    }
+    if (!onlineUsers.has(to)) {
+      console.log(`❌ call_answer: User ${to} not online`);
+      return;
+    }
+    
+    console.log(`✅ Sending call_answer to user ${to}`);
     onlineUsers.get(to).forEach((sid) => {
       io.to(sid).emit('call_answer', { from: uid, answer, callId });
     });

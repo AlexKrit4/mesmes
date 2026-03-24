@@ -603,14 +603,16 @@ export default function Chat() {
       setIncomingCall(null);
       setCallState('connecting');
       
+      // ВАЖНО: отправить answer ПЕРЕД переходом на другую страницу!
+      socket.emit('call_answer', { to: peerId, answer, callId });
+      console.log('📞 Answer sent to peer');
+      
       // Сохраняем информацию о звонке в sessionStorage и переходим на страницу звонка
       sessionStorage.setItem('activeCall', JSON.stringify({
         friendId: peerId,
         callId
       }));
       navigate(`/call/${peerId}`);
-      
-      socket.emit('call_answer', { to: peerId, answer, callId });
     } catch (err) {
       console.error('Accept call error:', err);
       showCallError('Не удалось принять звонок');
@@ -888,9 +890,29 @@ export default function Chat() {
     };
 
     const onCallAnswer = async ({ from, answer, callId }) => {
-      if (!answer || !callId || callId !== activeCallIdRef.current || from !== activeCallPeerRef.current || !peerConnectionRef.current) return;
+      console.log('📞 onCallAnswer received:', { from, callId, activeCallId: activeCallIdRef.current, activePeer: activeCallPeerRef.current, hasPC: !!peerConnectionRef.current });
+      
+      if (!answer || !callId) {
+        console.log('❌ No answer or callId');
+        return;
+      }
+      if (callId !== activeCallIdRef.current) {
+        console.log(`❌ callId mismatch: ${callId} !== ${activeCallIdRef.current}`);
+        return;
+      }
+      if (from !== activeCallPeerRef.current) {
+        console.log(`❌ from mismatch: ${from} !== ${activeCallPeerRef.current}`);
+        return;
+      }
+      if (!peerConnectionRef.current) {
+        console.log('❌ No peer connection');
+        return;
+      }
+      
       try {
+        console.log('📞 Setting remote description from answer...');
         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log('📞 Remote description set, processing ICE candidates...');
         for (const candidate of pendingRemoteCandidatesRef.current) {
           await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
         }
