@@ -21,6 +21,8 @@ export default function CallPage() {
   const remoteAudioRef = useRef(null);
   const pendingRemoteCandidatesRef = useRef([]);
 
+  console.log('🎬 [CallPage] COMPONENT MOUNTED with friendId:', friendId);
+
   useEffect(() => {
     // Получи информацию о друге из localStorage (передалась при инициировании звонка)
     const callData = JSON.parse(sessionStorage.getItem('activeCall') || '{}');
@@ -101,6 +103,8 @@ export default function CallPage() {
       console.log('❌ [CallPage] No peer connection found');
       return;
     }
+
+    console.log('✅ [CallPage] Registering RTC handlers | Current state - Signaling:', pc.signalingState, '| ICE:', pc.iceConnectionState, '| Connection:', pc.connectionState);
 
     // Register connection state handlers on PC
     pc.onconnectionstatechange = () => {
@@ -205,6 +209,22 @@ export default function CallPage() {
 
     socket.on('call_answer', onCallAnswer);
     socket.on('call_ice_candidate', onCallIceCandidate);
+
+    // If PC already has both descriptions (answerer side scenario), manually update UI
+    console.log('🔍 [CallPage] Checking if already connected...');
+    if (pc.signalingState === 'stable' && pc.localDescription && pc.remoteDescription) {
+      console.log('📡 [CallPage] ✅ PC already has both descriptions, manually triggering state checks');
+      setDebugInfo(prev => ({ ...prev, connectionState: `📡 ${pc.connectionState}`, iceState: `🧊 ${pc.iceConnectionState}` }));
+      
+      // Check if we should be in-call
+      if (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        console.log('✅ [CallPage] Already in connected state, moving to in-call');
+        setCallState('in-call');
+      } else if (pc.connectionState === 'failed' || pc.iceConnectionState === 'failed') {
+        console.error('❌ [CallPage] PC already in failed state');
+        setCallState('ended');
+      }
+    }
 
     return () => {
       socket.off('call_answer', onCallAnswer);
