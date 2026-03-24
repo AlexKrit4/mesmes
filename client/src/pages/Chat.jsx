@@ -541,13 +541,22 @@ export default function Chat() {
       activeCallIdRef.current = callId;
       setActiveCallPeer(friendIdNum);
       setCallState('calling');
+      
+      // Сохраняем информацию о звонке в sessionStorage и переходим на страницу звонка
+      sessionStorage.setItem('activeCall', JSON.stringify({
+        friendId: friendIdNum,
+        friend: friend,
+        callId
+      }));
+      navigate(`/call/${friendIdNum}`);
+      
       socket.emit('call_offer', { to: friendIdNum, offer, callId });
     } catch (err) {
       console.error('Call start error:', err);
       showCallError('Не удалось начать звонок');
       resetCallState();
     }
-  }, [callState, createPeerConnection, ensureLocalAudio, friendIdNum, hasBlock, me.id, resetCallState, showCallError]);
+  }, [callState, createPeerConnection, ensureLocalAudio, friendIdNum, hasBlock, me.id, resetCallState, showCallError, friend, navigate]);
 
   const rejectIncomingCall = useCallback(() => {
     const socket = getSocket();
@@ -593,13 +602,21 @@ export default function Chat() {
       setActiveCallPeer(peerId);
       setIncomingCall(null);
       setCallState('connecting');
+      
+      // Сохраняем информацию о звонке в sessionStorage и переходим на страницу звонка
+      sessionStorage.setItem('activeCall', JSON.stringify({
+        friendId: peerId,
+        callId
+      }));
+      navigate(`/call/${peerId}`);
+      
       socket.emit('call_answer', { to: peerId, answer, callId });
     } catch (err) {
       console.error('Accept call error:', err);
       showCallError('Не удалось принять звонок');
       resetCallState();
     }
-  }, [ensureLocalAudio, createPeerConnection, showCallError, resetCallState]);
+  }, [ensureLocalAudio, createPeerConnection, showCallError, resetCallState, navigate]);
 
   const acceptIncomingCall = useCallback(async () => {
     if (!incomingCall) return;

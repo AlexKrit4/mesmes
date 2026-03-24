@@ -5,6 +5,7 @@ import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Home from './pages/Home.jsx';
 import Chat from './pages/Chat.jsx';
+import CallPage from './pages/CallPage.jsx';
 import ChannelPage from './pages/ChannelPage.jsx';
 import ChannelInfoPage from './pages/ChannelInfoPage.jsx';
 import ChannelPostComments from './pages/ChannelPostComments.jsx';
@@ -139,6 +140,7 @@ function AppRoutes() {
         <Route path="/join/:code" element={<PrivateRoute><JoinChannel /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute><AdminPanel /></PrivateRoute>} />
+        <Route path="/call/:friendId" element={<PrivateRoute><CallPage /></PrivateRoute>} />
         <Route path="/premium" element={<PrivateRoute><PremiumPage /></PrivateRoute>} />
         <Route path="/:publicId" element={<PrivateRoute><Profile /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
