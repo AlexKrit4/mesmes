@@ -10,6 +10,13 @@ export default function CallPage() {
   const [callDuration, setCallDuration] = useState(0);
   const [isMicOn, setIsMicOn] = useState(true);
   const [callState, setCallState] = useState('connecting'); // connecting, in-call, ended
+  const [debugInfo, setDebugInfo] = useState({ 
+    micAccess: '⏳ Запрашиваю микрофон...',
+    localTracks: 0,
+    remoteTracks: 0,
+    iceState: '⏳ Инициализация...',
+    connectionState: '⏳ Подключаюсь...'
+  });
   const timerRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const pendingRemoteCandidatesRef = useRef([]);
@@ -29,6 +36,28 @@ export default function CallPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
+  }, []);
+
+  // Периодически обновляй информацию о микрофоне и треках
+  useEffect(() => {
+    const updateDebugInfo = () => {
+      const pc = window.currentPeerConnection;
+      if (!pc) return;
+      
+      // Получи информацию о локальных треках
+      const senders = pc.getSenders();
+      const audioSenders = senders.filter(sender => sender.track?.kind === 'audio');
+      const micAccessible = audioSenders.length > 0;
+      
+      setDebugInfo(prev => ({
+        ...prev,
+        micAccess: micAccessible ? `✅ Микрофон включен (${audioSenders.length} трек${audioSenders.length !== 1 ? 'и' : ''})` : '❌ Микрофон не подключен'
+      }));
+    };
+
+    const interval = setInterval(updateDebugInfo, 500);
+    updateDebugInfo();
+    return () => clearInterval(interval);
   }, []);
 
   // Обновляй статус звонка
@@ -66,6 +95,7 @@ export default function CallPage() {
     // Register connection state handlers on PC
     pc.onconnectionstatechange = () => {
       console.log('📡 [CallPage] Connection state:', pc.connectionState);
+      setDebugInfo(prev => ({ ...prev, connectionState: `📡 ${pc.connectionState}` }));
       if (pc.connectionState === 'connecting') setCallState('connecting');
       if (pc.connectionState === 'connected') setCallState('in-call');
       if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
@@ -75,6 +105,7 @@ export default function CallPage() {
 
     pc.oniceconnectionstatechange = () => {
       console.log('🧊 [CallPage] ICE connection state:', pc.iceConnectionState);
+      setDebugInfo(prev => ({ ...prev, iceState: `🧊 ${pc.iceConnectionState}` }));
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         setCallState('in-call');
       }
@@ -87,6 +118,8 @@ export default function CallPage() {
     pc.ontrack = (event) => {
       console.log('🎵 [CallPage] Remote track received:', event.track.kind, 'enabled:', event.track.enabled, 'readyState:', event.track.readyState);
       console.log('🎵 [CallPage] Track streams:', event.streams.length);
+      
+      setDebugInfo(prev => ({ ...prev, remoteTracks: 1 }));
       
       if (remoteAudioRef.current) {
         console.log('🎵 [CallPage] Setting up audio element, current srcObject:', remoteAudioRef.current.srcObject);
@@ -103,6 +136,7 @@ export default function CallPage() {
         try {
           remoteAudioRef.current.play?.();
           console.log('✅ [CallPage] Audio playback started');
+          setDebugInfo(prev => ({ ...prev, remoteTracks: remoteAudioRef.current.srcObject.getTracks().length }));
         } catch (err) {
           console.error('❌ [CallPage] Audio playback failed:', err);
         }
@@ -259,6 +293,23 @@ export default function CallPage() {
             <span className="icon">📞</span>
             <span className="label">Завершить</span>
           </button>
+        </div>
+
+        {/* Debug info panel */}
+        <div style={{
+          marginTop: '20px',
+          padding: '12px',
+          backgroundColor: 'rgba(0, 0, 0, 0.3)',
+          borderRadius: '8px',
+          fontSize: '12px',
+          color: '#fff',
+          textAlign: 'left',
+          fontFamily: 'monospace'
+        }}>
+          <div style={{ marginBottom: '6px' }}>{debugInfo.micAccess}</div>
+          <div style={{ marginBottom: '6px' }}>🎵 Удаленный звук: {debugInfo.remoteTracks > 0 ? `✅ ${debugInfo.remoteTracks} трек` : '❌ ждет'}</div>
+          <div style={{ marginBottom: '6px' }}>{debugInfo.iceState}</div>
+          <div>{debugInfo.connectionState}</div>
         </div>
       </div>
     </div>
