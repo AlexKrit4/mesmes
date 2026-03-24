@@ -26,7 +26,9 @@ export default function CallPage() {
   useEffect(() => {
     // Получи информацию о друге из localStorage (передалась при инициировании звонка)
     const callData = JSON.parse(sessionStorage.getItem('activeCall') || '{}');
+    console.log('👥 [CallPage] Loading call data:', { friendId: callData.friendId, hasFriend: !!callData.friend, friend: callData.friend });
     if (callData.friendId) {
+      console.log('✅ [CallPage] Setting friend:', callData.friend);
       setFriend(callData.friend);
     }
 

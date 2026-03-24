@@ -624,6 +624,7 @@ export default function Chat() {
       // Сохраняем информацию о звонке в sessionStorage и переходим на страницу звонка
       sessionStorage.setItem('activeCall', JSON.stringify({
         friendId: peerId,
+        friend: callData.friendData || { id: peerId, username: 'User', public_id: 'user' },
         callId
       }));
       navigate(`/call/${peerId}`);
@@ -636,7 +637,18 @@ export default function Chat() {
 
   const acceptIncomingCall = useCallback(async () => {
     if (!incomingCall) return;
-    await acceptIncomingCallData(incomingCall);
+    // Добавляем информацию о звонящем перед тем как перейти на CallPage
+    const callerInfo = {
+      ...incomingCall,
+      friendData: {
+        id: incomingCall.from,
+        username: incomingCall.username,
+        public_id: incomingCall.username,
+        name: incomingCall.username,
+        avatar: null // Аватарку можно загрузить позже
+      }
+    };
+    await acceptIncomingCallData(callerInfo);
   }, [incomingCall, acceptIncomingCallData]);
 
   const endCall = useCallback((notify = true) => {
