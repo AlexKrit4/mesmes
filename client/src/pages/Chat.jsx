@@ -27,7 +27,7 @@ function buildRtcConfig() {
 
   return {
     iceServers,
-    iceTransportPolicy: 'relay',
+    iceTransportPolicy: 'all',  // Try direct first, then relay
   };
 }
 
