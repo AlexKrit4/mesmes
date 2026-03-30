@@ -4073,9 +4073,9 @@ img.avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
+  cursor: grab;
   padding: 8px;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
@@ -4087,11 +4087,13 @@ img.avatar {
 }
 
 .block-blast-piece-card:active {
+  cursor: grabbing;
   transform: scale(0.98);
 }
 
-.block-blast-piece-card.active {
-  background: rgba(108, 92, 231, 0.2);
+.block-blast-piece-card.dragging {
+  opacity: 0.6;
+  cursor: grabbing;
 }
 
 .block-blast-piece-card.empty {

@@ -103,20 +103,13 @@ function clearCompleted(board) {
 export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   const [board, setBoard] = useState(createEmptyBoard());
   const [pieces, setPieces] = useState([randomPiece(), randomPiece(), randomPiece()]);
-  const [selectedPieceId, setSelectedPieceId] = useState(null);
   const [score, setScore] = useState(0);
   const [bestScore, setBestScore] = useState(0);
   const [message, setMessage] = useState('');
   const [gameOver, setGameOver] = useState(false);
   const [savingResult, setSavingResult] = useState(false);
+  const [draggingPieceId, setDraggingPieceId] = useState(null);
   const [previewPos, setPreviewPos] = useState(null);
-  const [hoverRow, setHoverRow] = useState(null);
-  const [hoverCol, setHoverCol] = useState(null);
-
-  const selectedPiece = useMemo(
-    () => pieces.find((p) => p?.id === selectedPieceId) || null,
-    [pieces, selectedPieceId]
-  );
 
   const submitScore = async (value) => {
     if (savingResult) return;
@@ -134,13 +127,11 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   const resetGame = () => {
     setBoard(createEmptyBoard());
     setPieces([randomPiece(), randomPiece(), randomPiece()]);
-    setSelectedPieceId(null);
     setScore(0);
     setGameOver(false);
     setMessage('');
     setPreviewPos(null);
-    setHoverRow(null);
-    setHoverCol(null);
+    setDraggingPieceId(null);
   };
 
   const tryFinishIfNoMoves = async (nextBoard, nextPieces, nextScore) => {
@@ -172,19 +163,10 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     setBoard(afterClear.board);
     setScore(nextScore);
     setPieces(finalPieces);
-    setSelectedPieceId(null);
+    setDraggingPieceId(null);
     setPreviewPos(null);
-    setHoverRow(null);
-    setHoverCol(null);
 
     await tryFinishIfNoMoves(afterClear.board, finalPieces, nextScore);
-  };
-
-  const onCellClick = (row, col) => {
-    if (selectedPieceId) {
-      const piece = pieces.find((p) => p?.id === selectedPieceId);
-      placePieceAt(piece, row, col);
-    }
   };
 
   const getBoardRect = (boardEl) => {
@@ -194,13 +176,8 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     return { rect, cellSize };
   };
 
-  const handleBoardMove = (clientX, clientY) => {
-    if (!selectedPieceId) {
-      setPreviewPos(null);
-      setHoverRow(null);
-      setHoverCol(null);
-      return;
-    }
+  const handleMove = (clientX, clientY) => {
+    if (!draggingPieceId) return;
 
     const boardEl = document.querySelector('.block-blast-board');
     const boardData = getBoardRect(boardEl);
@@ -214,9 +191,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     const row = Math.floor(y / (cellSize + 4));
 
     if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
-      setHoverRow(row);
-      setHoverCol(col);
-      const piece = pieces.find((p) => p?.id === selectedPieceId);
+      const piece = pieces.find((p) => p?.id === draggingPieceId);
       if (piece && canPlace(board, piece, row, col)) {
         setPreviewPos({ row, col });
         return;
@@ -225,31 +200,49 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     setPreviewPos(null);
   };
 
+  const handleMoveEnd = () => {
+    if (draggingPieceId && previewPos) {
+      const piece = pieces.find((p) => p?.id === draggingPieceId);
+      placePieceAt(piece, previewPos.row, previewPos.col);
+    } else {
+      setDraggingPieceId(null);
+      setPreviewPos(null);
+    }
+  };
+
+  const onBoardMouseMove = (e) => {
+    handleMove(e.clientX, e.clientY);
+  };
+
+  const onBoardMouseUp = () => {
+    handleMoveEnd();
+  };
+
+  const onBoardMouseLeave = () => {
+    if (!draggingPieceId) return;
+    setPreviewPos(null);
+  };
+
   const onBoardTouchMove = (e) => {
+    if (!draggingPieceId) return;
     e.preventDefault();
     if (e.touches.length === 1) {
       const touch = e.touches[0];
-      handleBoardMove(touch.clientX, touch.clientY);
+      handleMove(touch.clientX, touch.clientY);
     }
   };
 
   const onBoardTouchEnd = () => {
-    if (selectedPieceId && previewPos) {
-      const piece = pieces.find((p) => p?.id === selectedPieceId);
-      placePieceAt(piece, previewPos.row, previewPos.col);
-    }
-    setPreviewPos(null);
-    setHoverRow(null);
-    setHoverCol(null);
+    handleMoveEnd();
   };
 
-  const onBoardMouseMove = (e) => {
-    handleBoardMove(e.clientX, e.clientY);
+  const onPieceMouseDown = (pieceId) => {
+    setDraggingPieceId(pieceId);
   };
 
-  const onBoardMouseLeave = () => {
-    setPreviewPos(null);
-    setHoverRow(null);
+  const onPieceTouchStart = (pieceId) => {
+    setDraggingPieceId(pieceId);
+  };
     setHoverCol(null);
   };
 
@@ -285,10 +278,10 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
         </button>
       </div>
 
-      <div className="block-blast-board" onMouseMove={onBoardMouseMove} onMouseLeave={onBoardMouseLeave} onTouchMove={onBoardTouchMove} onTouchEnd={onBoardTouchEnd}>
+      <div className="block-blast-board" onMouseMove={onBoardMouseMove} onMouseLeave={onBoardMouseLeave} onMouseUp={onBoardMouseUp} onTouchMove={onBoardTouchMove} onTouchEnd={onBoardTouchEnd}>
         {board.map((row, rIdx) =>
           row.map((cell, cIdx) => {
-            const piece = pieces.find((p) => p?.id === selectedPieceId);
+            const piece = pieces.find((p) => p?.id === draggingPieceId);
             let previewColor = null;
             
             if (previewPos && piece) {
@@ -302,7 +295,6 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
               <button
                 key={`${rIdx}-${cIdx}`}
                 className="block-blast-cell"
-                onClick={() => onCellClick(rIdx, cIdx)}
                 style={{
                   background: cell ? cell : (previewColor ? `${previewColor}60` : 'rgba(255,255,255,0.06)'),
                   transition: previewColor ? 'background 0.05s' : 'background 0.15s',
@@ -325,13 +317,14 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
             }
 
             const { width, height } = getPieceSize(piece.cells);
-            const isSelected = selectedPieceId === piece.id;
+            const isDragging = draggingPieceId === piece.id;
 
             return (
               <div
                 key={piece.id}
-                className={`block-blast-piece-card ${isSelected ? 'active' : ''}`}
-                onClick={() => setSelectedPieceId(piece.id)}
+                className={`block-blast-piece-card ${isDragging ? 'dragging' : ''}`}
+                onMouseDown={() => onPieceMouseDown(piece.id)}
+                onTouchStart={() => onPieceTouchStart(piece.id)}
               >
                 <div
                   className="block-blast-piece-grid"
