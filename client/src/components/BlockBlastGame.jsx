@@ -111,6 +111,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   const [draggingPieceId, setDraggingPieceId] = useState(null);
   const [previewPos, setPreviewPos] = useState(null);
   const [dragPointer, setDragPointer] = useState(null);
+  const [boardCellSize, setBoardCellSize] = useState(16);
   const boardRef = useRef(null);
   const draggingPieceIdRef = useRef(null);
   const previewPosRef = useRef(null);
@@ -132,6 +133,20 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   useEffect(() => {
     boardStateRef.current = board;
   }, [board]);
+
+  useEffect(() => {
+    const updateBoardCellSize = () => {
+      const boardEl = boardRef.current;
+      if (!boardEl) return;
+      const data = getBoardRect(boardEl);
+      if (!data) return;
+      setBoardCellSize(Math.max(12, Math.floor(data.cellSize)));
+    };
+
+    updateBoardCellSize();
+    window.addEventListener('resize', updateBoardCellSize);
+    return () => window.removeEventListener('resize', updateBoardCellSize);
+  }, []);
 
   const draggingPiece = pieces.find((p) => p?.id === draggingPieceId) || null;
 
@@ -221,6 +236,16 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
 
     if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
       const piece = piecesRef.current.find((p) => p?.id === activePieceId);
+      if (piece) {
+        const { width, height } = getPieceSize(piece.cells);
+        const targetRow = row - Math.floor(height / 2);
+        const targetCol = col - Math.floor(width / 2);
+
+        if (canPlace(boardStateRef.current, piece, targetRow, targetCol)) {
+          setPreviewPos({ row: targetRow, col: targetCol });
+          return;
+        }
+      }
       if (piece && canPlace(boardStateRef.current, piece, row, col)) {
         setPreviewPos({ row, col });
         return;
@@ -274,6 +299,8 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     setDragPointer({ x: e.clientX, y: e.clientY });
     handleMove(e.clientX, e.clientY);
   };
+
+  const draggingPieceSize = draggingPiece ? getPieceSize(draggingPiece.cells) : null;
 
   if (!canPlay) {
     return (
@@ -356,7 +383,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
               >
                 <div
                   className="block-blast-piece-grid"
-                  style={{ gridTemplateColumns: `repeat(${width}, 16px)`, gridTemplateRows: `repeat(${height}, 16px)` }}
+                  style={{ gridTemplateColumns: `repeat(${width}, ${boardCellSize}px)`, gridTemplateRows: `repeat(${height}, ${boardCellSize}px)` }}
                 >
                   {Array.from({ length: width * height }).map((_, i) => {
                     const rr = Math.floor(i / width);
@@ -366,7 +393,12 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
                       <span
                         key={`${piece.id}-${i}`}
                         className="block-blast-piece-dot"
-                        style={{ background: filled ? piece.color : 'transparent' }}
+                        style={{
+                          width: `${boardCellSize}px`,
+                          height: `${boardCellSize}px`,
+                          borderRadius: `${Math.max(4, Math.floor(boardCellSize * 0.2))}px`,
+                          background: filled ? piece.color : 'transparent',
+                        }}
                       />
                     );
                   })}
@@ -389,19 +421,24 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
           <div
             className="block-blast-piece-grid"
             style={{
-              gridTemplateColumns: `repeat(${getPieceSize(draggingPiece.cells).width}, 16px)`,
-              gridTemplateRows: `repeat(${getPieceSize(draggingPiece.cells).height}, 16px)`,
+              gridTemplateColumns: `repeat(${draggingPieceSize.width}, ${boardCellSize}px)`,
+              gridTemplateRows: `repeat(${draggingPieceSize.height}, ${boardCellSize}px)`,
             }}
           >
-            {Array.from({ length: getPieceSize(draggingPiece.cells).width * getPieceSize(draggingPiece.cells).height }).map((_, i) => {
-              const rr = Math.floor(i / getPieceSize(draggingPiece.cells).width);
-              const cc = i % getPieceSize(draggingPiece.cells).width;
+            {Array.from({ length: draggingPieceSize.width * draggingPieceSize.height }).map((_, i) => {
+              const rr = Math.floor(i / draggingPieceSize.width);
+              const cc = i % draggingPieceSize.width;
               const filled = draggingPiece.cells.some(([r, c]) => r === rr && c === cc);
               return (
                 <span
                   key={`ghost-${draggingPiece.id}-${i}`}
                   className="block-blast-piece-dot"
-                  style={{ background: filled ? draggingPiece.color : 'transparent' }}
+                  style={{
+                    width: `${boardCellSize}px`,
+                    height: `${boardCellSize}px`,
+                    borderRadius: `${Math.max(4, Math.floor(boardCellSize * 0.2))}px`,
+                    background: filled ? draggingPiece.color : 'transparent',
+                  }}
                 />
               );
             })}
