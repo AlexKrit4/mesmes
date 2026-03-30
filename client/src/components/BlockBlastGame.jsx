@@ -109,9 +109,9 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   const [message, setMessage] = useState('');
   const [gameOver, setGameOver] = useState(false);
   const [savingResult, setSavingResult] = useState(false);
-  const [draggingPieceId, setDraggingPieceId] = useState(null);
-  const [dragPos, setDragPos] = useState(null);
   const [previewPos, setPreviewPos] = useState(null);
+  const [hoverRow, setHoverRow] = useState(null);
+  const [hoverCol, setHoverCol] = useState(null);
 
   const selectedPiece = useMemo(
     () => pieces.find((p) => p?.id === selectedPieceId) || null,
@@ -135,10 +135,12 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     setBoard(createEmptyBoard());
     setPieces([randomPiece(), randomPiece(), randomPiece()]);
     setSelectedPieceId(null);
-    setDraggingPieceId(null);
     setScore(0);
     setGameOver(false);
     setMessage('');
+    setPreviewPos(null);
+    setHoverRow(null);
+    setHoverCol(null);
   };
 
   const tryFinishIfNoMoves = async (nextBoard, nextPieces, nextScore) => {
@@ -171,8 +173,9 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     setScore(nextScore);
     setPieces(finalPieces);
     setSelectedPieceId(null);
-    setDraggingPieceId(null);
     setPreviewPos(null);
+    setHoverRow(null);
+    setHoverCol(null);
 
     await tryFinishIfNoMoves(afterClear.board, finalPieces, nextScore);
   };
@@ -191,9 +194,13 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     return { rect, cellSize };
   };
 
-  const onBoardDragOver = (e) => {
-    e.preventDefault();
-    if (!draggingPieceId) return;
+  const onBoardMouseMove = (e) => {
+    if (!selectedPieceId) {
+      setPreviewPos(null);
+      setHoverRow(null);
+      setHoverCol(null);
+      return;
+    }
 
     const boardEl = e.currentTarget;
     const boardData = getBoardRect(boardEl);
@@ -207,7 +214,9 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     const row = Math.floor(y / (cellSize + 4));
 
     if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
-      const piece = pieces.find((p) => p?.id === draggingPieceId);
+      setHoverRow(row);
+      setHoverCol(col);
+      const piece = pieces.find((p) => p?.id === selectedPieceId);
       if (piece && canPlace(board, piece, row, col)) {
         setPreviewPos({ row, col });
         return;
@@ -216,22 +225,10 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     setPreviewPos(null);
   };
 
-  const onBoardDrop = (e) => {
-    e.preventDefault();
-    if (!draggingPieceId || !previewPos) {
-      setDraggingPieceId(null);
-      setPreviewPos(null);
-      return;
-    }
-
-    const piece = pieces.find((p) => p?.id === draggingPieceId);
-    placePieceAt(piece, previewPos.row, previewPos.col);
-  };
-
-  const onBoardDragLeave = (e) => {
-    if (e.currentTarget === e.target) {
-      setPreviewPos(null);
-    }
+  const onBoardMouseLeave = () => {
+    setPreviewPos(null);
+    setHoverRow(null);
+    setHoverCol(null);
   };
 
   if (!canPlay) {
@@ -266,18 +263,17 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
         </button>
       </div>
 
-      <div className="block-blast-board" onDragOver={onBoardDragOver} onDrop={onBoardDrop} onDragLeave={onBoardDragLeave}>
+      <div className="block-blast-board" onMouseMove={onBoardMouseMove} onMouseLeave={onBoardMouseLeave}>
         {board.map((row, rIdx) =>
           row.map((cell, cIdx) => {
+            const piece = pieces.find((p) => p?.id === selectedPieceId);
             const isPreviewCell = previewPos && previewPos.row === rIdx && previewPos.col === cIdx;
-            const selectedPiece = pieces.find((p) => p?.id === draggingPieceId);
-            const isInPreview = isPreviewCell && selectedPiece && canPlace(board, selectedPiece, previewPos.row, previewPos.col);
-            
             let previewColor = null;
-            if (isInPreview) {
-              // Highlight all cells that will be affected
-              if (selectedPiece.cells.some(([dr, dc]) => rIdx === previewPos.row + dr && cIdx === previewPos.col + dc)) {
-                previewColor = selectedPiece.color;
+            
+            if (previewPos && piece) {
+              // Check if this cell is part of the preview shape
+              if (piece.cells.some(([dr, dc]) => rIdx === previewPos.row + dr && cIdx === previewPos.col + dc)) {
+                previewColor = piece.color;
               }
             }
 
@@ -287,9 +283,10 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
                 className="block-blast-cell"
                 onClick={() => onCellClick(rIdx, cIdx)}
                 style={{
-                  background: cell ? cell : (previewColor ? `${previewColor}44` : 'rgba(255,255,255,0.06)'),
+                  background: cell ? cell : (previewColor ? `${previewColor}60` : 'rgba(255,255,255,0.06)'),
+                  transition: previewColor ? 'background 0.05s' : 'background 0.15s',
                 }}
-                title={selectedPieceId ? 'Кликни или перетащи фигуру' : 'Выбери фигуру снизу'}
+                title={selectedPieceId ? 'Выбери позицию и кликни' : 'Выбери фигуру'}
               />
             );
           })
@@ -308,17 +305,12 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
             }
 
             const { width, height } = getPieceSize(piece.cells);
+            const isSelected = selectedPieceId === piece.id;
 
             return (
               <div
                 key={piece.id}
-                className={`block-blast-piece-card ${selectedPieceId === piece.id ? 'active' : ''} ${draggingPieceId === piece.id ? 'dragging' : ''}`}
-                draggable
-                onDragStart={() => setDraggingPieceId(piece.id)}
-                onDragEnd={() => {
-                  setDraggingPieceId(null);
-                  setPreviewPos(null);
-                }}
+                className={`block-blast-piece-card ${isSelected ? 'active' : ''}`}
                 onClick={() => setSelectedPieceId(piece.id)}
               >
                 <div
