@@ -7,6 +7,12 @@ const { logWebhook, getRecentLogs } = require('../webhookLogger');
 
 const router = express.Router();
 
+function getMinAcceptedCreditedAmount(depositAmount) {
+  const deltaRaw = Number(process.env.CASINO_DEPOSIT_ACCEPT_DELTA_RUB || 0.1);
+  const delta = Number.isFinite(deltaRaw) && deltaRaw >= 0 ? deltaRaw : 0.1;
+  return Number(depositAmount || 0) - delta;
+}
+
 // Middleware
 function isAdmin(req, res, next) {
   const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.userId);
@@ -227,7 +233,7 @@ router.post('/deposit-yoomoney/reconcile', auth, hasSlotAccess, async (req, res)
 
     const operations = Array.isArray(ymData.operations) ? ymData.operations : [];
     const expectedLabel = String(deposit.yoomoney_label);
-    const minExpectedAmount = Number(deposit.amount || 0) - 0.01;
+    const minExpectedAmount = getMinAcceptedCreditedAmount(deposit.amount);
     const matched = operations.find((op) => {
       const opLabel = String(op.label || '');
       const opStatus = String(op.status || '').toLowerCase();
@@ -635,11 +641,13 @@ router.post('/yoomoney-webhook', (req, res) => {
     }
 
     const amountRub = parseFloat(amount);
-    if (amountRub < deposit.total_charged - 0.01) {
+    const minAccepted = getMinAcceptedCreditedAmount(deposit.amount);
+    if (amountRub < minAccepted) {
       logWebhook('webhook amount too small', {
         label,
         amountRub,
-        required: deposit.total_charged,
+        required: deposit.amount,
+        minAccepted,
       });
       return res.status(400).send('small-amount');
     }
