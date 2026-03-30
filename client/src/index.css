@@ -3807,3 +3807,133 @@ img.avatar {
   padding: 0 !important;
 }
 
+/* ─── Block Blast ─────────────────────────────────────────────── */
+.block-blast-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.block-blast-stat {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.block-blast-stat span {
+  color: var(--text2);
+  font-size: 12px;
+}
+
+.block-blast-stat strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.block-blast-board {
+  margin: 8px 0 10px;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.block-blast-cell {
+  border: none;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+
+.block-blast-cell:active {
+  transform: scale(0.95);
+}
+
+.block-blast-pieces {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.block-blast-piece-card {
+  min-height: 64px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 8px;
+}
+
+.block-blast-piece-card.active {
+  outline: 2px solid var(--accent);
+}
+
+.block-blast-piece-card.empty {
+  color: var(--text2);
+  font-size: 12px;
+  cursor: not-allowed;
+}
+
+.block-blast-piece-grid {
+  display: grid;
+  gap: 2px;
+}
+
+.block-blast-piece-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.block-blast-leaderboard {
+  margin-top: 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.block-blast-leaderboard-title {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.block-blast-leader-row {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.block-blast-leader-row:last-child {
+  border-bottom: none;
+}
+
+@media (max-width: 420px) {
+  .block-blast-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .block-blast-pieces {
+    grid-template-columns: 1fr;
+  }
+}
+

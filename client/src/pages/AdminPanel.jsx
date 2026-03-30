@@ -33,6 +33,7 @@ export default function AdminPanel() {
   const [adminComment, setAdminComment] = useState('');
   const [reportMsg, setReportMsg] = useState('');
   const [moderatorMsg, setModeratorMsg] = useState('');
+  const [blockBlastMsg, setBlockBlastMsg] = useState('');
   const [adminAccess, setAdminAccess] = useState({ isAdmin: false, isModerator: false, canAccessAdminPanel: false });
 
   // Check admin access
@@ -118,6 +119,7 @@ export default function AdminPanel() {
     setTab('messages');
     setBanMsg('');
     setModeratorMsg('');
+    setBlockBlastMsg('');
     try {
       const [msgRes, banRes] = await Promise.all([
         api.get(`/admin/users/${user.id}/messages`),
@@ -214,6 +216,35 @@ export default function AdminPanel() {
     }
   };
 
+  const toggleBlockBlastAccess = async () => {
+    if (!selectedUser) return;
+    setBlockBlastMsg('');
+
+    const currentUser = users.find((u) => u.id === selectedUser.id) || selectedUser;
+    const hasAccess = !!currentUser.is_admin || !!currentUser.can_play_block_blast;
+
+    if (currentUser.is_admin && hasAccess) {
+      setBlockBlastMsg('У администратора доступ к игре всегда включен');
+      return;
+    }
+
+    try {
+      if (hasAccess) {
+        await api.post('/admin/block-blast/revoke', { user_id: selectedUser.id });
+        setBlockBlastMsg('Доступ к Block Blast отозван');
+      } else {
+        await api.post('/admin/block-blast/grant', { user_id: selectedUser.id });
+        setBlockBlastMsg('Доступ к Block Blast выдан');
+      }
+
+      const nextValue = hasAccess ? 0 : 1;
+      setUsers((prev) => prev.map((u) => (u.id === selectedUser.id ? { ...u, can_play_block_blast: nextValue } : u)));
+      setSelectedUser((prev) => (prev ? { ...prev, can_play_block_blast: nextValue } : prev));
+    } catch (err) {
+      setBlockBlastMsg(err.response?.data?.error || 'Ошибка изменения доступа к игре');
+    }
+  };
+
   const filteredUsers = users.filter((u) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
@@ -222,6 +253,10 @@ export default function AdminPanel() {
 
   const isUserBanned = selectedUser && users.find(u => u.id === selectedUser.id)?.active_ban_id;
   const isUserModerator = selectedUser && users.find(u => u.id === selectedUser.id)?.is_moderator;
+  const canUserPlayBlockBlast = selectedUser && (
+    users.find(u => u.id === selectedUser.id)?.is_admin ||
+    users.find(u => u.id === selectedUser.id)?.can_play_block_blast
+  );
   const userPremiumUntil = selectedUser && users.find(u => u.id === selectedUser.id)?.premium_until;
   const isUserPremium = userPremiumUntil && new Date(userPremiumUntil) > new Date();
 
@@ -326,6 +361,14 @@ export default function AdminPanel() {
               {isUserModerator ? 'Снять права модератора' : 'Выдать права модератора'}
             </button>
             {moderatorMsg && <div className="admin-ban-msg">{moderatorMsg}</div>}
+          </div>
+
+          <div className="admin-ban-form" style={{ marginBottom: 12 }}>
+            <h3>Игра Block Blast</h3>
+            <button className={`btn ${canUserPlayBlockBlast ? 'btn-danger' : 'btn-primary'}`} onClick={toggleBlockBlastAccess}>
+              {canUserPlayBlockBlast ? 'Отозвать доступ к игре' : 'Выдать доступ к игре'}
+            </button>
+            {blockBlastMsg && <div className="admin-ban-msg">{blockBlastMsg}</div>}
           </div>
 
           {/* Tabs */}

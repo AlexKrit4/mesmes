@@ -85,6 +85,12 @@ function auth(req, res, next) {
   }
 }
 
+function hasBlockBlastAccess(userId) {
+  const user = db.prepare('SELECT is_admin, can_play_block_blast FROM users WHERE id = ?').get(userId);
+  if (!user) return false;
+  return !!user.is_admin || !!user.can_play_block_blast;
+}
+
 // GET /api/users/vapid-public-key
 router.get('/vapid-public-key', (req, res) => {
   res.json({
@@ -831,6 +837,62 @@ router.delete('/sessions/:id', auth, (req, res) => {
   const sessionId = parseInt(req.params.id);
   db.prepare('DELETE FROM sessions WHERE id = ? AND user_id = ?').run(sessionId, req.userId);
   res.json({ success: true });
+});
+
+// GET /api/users/block-blast/access — check access to game
+router.get('/block-blast/access', auth, (req, res) => {
+  const user = db.prepare('SELECT is_admin, can_play_block_blast FROM users WHERE id = ?').get(req.userId);
+  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+  const canPlay = !!user.is_admin || !!user.can_play_block_blast;
+  res.json({ can_play: canPlay, is_admin: !!user.is_admin });
+});
+
+// GET /api/users/block-blast/leaderboard — top best records
+router.get('/block-blast/leaderboard', auth, (req, res) => {
+  if (!hasBlockBlastAccess(req.userId)) {
+    return res.status(403).json({ error: 'Нет доступа к игре' });
+  }
+
+  const leaderboard = db.prepare(`
+    SELECT
+      u.id,
+      u.username,
+      u.public_id,
+      MAX(s.score) AS best_score,
+      MIN(CASE WHEN s.score = (SELECT MAX(s2.score) FROM block_blast_scores s2 WHERE s2.user_id = u.id) THEN s.created_at END) AS achieved_at
+    FROM block_blast_scores s
+    JOIN users u ON u.id = s.user_id
+    GROUP BY u.id, u.username, u.public_id
+    ORDER BY best_score DESC, achieved_at ASC
+    LIMIT 50
+  `).all();
+
+  const myBest = db.prepare('SELECT MAX(score) AS best_score FROM block_blast_scores WHERE user_id = ?').get(req.userId);
+  const myRecent = db.prepare(`
+    SELECT score, created_at
+    FROM block_blast_scores
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+    LIMIT 10
+  `).all(req.userId);
+
+  res.json({ leaderboard, my_best_score: myBest?.best_score || 0, my_recent: myRecent });
+});
+
+// POST /api/users/block-blast/score — save game result
+router.post('/block-blast/score', auth, (req, res) => {
+  if (!hasBlockBlastAccess(req.userId)) {
+    return res.status(403).json({ error: 'Нет доступа к игре' });
+  }
+
+  const score = parseInt(req.body?.score, 10);
+  if (!Number.isInteger(score) || score < 0) {
+    return res.status(400).json({ error: 'Некорректный score' });
+  }
+
+  db.prepare('INSERT INTO block_blast_scores (user_id, score) VALUES (?, ?)').run(req.userId, score);
+  const best = db.prepare('SELECT MAX(score) AS best_score FROM block_blast_scores WHERE user_id = ?').get(req.userId);
+  res.json({ success: true, best_score: best?.best_score || score });
 });
 
 // POST /api/users/report -> create user report

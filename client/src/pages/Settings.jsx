@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { disconnectSocket } from '../socket.js';
+import BlockBlastGame from '../components/BlockBlastGame.jsx';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export default function Settings() {
   const [twoFAEnableCode, setTwoFAEnableCode] = useState('');
   const [twoFADisableCode, setTwoFADisableCode] = useState('');
   const [twoFADisablePassword, setTwoFADisablePassword] = useState('');
+  const [blockBlastAccess, setBlockBlastAccess] = useState(false);
 
   // Fetch fresh me data
   useEffect(() => {
@@ -36,6 +38,10 @@ export default function Settings() {
 
     api.get('/auth/2fa/status').then(({ data }) => {
       setTwoFAEnabled(!!data.enabled);
+    }).catch(() => {});
+
+    api.get('/users/block-blast/access').then(({ data }) => {
+      setBlockBlastAccess(!!data.can_play);
     }).catch(() => {});
   }, []);
 
@@ -257,6 +263,10 @@ export default function Settings() {
             </div>
           )}
         </div>
+
+        <div className="settings-divider" />
+
+        <BlockBlastGame canPlay={blockBlastAccess} />
 
         <div className="settings-divider" />
 

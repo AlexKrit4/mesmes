@@ -37,7 +37,7 @@ router.get('/check', auth, (req, res) => {
 // GET /api/admin/users — list all users
 router.get('/users', auth, requireAdmin, (req, res) => {
   const users = db.prepare(`
-    SELECT u.id, u.username, u.public_id, u.email, u.avatar, u.created_at, u.last_seen, u.is_admin, u.is_moderator, u.premium_until,
+    SELECT u.id, u.username, u.public_id, u.email, u.avatar, u.created_at, u.last_seen, u.is_admin, u.is_moderator, u.can_play_block_blast, u.premium_until,
       (SELECT COUNT(*) FROM messages WHERE sender_id = u.id) as message_count,
       (SELECT b.id FROM bans b WHERE b.user_id = u.id AND b.active = 1 LIMIT 1) as active_ban_id
     FROM users u
@@ -83,6 +83,31 @@ router.post('/moderator/revoke', auth, requireAdmin, (req, res) => {
   if (target.is_admin) return res.status(400).json({ error: 'Нельзя снимать права администратора через модерацию' });
 
   db.prepare('UPDATE users SET is_moderator = 0 WHERE id = ?').run(user_id);
+  res.json({ success: true });
+});
+
+// POST /api/admin/block-blast/grant — grant access to Block Blast
+router.post('/block-blast/grant', auth, requireAdmin, (req, res) => {
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id обязателен' });
+
+  const target = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
+  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  db.prepare('UPDATE users SET can_play_block_blast = 1 WHERE id = ?').run(user_id);
+  res.json({ success: true });
+});
+
+// POST /api/admin/block-blast/revoke — revoke access to Block Blast
+router.post('/block-blast/revoke', auth, requireAdmin, (req, res) => {
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id обязателен' });
+
+  const target = db.prepare('SELECT id, is_admin FROM users WHERE id = ?').get(user_id);
+  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (target.is_admin) return res.status(400).json({ error: 'У администратора доступ к игре нельзя отозвать' });
+
+  db.prepare('UPDATE users SET can_play_block_blast = 0 WHERE id = ?').run(user_id);
   res.json({ success: true });
 });
 

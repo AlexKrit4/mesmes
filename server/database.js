@@ -462,6 +462,22 @@ try {
   }
 }
 
+// Migration: access flag for Block Blast game
+try { db.exec(`ALTER TABLE users ADD COLUMN can_play_block_blast INTEGER DEFAULT 0`); } catch (e) {}
+
+// Migration: Block Blast score history
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS block_blast_scores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      score INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+} catch (e) {}
+
   // Migration: voice circles (video/audio recordings up to 60 seconds)
   try {
     db.exec(`
