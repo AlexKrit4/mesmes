@@ -496,4 +496,52 @@ try {
     `);
   } catch (e) {}
 
+  // Migration: casino balances for slot machine
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN casino_balance REAL DEFAULT 0`);
+  } catch (e) {}
+
+  // Migration: slot access flag (admin grants access to users)
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN can_play_slots INTEGER DEFAULT 0`);
+  } catch (e) {}
+
+  // Migration: casino deposits history
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS casino_deposits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        commission REAL NOT NULL,
+        total_charged REAL NOT NULL,
+        status TEXT DEFAULT 'pending',
+        yoomoney_label TEXT UNIQUE,
+        yoomoney_operation_id TEXT DEFAULT NULL,
+        paid_at DATETIME DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+  } catch (e) {}
+
+  // Migration: casino withdrawals requests
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS casino_withdrawals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        bank TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        admin_comment TEXT DEFAULT '',
+        canceled_at DATETIME DEFAULT NULL,
+        reviewed_at DATETIME DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+  } catch (e) {}
+
   module.exports = db;

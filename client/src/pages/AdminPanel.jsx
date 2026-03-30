@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api.js';
+import CasinoWithdrawalsAdmin from '../components/CasinoWithdrawalsAdmin.jsx';
 
 function formatDate(d) {
   if (!d) return '—';
@@ -27,7 +28,7 @@ export default function AdminPanel() {
   // Reports
   const [reports, setReports] = useState([]);
   const [unreadReports, setUnreadReports] = useState(0);
-  const [mainTab, setMainTab] = useState('users'); // users | reports
+  const [mainTab, setMainTab] = useState('users'); // users | reports | channels | casino-withdrawals
   const [selectedReport, setSelectedReport] = useState(null);
   const [reportAction, setReportAction] = useState('banned'); // banned | forgiven
   const [adminComment, setAdminComment] = useState('');
@@ -48,7 +49,7 @@ export default function AdminPanel() {
         setAdminAccess(data);
 
         const requestedSection = new URLSearchParams(location.search).get('section');
-        const allowedSections = data.isAdmin ? ['users', 'reports', 'channels'] : ['reports'];
+        const allowedSections = data.isAdmin ? ['users', 'reports', 'channels', 'casino-withdrawals'] : ['reports'];
 
         if (requestedSection && allowedSections.includes(requestedSection)) {
           setMainTab(requestedSection);
@@ -296,6 +297,12 @@ export default function AdminPanel() {
             onClick={() => { setMainTab('channels'); setSelectedUser(null); setSelectedReport(null); }}
             style={{ flex: 1, padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'channels' ? '2px solid #0088cc' : 'none', color: mainTab === 'channels' ? '#0088cc' : '#aaa' }}
           >Каналы</div>
+        )}
+        {adminAccess.isAdmin && (
+          <div
+            onClick={() => { setMainTab('casino-withdrawals'); setSelectedUser(null); setSelectedReport(null); }}
+            style={{ flex: 1, padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'casino-withdrawals' ? '2px solid #0088cc' : 'none', color: mainTab === 'casino-withdrawals' ? '#0088cc' : '#aaa' }}
+          >💸 Казино</div>
         )}
       </div>
 
@@ -615,6 +622,10 @@ export default function AdminPanel() {
             </div>
           ))}
         </div>
+      )}
+
+      {mainTab === 'casino-withdrawals' && (
+        <CasinoWithdrawalsAdmin />
       )}
     </div>
   );

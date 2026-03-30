@@ -1,0 +1,229 @@
+.casino-game-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  gap: 20px;
+}
+
+.casino-reels {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+  padding: 20px;
+  border-radius: 12px;
+  border: 3px solid #ffd700;
+  box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+}
+
+.reel-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.reel-cell {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+  border: 2px solid #ffd700;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  transition: all 0.1s ease;
+  position: relative;
+}
+
+.reel-cell.spinning {
+  animation: reel-spin 0.1s infinite;
+}
+
+@keyframes reel-spin {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.reel-cell.winning {
+  background: linear-gradient(135deg, #20c997 0%, #0da2a2 100%);
+  border-color: #28d9aa;
+  box-shadow: 0 0 15px rgba(40, 217, 170, 0.6);
+  animation: winning-pulse 0.5s ease-out;
+}
+
+@keyframes winning-pulse {
+  0% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.casino-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+.bet-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bet-control label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.bet-control input {
+  width: 100px;
+  padding: 6px 10px;
+  border: 1px solid #ffd700;
+  border-radius: 4px;
+  background: rgba(255, 215, 0, 0.1);
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+}
+
+.bet-control input:focus {
+  outline: none;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.bet-control input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-spin {
+  width: 200px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+  color: #000;
+  border: none;
+  border-radius: 30px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+}
+
+.btn-spin:hover:not(.disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 215, 0, 0.6);
+  font-size: 17px;
+}
+
+.btn-spin:active:not(.disabled) {
+  transform: translateY(0);
+}
+
+.btn-spin.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.message {
+  font-size: 16px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  background: rgba(255, 99, 71, 0.2);
+  border: 1px solid #ff6347;
+  animation: message-fade 0.5s ease-out;
+}
+
+.message.success {
+  background: rgba(32, 201, 151, 0.2);
+  border: 1px solid #20c997;
+  color: #28d9aa;
+}
+
+@keyframes message-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.winnings-display {
+  font-size: 18px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, rgba(32, 201, 151, 0.2), rgba(40, 217, 170, 0.2));
+  border: 2px solid #28d9aa;
+  border-radius: 8px;
+  color: #28d9aa;
+  font-weight: bold;
+  animation: winnings-popup 0.5s ease-out;
+}
+
+.winnings-display .amount {
+  color: #ffed4e;
+  font-size: 20px;
+}
+
+@keyframes winnings-popup {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.paylines-info {
+  text-align: center;
+  padding: 12px 20px;
+  background: rgba(255, 215, 0, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: 6px;
+}
+
+.paylines-info h3 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  color: #ffd700;
+}
+
+.info-text {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+@media (max-width: 600px) {
+  .reel-cell {
+    width: 50px;
+    height: 50px;
+    font-size: 28px;
+  }
+
+  .btn-spin {
+    width: 160px;
+    font-size: 14px;
+  }
+}

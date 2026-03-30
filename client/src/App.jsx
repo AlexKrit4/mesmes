@@ -16,6 +16,7 @@ import PremiumPage from './pages/PremiumPage.jsx';
 import ForgotPassword from './pages/ForgotPassword.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
 import BlockBlastPage from './pages/BlockBlastPage.jsx';
+import CasinoSlot from './components/CasinoSlot.jsx';
 import { connectSocket, getSocket } from './socket.js';
 
 const PENDING_INCOMING_CALL_KEY = 'pending_incoming_call';
@@ -140,6 +141,7 @@ function AppRoutes() {
         <Route path="/join/:code" element={<PrivateRoute><JoinChannel /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
         <Route path="/block-blast" element={<PrivateRoute><BlockBlastPage /></PrivateRoute>} />
+        <Route path="/casino" element={<PrivateRoute><CasinoSlot /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute><AdminPanel /></PrivateRoute>} />
         <Route path="/premium" element={<PrivateRoute><PremiumPage /></PrivateRoute>} />
         <Route path="/:publicId" element={<PrivateRoute><Profile /></PrivateRoute>} />
