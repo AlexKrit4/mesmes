@@ -138,6 +138,20 @@ export default function CasinoWithdrawalsAdmin() {
               </span>
             </div>
 
+            {selectedWithdrawal.status === 'pending' && (
+              <div style={{
+                padding: '10px',
+                background: 'rgba(100, 180, 255, 0.15)',
+                border: '1px solid rgba(100, 180, 255, 0.3)',
+                borderRadius: '4px',
+                color: '#64b4ff',
+                fontSize: '13px',
+                marginTop: '10px'
+              }}>
+                ℹ️ Пользователь может отменить этот вывод в течение <strong>1 минуты</strong> в своей истории операций. Вы можете одобрить заявку - деньги будут выведены, но пользователь всё ещё сможет отменить.
+              </div>
+            )}
+
             {selectedWithdrawal.admin_comment && (
               <div className="info-row">
                 <span className="label">Комментарий администратора:</span>
