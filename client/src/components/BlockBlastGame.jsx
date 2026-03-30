@@ -112,7 +112,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   const [draggingPieceId, setDraggingPieceId] = useState(null);
   const [previewPos, setPreviewPos] = useState(null);
   const [dragPointer, setDragPointer] = useState(null);
-  const [boardCellSize, setBoardCellSize] = useState(16);
+  const [boardCellSize, setBoardCellSize] = useState(24);
   const boardRef = useRef(null);
   const draggingPieceIdRef = useRef(null);
   const previewPosRef = useRef(null);
@@ -136,6 +136,8 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   }, [board]);
 
   useEffect(() => {
+    if (!canPlay) return;
+
     const updateBoardCellSize = () => {
       const boardEl = boardRef.current;
       if (!boardEl) return;
@@ -146,9 +148,26 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     };
 
     updateBoardCellSize();
+    const rafId = requestAnimationFrame(updateBoardCellSize);
+    const timeoutId = setTimeout(updateBoardCellSize, 80);
+
+    let resizeObserver = null;
+    if (typeof ResizeObserver !== 'undefined' && boardRef.current) {
+      resizeObserver = new ResizeObserver(() => updateBoardCellSize());
+      resizeObserver.observe(boardRef.current);
+    }
+
     window.addEventListener('resize', updateBoardCellSize);
-    return () => window.removeEventListener('resize', updateBoardCellSize);
-  }, []);
+    window.addEventListener('orientationchange', updateBoardCellSize);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timeoutId);
+      if (resizeObserver) resizeObserver.disconnect();
+      window.removeEventListener('resize', updateBoardCellSize);
+      window.removeEventListener('orientationchange', updateBoardCellSize);
+    };
+  }, [canPlay]);
 
   const draggingPiece = pieces.find((p) => p?.id === draggingPieceId) || null;
 

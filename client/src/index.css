@@ -4069,12 +4069,12 @@ img.avatar {
   min-width: 0;
   border: none;
   border-radius: 12px;
-  background: var(--bg3);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: grab;
-  padding: 4px;
+  padding: 0;
   transition: background 0.15s, transform 0.1s, opacity 0.15s;
   user-select: none;
   touch-action: none;
@@ -4083,7 +4083,7 @@ img.avatar {
 }
 
 .block-blast-piece-card:hover {
-  background: var(--bg3);
+  background: transparent;
   transform: scale(1.05);
 }
 
@@ -4101,12 +4101,12 @@ img.avatar {
   position: fixed;
   z-index: 1200;
   pointer-events: none;
-  background: rgba(18, 18, 31, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  border: none;
   border-radius: 10px;
-  padding: 8px;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(3px);
+  padding: 0;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .block-blast-piece-card.empty {
