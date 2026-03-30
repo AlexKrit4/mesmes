@@ -140,6 +140,8 @@ router.post('/deposit-yoomoney', auth, hasSlotAccess, (req, res) => {
       label,
     });
 
+    const successURL = `${process.env.APP_URL || process.env.CLIENT_ORIGIN || 'https://mesmes.ru'}/settings`;
+
     res.json({
       depositId: deposit.id,
       amount,
@@ -148,7 +150,7 @@ router.post('/deposit-yoomoney', auth, hasSlotAccess, (req, res) => {
       label,
       // In production, return Yoomoney payment URL
       // For now, return payment URL format
-      paymentUrl: `https://yoomoney.ru/quickpay/confirm?receiver=${process.env.YOOMONEY_RECEIVER || 'test'}&quickpay-form=shop&targets=Casino%20deposit&sum=${total}&label=${label}`,
+      paymentUrl: `https://yoomoney.ru/quickpay/confirm?receiver=${process.env.YOOMONEY_RECEIVER || 'test'}&quickpay-form=shop&targets=Casino%20deposit&sum=${total}&label=${label}&successURL=${encodeURIComponent(successURL)}`,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -224,17 +226,30 @@ router.post('/deposit-yoomoney/reconcile', auth, hasSlotAccess, async (req, res)
     }
 
     const operations = Array.isArray(ymData.operations) ? ymData.operations : [];
-    const matched = operations.find((op) => (
-      String(op.label || '') === String(deposit.yoomoney_label)
-      && String(op.status || '').toLowerCase() === 'success'
-      && Number(op.amount || 0) >= (Number(deposit.total_charged || 0) - 0.01)
-    ));
+    const expectedLabel = String(deposit.yoomoney_label);
+    const minExpectedAmount = Number(deposit.amount || 0) - 0.01;
+    const matched = operations.find((op) => {
+      const opLabel = String(op.label || '');
+      const opStatus = String(op.status || '').toLowerCase();
+      const opAmount = Number(op.amount || 0);
+      return opLabel === expectedLabel && opStatus === 'success' && opAmount >= minExpectedAmount;
+    });
 
     if (!matched) {
+      const opDebug = operations.slice(0, 3).map((op) => ({
+        operation_id: op.operation_id,
+        label: op.label,
+        status: op.status,
+        amount: op.amount,
+        type: op.type,
+        datetime: op.datetime,
+      }));
       logWebhook('reconcile no successful operation yet', {
         depositId,
         label: deposit.yoomoney_label,
         operationsCount: operations.length,
+        minExpectedAmount,
+        firstOperations: opDebug,
       });
       return res.json({ status: 'pending', credited: false });
     }
