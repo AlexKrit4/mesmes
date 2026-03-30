@@ -354,6 +354,16 @@ router.patch('/admin/withdrawal/:id/approve', auth, isAdmin, (req, res) => {
   try {
     const { adminComment = '' } = req.body;
 
+    // Check current status first
+    const withdrawal = db.prepare('SELECT status FROM casino_withdrawals WHERE id = ?').get(req.params.id);
+    if (!withdrawal) {
+      return res.status(404).json({ error: 'Withdrawal not found' });
+    }
+
+    if (withdrawal.status !== 'pending') {
+      return res.status(400).json({ error: `Cannot approve ${withdrawal.status} withdrawal` });
+    }
+
     db.prepare(`
       UPDATE casino_withdrawals 
       SET status = 'approved', admin_comment = ?, reviewed_at = CURRENT_TIMESTAMP
@@ -376,7 +386,11 @@ router.patch('/admin/withdrawal/:id/reject', auth, isAdmin, (req, res) => {
     `).get(req.params.id);
 
     if (!withdrawal) {
-      return res.status(404).json({ error: 'Not found' });
+      return res.status(404).json({ error: 'Withdrawal not found' });
+    }
+
+    if (withdrawal.status !== 'pending') {
+      return res.status(400).json({ error: `Cannot reject ${withdrawal.status} withdrawal` });
     }
 
     // Refund balance
@@ -402,6 +416,13 @@ router.patch('/admin/withdrawal/:id/reject', auth, isAdmin, (req, res) => {
 // POST /casino/yoomoney-webhook - Yoomoney webhook for casino deposits
 router.post('/yoomoney-webhook', (req, res) => {
   try {
+    // Log all incoming data for debugging
+    console.log('[casino] webhook received:', {
+      contentType: req.get('content-type'),
+      bodyKeys: Object.keys(req.body || {}),
+      fullBody: req.body,
+    });
+
     const {
       notification_type,
       operation_id,

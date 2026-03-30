@@ -355,6 +355,7 @@ export default function CasinoWithdrawalsAdmin() {
         .admin-table {
           width: 100%;
           border-collapse: collapse;
+          min-width: 600px;
         }
 
         .admin-table th {
@@ -363,11 +364,37 @@ export default function CasinoWithdrawalsAdmin() {
           text-align: left;
           font-weight: 600;
           border-bottom: 2px solid var(--border);
+          white-space: nowrap;
         }
 
         .admin-table td {
           padding: 12px;
           border-bottom: 1px solid var(--border);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .withdrawals-list {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        @media (max-width: 768px) {
+          .admin-table th,
+          .admin-table td {
+            padding: 8px 6px;
+            font-size: 13px;
+          }
+
+          .btn-small {
+            padding: 4px 8px;
+            font-size: 11px;
+          }
+
+          .admin-table {
+            min-width: 500px;
+          }
         }
 
         .admin-table tr:hover {
