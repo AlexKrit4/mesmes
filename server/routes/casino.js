@@ -352,4 +352,99 @@ router.patch('/admin/withdrawal/:id/reject', auth, isAdmin, (req, res) => {
   }
 });
 
+// ==================== WEBHOOK ====================
+
+// POST /casino/yoomoney-webhook - Yoomoney webhook for casino deposits
+router.post('/yoomoney-webhook', (req, res) => {
+  try {
+    const {
+      notification_type,
+      operation_id,
+      amount,
+      currency,
+      datetime,
+      sender,
+      codepro,
+      label,
+      sha1_hash,
+    } = req.body || {};
+
+    if (!label || !sha1_hash) {
+      console.warn('[casino] webhook missing fields', { hasLabel: !!label, hasSha1: !!sha1_hash });
+      return res.status(400).send('missing');
+    }
+
+    const YOOMONEY_NOTIFICATION_SECRET = process.env.YOOMONEY_NOTIFICATION_SECRET || '';
+    if (!YOOMONEY_NOTIFICATION_SECRET) {
+      console.error('[casino] webhook secret not configured');
+      return res.status(500).send('secret-not-configured');
+    }
+
+    // Verify SHA1 signature
+    const base = [
+      notification_type,
+      operation_id,
+      amount,
+      currency,
+      datetime,
+      sender,
+      codepro,
+      YOOMONEY_NOTIFICATION_SECRET,
+      label,
+    ].join('&');
+
+    const localHash = crypto.createHash('sha1').update(base).digest('hex');
+    if (String(localHash).toLowerCase() !== String(sha1_hash).toLowerCase()) {
+      console.warn('[casino] webhook bad signature', { label, operation_id });
+      return res.status(403).send('bad-sign');
+    }
+
+    // Find deposit record
+    const deposit = db.prepare('SELECT * FROM casino_deposits WHERE yoomoney_label = ?').get(label);
+    if (!deposit) {
+      console.warn('[casino] webhook deposit not found by label', { label, operation_id, amount });
+      return res.status(200).send('ok');
+    }
+
+    // Already processed
+    if (deposit.status === 'paid') {
+      return res.status(200).send('ok');
+    }
+
+    const amountRub = parseFloat(amount);
+    if (amountRub < deposit.total_charged - 0.01) {
+      console.warn('[casino] webhook amount too small', {
+        label,
+        amountRub,
+        required: deposit.total_charged,
+      });
+      return res.status(400).send('small-amount');
+    }
+
+    // Update deposit status
+    db.prepare(`
+      UPDATE casino_deposits 
+      SET status = 'paid', yoomoney_operation_id = ?, paid_at = ?
+      WHERE id = ?
+    `).run(operation_id || null, datetime || new Date().toISOString(), deposit.id);
+
+    // Credit balance
+    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(deposit.user_id);
+    const newBalance = (user?.casino_balance || 0) + deposit.amount;
+    db.prepare('UPDATE users SET casino_balance = ? WHERE id = ?').run(newBalance, deposit.user_id);
+
+    console.log('[casino] deposit credited via webhook', {
+      deposit_id: deposit.id,
+      user_id: deposit.user_id,
+      amount: deposit.amount,
+      operation_id,
+    });
+
+    return res.status(200).send('ok');
+  } catch (error) {
+    console.error('[casino] webhook error:', error.message);
+    return res.status(500).send('error');
+  }
+});
+
 module.exports = router;
