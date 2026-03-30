@@ -18,16 +18,15 @@ function hasSlotAccess(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  if (!req.user.can_play_slots) {
-    return res.status(403).json({ error: 'No slot access' });
-  }
+  // For now, allow all authenticated users to play
+  // In future: check if (!req.user.can_play_slots) return res.status(403).json({ error: 'No slot access' });
   next();
 }
 
 // GET /casino/balance - Get current balance
 router.get('/balance', auth, (req, res) => {
   try {
-    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.userId);
     res.json({ balance: user?.casino_balance || 0 });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -43,7 +42,7 @@ router.post('/spin', auth, hasSlotAccess, (req, res) => {
       return res.status(400).json({ error: 'Invalid bet amount (0.20 - 100)' });
     }
 
-    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.userId);
     if ((user?.casino_balance || 0) < betAmount) {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
@@ -54,7 +53,7 @@ router.post('/spin', auth, hasSlotAccess, (req, res) => {
 
     // Update balance
     const newBalance = (user?.casino_balance || 0) - betAmount + totalWinnings;
-    db.prepare('UPDATE users SET casino_balance = ? WHERE id = ?').run(newBalance, req.user.id);
+    db.prepare('UPDATE users SET casino_balance = ? WHERE id = ?').run(newBalance, req.userId);
 
     res.json({
       grid,
@@ -83,9 +82,9 @@ router.post('/fund', auth, (req, res) => {
 
     // For now, allow users to fund themselves (testing)
     // In production, this would be restricted or require admin approval
-    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.userId);
     const newBalance = (user?.casino_balance || 0) + amount;
-    db.prepare('UPDATE users SET casino_balance = ? WHERE id = ?').run(newBalance, req.user.id);
+    db.prepare('UPDATE users SET casino_balance = ? WHERE id = ?').run(newBalance, req.userId);
 
     res.json({ balance: newBalance });
   } catch (error) {
@@ -106,13 +105,13 @@ router.post('/deposit-yoomoney', auth, hasSlotAccess, (req, res) => {
     const total = amount + commission;
 
     // Generate unique label
-    const label = `casino-deposit-${req.user.id}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    const label = `casino-deposit-${req.userId}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 
     // Create deposit record
     db.prepare(`
       INSERT INTO casino_deposits (user_id, amount, commission, total_charged, yoomoney_label)
       VALUES (?, ?, ?, ?, ?)
-    `).run(req.user.id, amount, commission, total, label);
+    `).run(req.userId, amount, commission, total, label);
 
     const deposit = db.prepare(`
       SELECT id FROM casino_deposits WHERE yoomoney_label = ?
@@ -142,7 +141,7 @@ router.get('/deposit-history', auth, (req, res) => {
       WHERE user_id = ?
       ORDER BY created_at DESC
       LIMIT 50
-    `).all(req.user.id);
+    `).all(req.userId);
 
     res.json({ deposits });
   } catch (error) {
@@ -160,7 +159,7 @@ router.post('/withdrawal', auth, hasSlotAccess, (req, res) => {
       return res.status(400).json({ error: 'Invalid withdrawal data' });
     }
 
-    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.userId);
     if ((user?.casino_balance || 0) < amount) {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
@@ -169,11 +168,11 @@ router.post('/withdrawal', auth, hasSlotAccess, (req, res) => {
     const result = db.prepare(`
       INSERT INTO casino_withdrawals (user_id, amount, bank, phone)
       VALUES (?, ?, ?, ?)
-    `).run(req.user.id, amount, bank.toLowerCase(), phone);
+    `).run(req.userId, amount, bank.toLowerCase(), phone);
 
     // Deduct from balance immediately
     const newBalance = (user?.casino_balance || 0) - amount;
-    db.prepare('UPDATE users SET casino_balance = ? WHERE id = ?').run(newBalance, req.user.id);
+    db.prepare('UPDATE users SET casino_balance = ? WHERE id = ?').run(newBalance, req.userId);
 
     res.json({
       withdrawalId: result.lastInsertRowid,
@@ -197,7 +196,7 @@ router.get('/withdrawal-history', auth, (req, res) => {
       WHERE user_id = ?
       ORDER BY created_at DESC
       LIMIT 50
-    `).all(req.user.id);
+    `).all(req.userId);
 
     res.json({ withdrawals });
   } catch (error) {
@@ -210,7 +209,7 @@ router.patch('/withdrawal/:id/cancel', auth, (req, res) => {
   try {
     const withdrawal = db.prepare(`
       SELECT * FROM casino_withdrawals WHERE id = ? AND user_id = ?
-    `).get(req.params.id, req.user.id);
+    `).get(req.params.id, req.userId);
 
     if (!withdrawal) {
       return res.status(404).json({ error: 'Withdrawal not found' });
@@ -236,9 +235,9 @@ router.patch('/withdrawal/:id/cancel', auth, (req, res) => {
 
     // Refund balance
     const refundAmount = withdrawal.amount;
-    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.userId);
     const newBalance = (user?.casino_balance || 0) + refundAmount;
-    db.prepare('UPDATE users SET casino_balance = ? WHERE id = ?').run(newBalance, req.user.id);
+    db.prepare('UPDATE users SET casino_balance = ? WHERE id = ?').run(newBalance, req.userId);
 
     res.json({ status: 'canceled', balance: newBalance });
   } catch (error) {

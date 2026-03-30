@@ -12,11 +12,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401 — redirect to login
+// Handle 401 — redirect to login (only if token is actually invalid)
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    // 401 without token in storage means session expired
+    if (err.response?.status === 401 && !localStorage.getItem('token')) {
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
