@@ -8,23 +8,36 @@ const router = express.Router();
 
 // Middleware
 function isAdmin(req, res, next) {
-  if (!req.user || !req.user.is_admin) {
+  const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.userId);
+  if (!user || !user.is_admin) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
 }
 
 function hasSlotAccess(req, res, next) {
-  if (!req.user) {
+  if (!req.userId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  // For now, allow all authenticated users to play
-  // In future: check if (!req.user.can_play_slots) return res.status(403).json({ error: 'No slot access' });
+  const user = db.prepare('SELECT can_play_slots FROM users WHERE id = ?').get(req.userId);
+  if (!user || !user.can_play_slots) {
+    return res.status(403).json({ error: 'No slot access' });
+  }
   next();
 }
 
+// GET /casino/check-access - Check if user has casino access
+router.get('/check-access', auth, (req, res) => {
+  try {
+    const user = db.prepare('SELECT can_play_slots FROM users WHERE id = ?').get(req.userId);
+    res.json({ hasAccess: user?.can_play_slots === 1 });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /casino/balance - Get current balance
-router.get('/balance', auth, (req, res) => {
+router.get('/balance', auth, hasSlotAccess, (req, res) => {
   try {
     const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.userId);
     res.json({ balance: user?.casino_balance || 0 });
@@ -73,7 +86,7 @@ router.post('/spin', auth, hasSlotAccess, (req, res) => {
 });
 
 // POST /casino/fund - Fund the casino balance directly (admin/testing)
-router.post('/fund', auth, (req, res) => {
+router.post('/fund', auth, hasSlotAccess, (req, res) => {
   try {
     const { amount } = req.body;
     if (!amount || amount <= 0) {
@@ -133,7 +146,7 @@ router.post('/deposit-yoomoney', auth, hasSlotAccess, (req, res) => {
 });
 
 // GET /casino/deposit-history - Get deposit history
-router.get('/deposit-history', auth, (req, res) => {
+router.get('/deposit-history', auth, hasSlotAccess, (req, res) => {
   try {
     const deposits = db.prepare(`
       SELECT id, amount, commission, total_charged, status, created_at, paid_at
@@ -188,7 +201,7 @@ router.post('/withdrawal', auth, hasSlotAccess, (req, res) => {
 });
 
 // GET /casino/withdrawal-history - Get withdrawal history
-router.get('/withdrawal-history', auth, (req, res) => {
+router.get('/withdrawal-history', auth, hasSlotAccess, (req, res) => {
   try {
     const withdrawals = db.prepare(`
       SELECT id, amount, bank, phone, status, admin_comment, created_at, reviewed_at, canceled_at
@@ -205,7 +218,7 @@ router.get('/withdrawal-history', auth, (req, res) => {
 });
 
 // PATCH /casino/withdrawal/:id/cancel - Cancel withdrawal (within 1 minute)
-router.patch('/withdrawal/:id/cancel', auth, (req, res) => {
+router.patch('/withdrawal/:id/cancel', auth, hasSlotAccess, (req, res) => {
   try {
     const withdrawal = db.prepare(`
       SELECT * FROM casino_withdrawals WHERE id = ? AND user_id = ?
@@ -247,6 +260,22 @@ router.patch('/withdrawal/:id/cancel', auth, (req, res) => {
 
 // ==================== ADMIN ENDPOINTS ====================
 
+// GET /casino/admin/access-list - Get users with casino access
+router.get('/admin/access-list', auth, isAdmin, (req, res) => {
+  try {
+    const users = db.prepare(`
+      SELECT id, username, public_id, casino_balance, can_play_slots, created_at
+      FROM users
+      WHERE can_play_slots = 1
+      ORDER BY created_at DESC
+    `).all();
+
+    res.json({ users });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST /casino/admin/grant-access - Grant slot access to user
 router.post('/admin/grant-access', auth, isAdmin, (req, res) => {
   try {
@@ -259,6 +288,23 @@ router.post('/admin/grant-access', auth, isAdmin, (req, res) => {
     db.prepare('UPDATE users SET can_play_slots = 1, casino_balance = ? WHERE id = ?').run(initialBalance, userId);
 
     res.json({ success: true, message: 'Slot access granted' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /casino/admin/revoke-access - Revoke slot access from user
+router.post('/admin/revoke-access', auth, isAdmin, (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    db.prepare('UPDATE users SET can_play_slots = 0 WHERE id = ?').run(userId);
+
+    res.json({ success: true, message: 'Slot access revoked' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

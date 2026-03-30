@@ -21,6 +21,7 @@ export default function Settings() {
   const [twoFAEnableCode, setTwoFAEnableCode] = useState('');
   const [twoFADisableCode, setTwoFADisableCode] = useState('');
   const [twoFADisablePassword, setTwoFADisablePassword] = useState('');
+  const [casinoAccess, setCasinoAccess] = useState(false);
 
   // Fetch fresh me data
   useEffect(() => {
@@ -36,6 +37,10 @@ export default function Settings() {
 
     api.get('/auth/2fa/status').then(({ data }) => {
       setTwoFAEnabled(!!data.enabled);
+    }).catch(() => {});
+
+    api.get('/casino/check-access').then(({ data }) => {
+      setCasinoAccess(data.hasAccess);
     }).catch(() => {});
 
   }, []);
@@ -266,10 +271,18 @@ export default function Settings() {
           Block Blast
         </button>
 
-        <button className="settings-action-btn" onClick={() => navigate('/casino')}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><text x="12" y="16" textAnchor="middle" fontSize="12" fill="currentColor">🎰</text></svg>
-          Казино
-        </button>
+        {casinoAccess ? (
+          <button className="settings-action-btn" onClick={() => navigate('/casino')}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><text x="12" y="16" textAnchor="middle" fontSize="12" fill="currentColor">🎰</text></svg>
+            Казино
+          </button>
+        ) : (
+          <div className="settings-section" style={{ margin: '15px 0' }}>
+            <div style={{ color: '#f99', fontSize: '14px', padding: '10px' }}>
+              🎰 Казино недоступно - обратитесь к администратору для получения доступа
+            </div>
+          </div>
+        )}
 
         <div className="settings-divider" />
 
