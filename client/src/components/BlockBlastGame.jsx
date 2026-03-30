@@ -100,45 +100,30 @@ function clearCompleted(board) {
   return { board: nextBoard, cleared: rowsToClear.length + colsToClear.length };
 }
 
-export default function BlockBlastGame({ canPlay, showRecords = true }) {
+export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   const [board, setBoard] = useState(createEmptyBoard());
   const [pieces, setPieces] = useState([randomPiece(), randomPiece(), randomPiece()]);
   const [selectedPieceId, setSelectedPieceId] = useState(null);
   const [score, setScore] = useState(0);
   const [bestScore, setBestScore] = useState(0);
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [myRecent, setMyRecent] = useState([]);
   const [message, setMessage] = useState('');
   const [gameOver, setGameOver] = useState(false);
   const [savingResult, setSavingResult] = useState(false);
+  const [draggingPieceId, setDraggingPieceId] = useState(null);
+  const [dragPos, setDragPos] = useState(null);
+  const [previewPos, setPreviewPos] = useState(null);
 
   const selectedPiece = useMemo(
     () => pieces.find((p) => p?.id === selectedPieceId) || null,
     [pieces, selectedPieceId]
   );
 
-  const refreshLeaderboard = async () => {
-    try {
-      const { data } = await api.get('/users/block-blast/leaderboard');
-      setLeaderboard(data.leaderboard || []);
-      setBestScore(data.my_best_score || 0);
-      setMyRecent(data.my_recent || []);
-    } catch (err) {
-      setMessage(err.response?.data?.error || 'Не удалось загрузить рейтинг');
-    }
-  };
-
-  useEffect(() => {
-    if (canPlay) refreshLeaderboard();
-  }, [canPlay]);
-
   const submitScore = async (value) => {
     if (savingResult) return;
     setSavingResult(true);
     try {
-      const { data } = await api.post('/users/block-blast/score', { score: value });
-      setBestScore(data.best_score || value);
-      await refreshLeaderboard();
+      await api.post('/users/block-blast/score', { score: value });
+      if (onScoreSubmit) await onScoreSubmit();
     } catch (err) {
       setMessage(err.response?.data?.error || 'Не удалось сохранить результат');
     } finally {
@@ -150,6 +135,7 @@ export default function BlockBlastGame({ canPlay, showRecords = true }) {
     setBoard(createEmptyBoard());
     setPieces([randomPiece(), randomPiece(), randomPiece()]);
     setSelectedPieceId(null);
+    setDraggingPieceId(null);
     setScore(0);
     setGameOver(false);
     setMessage('');
@@ -164,29 +150,88 @@ export default function BlockBlastGame({ canPlay, showRecords = true }) {
     }
   };
 
-  const onCellClick = async (row, col) => {
-    if (!selectedPiece || gameOver) return;
-    if (!canPlace(board, selectedPiece, row, col)) return;
+  const placePieceAt = async (piece, row, col) => {
+    if (!piece || gameOver) return;
+    if (!canPlace(board, piece, row, col)) return;
 
     const placedBoard = board.map((r) => r.slice());
-    selectedPiece.cells.forEach(([r, c]) => {
-      placedBoard[row + r][col + c] = selectedPiece.color;
+    piece.cells.forEach(([r, c]) => {
+      placedBoard[row + r][col + c] = piece.color;
     });
 
-    const baseGain = selectedPiece.cells.length;
+    const baseGain = piece.cells.length;
     const afterClear = clearCompleted(placedBoard);
     const clearBonus = afterClear.cleared * 10;
     const nextScore = score + baseGain + clearBonus;
 
-    const nextPieces = pieces.map((p) => (p?.id === selectedPiece.id ? null : p));
+    const nextPieces = pieces.map((p) => (p?.id === piece.id ? null : p));
     const finalPieces = nextPieces.every((p) => !p) ? [randomPiece(), randomPiece(), randomPiece()] : nextPieces;
 
     setBoard(afterClear.board);
     setScore(nextScore);
     setPieces(finalPieces);
     setSelectedPieceId(null);
+    setDraggingPieceId(null);
+    setPreviewPos(null);
 
     await tryFinishIfNoMoves(afterClear.board, finalPieces, nextScore);
+  };
+
+  const onCellClick = (row, col) => {
+    if (selectedPieceId) {
+      const piece = pieces.find((p) => p?.id === selectedPieceId);
+      placePieceAt(piece, row, col);
+    }
+  };
+
+  const getBoardRect = (boardEl) => {
+    if (!boardEl) return null;
+    const rect = boardEl.getBoundingClientRect();
+    const cellSize = (rect.width - 28) / 8; // 8 клеток, padding 8px * 2, gap 4px * 7
+    return { rect, cellSize };
+  };
+
+  const onBoardDragOver = (e) => {
+    e.preventDefault();
+    if (!draggingPieceId) return;
+
+    const boardEl = e.currentTarget;
+    const boardData = getBoardRect(boardEl);
+    if (!boardData) return;
+
+    const { rect, cellSize } = boardData;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const col = Math.floor(x / (cellSize + 4));
+    const row = Math.floor(y / (cellSize + 4));
+
+    if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+      const piece = pieces.find((p) => p?.id === draggingPieceId);
+      if (piece && canPlace(board, piece, row, col)) {
+        setPreviewPos({ row, col });
+        return;
+      }
+    }
+    setPreviewPos(null);
+  };
+
+  const onBoardDrop = (e) => {
+    e.preventDefault();
+    if (!draggingPieceId || !previewPos) {
+      setDraggingPieceId(null);
+      setPreviewPos(null);
+      return;
+    }
+
+    const piece = pieces.find((p) => p?.id === draggingPieceId);
+    placePieceAt(piece, previewPos.row, previewPos.col);
+  };
+
+  const onBoardDragLeave = (e) => {
+    if (e.currentTarget === e.target) {
+      setPreviewPos(null);
+    }
   };
 
   if (!canPlay) {
@@ -221,95 +266,85 @@ export default function BlockBlastGame({ canPlay, showRecords = true }) {
         </button>
       </div>
 
-      <div className="block-blast-board">
+      <div className="block-blast-board" onDragOver={onBoardDragOver} onDrop={onBoardDrop} onDragLeave={onBoardDragLeave}>
         {board.map((row, rIdx) =>
-          row.map((cell, cIdx) => (
-            <button
-              key={`${rIdx}-${cIdx}`}
-              className="block-blast-cell"
-              onClick={() => onCellClick(rIdx, cIdx)}
-              style={{ background: cell || 'rgba(255,255,255,0.06)' }}
-              title={selectedPiece ? 'Поставить фигуру' : 'Выбери фигуру ниже'}
-            />
-          ))
+          row.map((cell, cIdx) => {
+            const isPreviewCell = previewPos && previewPos.row === rIdx && previewPos.col === cIdx;
+            const selectedPiece = pieces.find((p) => p?.id === draggingPieceId);
+            const isInPreview = isPreviewCell && selectedPiece && canPlace(board, selectedPiece, previewPos.row, previewPos.col);
+            
+            let previewColor = null;
+            if (isInPreview) {
+              // Highlight all cells that will be affected
+              if (selectedPiece.cells.some(([dr, dc]) => rIdx === previewPos.row + dr && cIdx === previewPos.col + dc)) {
+                previewColor = selectedPiece.color;
+              }
+            }
+
+            return (
+              <button
+                key={`${rIdx}-${cIdx}`}
+                className="block-blast-cell"
+                onClick={() => onCellClick(rIdx, cIdx)}
+                style={{
+                  background: cell ? cell : (previewColor ? `${previewColor}44` : 'rgba(255,255,255,0.06)'),
+                }}
+                title={selectedPieceId ? 'Кликни или перетащи фигуру' : 'Выбери фигуру снизу'}
+              />
+            );
+          })
         )}
       </div>
 
-      <div className="block-blast-pieces">
-        {pieces.map((piece, idx) => {
-          if (!piece) {
+      <div className="block-blast-pieces-container">
+        <div className="block-blast-pieces">
+          {pieces.map((piece, idx) => {
+            if (!piece) {
+              return (
+                <div key={`empty-${idx}`} className="block-blast-piece-card empty">
+                  ✓
+                </div>
+              );
+            }
+
+            const { width, height } = getPieceSize(piece.cells);
+
             return (
-              <div key={`empty-${idx}`} className="block-blast-piece-card empty">
-                Использована
+              <div
+                key={piece.id}
+                className={`block-blast-piece-card ${selectedPieceId === piece.id ? 'active' : ''} ${draggingPieceId === piece.id ? 'dragging' : ''}`}
+                draggable
+                onDragStart={() => setDraggingPieceId(piece.id)}
+                onDragEnd={() => {
+                  setDraggingPieceId(null);
+                  setPreviewPos(null);
+                }}
+                onClick={() => setSelectedPieceId(piece.id)}
+              >
+                <div
+                  className="block-blast-piece-grid"
+                  style={{ gridTemplateColumns: `repeat(${width}, 16px)`, gridTemplateRows: `repeat(${height}, 16px)` }}
+                >
+                  {Array.from({ length: width * height }).map((_, i) => {
+                    const rr = Math.floor(i / width);
+                    const cc = i % width;
+                    const filled = piece.cells.some(([r, c]) => r === rr && c === cc);
+                    return (
+                      <span
+                        key={`${piece.id}-${i}`}
+                        className="block-blast-piece-dot"
+                        style={{ background: filled ? piece.color : 'transparent' }}
+                      />
+                    );
+                  })}
+                </div>
               </div>
             );
-          }
-
-          const { width, height } = getPieceSize(piece.cells);
-
-          return (
-            <button
-              key={piece.id}
-              className={`block-blast-piece-card ${selectedPieceId === piece.id ? 'active' : ''}`}
-              onClick={() => setSelectedPieceId(piece.id)}
-            >
-              <div
-                className="block-blast-piece-grid"
-                style={{ gridTemplateColumns: `repeat(${width}, 16px)`, gridTemplateRows: `repeat(${height}, 16px)` }}
-              >
-                {Array.from({ length: width * height }).map((_, i) => {
-                  const rr = Math.floor(i / width);
-                  const cc = i % width;
-                  const filled = piece.cells.some(([r, c]) => r === rr && c === cc);
-                  return (
-                    <span
-                      key={`${piece.id}-${i}`}
-                      className="block-blast-piece-dot"
-                      style={{ background: filled ? piece.color : 'transparent' }}
-                    />
-                  );
-                })}
-              </div>
-            </button>
-          );
-        })}
+          })}
+        </div>
       </div>
 
       {message ? <div className="settings-msg" style={{ color: gameOver ? 'var(--accent)' : 'var(--red)' }}>{message}</div> : null}
-
-      {showRecords ? (
-        <>
-          <div className="block-blast-leaderboard">
-            <div className="block-blast-leaderboard-title">Рейтинг лучших рекордов</div>
-            {leaderboard.length === 0 ? (
-              <div className="settings-msg" style={{ color: 'var(--text2)' }}>Пока нет результатов</div>
-            ) : (
-              leaderboard.map((entry, index) => (
-                <div key={`${entry.id}-${entry.best_score}`} className="block-blast-leader-row">
-                  <span>#{index + 1}</span>
-                  <span>{entry.username} (@{entry.public_id})</span>
-                  <strong>{entry.best_score}</strong>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="block-blast-leaderboard" style={{ marginTop: 10 }}>
-            <div className="block-blast-leaderboard-title">Мои последние результаты</div>
-            {myRecent.length === 0 ? (
-              <div className="settings-msg" style={{ color: 'var(--text2)' }}>Пока нет сыгранных партий</div>
-            ) : (
-              myRecent.map((entry, index) => (
-                <div key={`${entry.created_at}-${index}`} className="block-blast-leader-row">
-                  <span>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</span>
-                  <span>{new Date(entry.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
-                  <strong>{entry.score}</strong>
-                </div>
-              ))
-            )}
-          </div>
-        </>
-      ) : null}
     </div>
   );
 }
