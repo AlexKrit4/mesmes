@@ -243,8 +243,6 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   const onPieceTouchStart = (pieceId) => {
     setDraggingPieceId(pieceId);
   };
-    setHoverCol(null);
-  };
 
   if (!canPlay) {
     return (
