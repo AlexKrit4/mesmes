@@ -22,6 +22,7 @@ export default function Settings() {
   const [twoFADisableCode, setTwoFADisableCode] = useState('');
   const [twoFADisablePassword, setTwoFADisablePassword] = useState('');
   const [casinoAccess, setCasinoAccess] = useState(false);
+  const [blockBlastAccess, setBlockBlastAccess] = useState(false);
 
   // Fetch fresh me data
   useEffect(() => {
@@ -41,6 +42,10 @@ export default function Settings() {
 
     api.get('/casino/check-access').then(({ data }) => {
       setCasinoAccess(data.hasAccess);
+    }).catch(() => {});
+
+    api.get('/block-blast/check-access').then(({ data }) => {
+      setBlockBlastAccess(data.hasAccess);
     }).catch(() => {});
 
   }, []);
@@ -266,25 +271,23 @@ export default function Settings() {
 
         <div className="settings-divider" />
 
-        <button className="settings-action-btn" onClick={() => navigate('/block-blast')}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3h8v3h3v8h-3v3H8v-3H5V6h3z"/></svg>
-          Block Blast
-        </button>
+        {blockBlastAccess && (
+          <button className="settings-action-btn" onClick={() => navigate('/block-blast')}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3h8v3h3v8h-3v3H8v-3H5V6h3z"/></svg>
+            Block Blast
+          </button>
+        )}
 
-        {casinoAccess ? (
+        {casinoAccess && (
           <button className="settings-action-btn" onClick={() => navigate('/casino')}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><text x="12" y="16" textAnchor="middle" fontSize="12" fill="currentColor">🎰</text></svg>
             Казино
           </button>
-        ) : (
-          <div className="settings-section" style={{ margin: '15px 0' }}>
-            <div style={{ color: '#f99', fontSize: '14px', padding: '10px' }}>
-              🎰 Казино недоступно - обратитесь к администратору для получения доступа
-            </div>
-          </div>
         )}
 
-        <div className="settings-divider" />
+        {(blockBlastAccess || casinoAccess) && (
+          <div className="settings-divider" />
+        )}
 
         {/* Notifications */}
         <div className="settings-section">

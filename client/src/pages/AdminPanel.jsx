@@ -36,6 +36,7 @@ export default function AdminPanel() {
   const [reportMsg, setReportMsg] = useState('');
   const [moderatorMsg, setModeratorMsg] = useState('');
   const [blockBlastMsg, setBlockBlastMsg] = useState('');
+  const [casinoMsg, setCasinoMsg] = useState('');
   const [adminAccess, setAdminAccess] = useState({ isAdmin: false, isModerator: false, canAccessAdminPanel: false });
 
   // Check admin access
@@ -122,6 +123,7 @@ export default function AdminPanel() {
     setBanMsg('');
     setModeratorMsg('');
     setBlockBlastMsg('');
+    setCasinoMsg('');
     try {
       const [msgRes, banRes] = await Promise.all([
         api.get(`/admin/users/${user.id}/messages`),
@@ -244,6 +246,30 @@ export default function AdminPanel() {
       setSelectedUser((prev) => (prev ? { ...prev, can_play_block_blast: nextValue } : prev));
     } catch (err) {
       setBlockBlastMsg(err.response?.data?.error || 'Ошибка изменения доступа к игре');
+    }
+  };
+
+  const toggleCasinoAccess = async () => {
+    if (!selectedUser) return;
+    setCasinoMsg('');
+
+    const currentUser = users.find((u) => u.id === selectedUser.id) || selectedUser;
+    const hasAccess = !!currentUser.can_play_slots;
+
+    try {
+      if (hasAccess) {
+        await api.post('/casino/admin/revoke-access', { userId: selectedUser.id });
+        setCasinoMsg('Доступ к казино отозван');
+      } else {
+        await api.post('/casino/admin/grant-access', { userId: selectedUser.id, initialBalance: 100 });
+        setCasinoMsg('Доступ к казино выдан с балансом 100₽');
+      }
+
+      const nextValue = hasAccess ? 0 : 1;
+      setUsers((prev) => prev.map((u) => (u.id === selectedUser.id ? { ...u, can_play_slots: nextValue } : u)));
+      setSelectedUser((prev) => (prev ? { ...prev, can_play_slots: nextValue } : prev));
+    } catch (err) {
+      setCasinoMsg(err.response?.data?.error || 'Ошибка изменения доступа к казино');
     }
   };
 
@@ -383,6 +409,14 @@ export default function AdminPanel() {
               {canUserPlayBlockBlast ? 'Отозвать доступ к игре' : 'Выдать доступ к игре'}
             </button>
             {blockBlastMsg && <div className="admin-ban-msg">{blockBlastMsg}</div>}
+          </div>
+
+          <div className="admin-ban-form" style={{ marginBottom: 12 }}>
+            <h3>🎰 Казино</h3>
+            <button className={`btn ${selectedUser?.can_play_slots ? 'btn-danger' : 'btn-primary'}`} onClick={toggleCasinoAccess}>
+              {selectedUser?.can_play_slots ? 'Отозвать доступ к казино' : 'Выдать доступ к казино'}
+            </button>
+            {casinoMsg && <div className="admin-ban-msg">{casinoMsg}</div>}
           </div>
 
           {/* Tabs */}
