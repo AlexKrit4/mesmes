@@ -40,7 +40,12 @@
 }
 
 .reel-cell.spinning {
-  animation: reel-spin 0.1s infinite;
+  overflow: hidden;
+}
+
+.reel-cell.spinning .symbol {
+  animation: symbol-scroll 0.14s linear infinite;
+  filter: blur(0.6px);
 }
 
 @keyframes reel-spin {
@@ -49,6 +54,21 @@
   }
   50% {
     transform: scale(1.05);
+  }
+}
+
+@keyframes symbol-scroll {
+  0% {
+    transform: translateY(-70%);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(0%);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(70%);
+    opacity: 0.5;
   }
 }
 
@@ -177,6 +197,22 @@
   color: #28d9aa;
   font-weight: bold;
   animation: winnings-popup 0.5s ease-out;
+}
+
+.round-balance {
+  font-size: 14px;
+  color: #d7e9ff;
+}
+
+.round-balance span {
+  color: #ffed4e;
+  font-weight: 700;
+}
+
+.winning-lines-display {
+  font-size: 13px;
+  color: #9de6c9;
+  text-align: center;
 }
 
 .winnings-display .amount {

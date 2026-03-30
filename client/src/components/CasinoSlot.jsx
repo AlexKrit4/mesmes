@@ -38,7 +38,10 @@ export default function CasinoSlot() {
     navigate('/settings');
   };
 
-  const handleSpinComplete = () => {
+  const handleSpinComplete = (nextBalance) => {
+    if (typeof nextBalance === 'number') {
+      setBalance(nextBalance);
+    }
     fetchBalance();
   };
 
