@@ -22,6 +22,7 @@ const adminRoutes = require('./routes/admin');
 const channelRoutes = require('./routes/channels');
 const paymentsRoutes = require('./routes/payments');
 const casinoRoutes = require('./routes/casino');
+const blockBlastRoutes = require('./routes/block-blast');
 
 const app = express();
 const server = http.createServer(app);
@@ -82,6 +83,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/channels', channelRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/casino', casinoRoutes);
+app.use('/api/block-blast', blockBlastRoutes);
 
 // Serve React build in production
 if (process.env.NODE_ENV === 'production') {

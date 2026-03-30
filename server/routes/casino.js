@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const db = require('../database');
 const { auth } = require('./users');
 const slot = require('../slotMath');
+const { logWebhook, getRecentLogs } = require('../webhookLogger');
 
 const router = express.Router();
 
@@ -417,10 +418,10 @@ router.patch('/admin/withdrawal/:id/reject', auth, isAdmin, (req, res) => {
 router.post('/yoomoney-webhook', (req, res) => {
   try {
     // Log all incoming data for debugging
-    console.log('[casino] webhook received:', {
+    logWebhook('Webhook received', {
       contentType: req.get('content-type'),
       bodyKeys: Object.keys(req.body || {}),
-      fullBody: req.body,
+      body: req.body,
     });
 
     const {
@@ -436,13 +437,13 @@ router.post('/yoomoney-webhook', (req, res) => {
     } = req.body || {};
 
     if (!label || !sha1_hash) {
-      console.warn('[casino] webhook missing fields', { hasLabel: !!label, hasSha1: !!sha1_hash });
+      logWebhook('webhook missing fields', { hasLabel: !!label, hasSha1: !!sha1_hash });
       return res.status(400).send('missing');
     }
 
     const YOOMONEY_NOTIFICATION_SECRET = process.env.YOOMONEY_NOTIFICATION_SECRET || '';
     if (!YOOMONEY_NOTIFICATION_SECRET) {
-      console.error('[casino] webhook secret not configured');
+      logWebhook('webhook secret not configured');
       return res.status(500).send('secret-not-configured');
     }
 
@@ -461,25 +462,26 @@ router.post('/yoomoney-webhook', (req, res) => {
 
     const localHash = crypto.createHash('sha1').update(base).digest('hex');
     if (String(localHash).toLowerCase() !== String(sha1_hash).toLowerCase()) {
-      console.warn('[casino] webhook bad signature', { label, operation_id });
+      logWebhook('webhook bad signature', { label, operation_id, localHash, providedHash: sha1_hash });
       return res.status(403).send('bad-sign');
     }
 
     // Find deposit record
     const deposit = db.prepare('SELECT * FROM casino_deposits WHERE yoomoney_label = ?').get(label);
     if (!deposit) {
-      console.warn('[casino] webhook deposit not found by label', { label, operation_id, amount });
+      logWebhook('webhook deposit not found by label', { label, operation_id, amount });
       return res.status(200).send('ok');
     }
 
     // Already processed
     if (deposit.status === 'paid') {
+      logWebhook('webhook deposit already paid', { label, deposit_id: deposit.id, status: deposit.status });
       return res.status(200).send('ok');
     }
 
     const amountRub = parseFloat(amount);
     if (amountRub < deposit.total_charged - 0.01) {
-      console.warn('[casino] webhook amount too small', {
+      logWebhook('webhook amount too small', {
         label,
         amountRub,
         required: deposit.total_charged,
@@ -496,20 +498,33 @@ router.post('/yoomoney-webhook', (req, res) => {
 
     // Credit balance
     const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(deposit.user_id);
-    const newBalance = (user?.casino_balance || 0) + deposit.amount;
+    const oldBalance = user?.casino_balance || 0;
+    const newBalance = oldBalance + deposit.amount;
     db.prepare('UPDATE users SET casino_balance = ? WHERE id = ?').run(newBalance, deposit.user_id);
 
-    console.log('[casino] deposit credited via webhook', {
+    logWebhook('webhook deposit credited successfully', {
       deposit_id: deposit.id,
       user_id: deposit.user_id,
       amount: deposit.amount,
+      oldBalance,
+      newBalance,
       operation_id,
     });
 
     return res.status(200).send('ok');
   } catch (error) {
-    console.error('[casino] webhook error:', error.message);
+    logWebhook('webhook error', { message: error.message, stack: error.stack });
     return res.status(500).send('error');
+  }
+});
+
+// GET /casino/admin/webhook-logs - Get webhook logs (admin only)
+router.get('/admin/webhook-logs', auth, isAdmin, (req, res) => {
+  try {
+    const logs = getRecentLogs(200);
+    res.json({ logs });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import CasinoWithdrawalsAdmin from '../components/CasinoWithdrawalsAdmin.jsx';
 import CasinoAccessAdmin from '../components/CasinoAccessAdmin.jsx';
+import CasinoWebhookLogs from '../components/CasinoWebhookLogs.jsx';
 
 function formatDate(d) {
   if (!d) return '—';
@@ -29,7 +30,7 @@ export default function AdminPanel() {
   // Reports
   const [reports, setReports] = useState([]);
   const [unreadReports, setUnreadReports] = useState(0);
-  const [mainTab, setMainTab] = useState('users'); // users | reports | channels | casino-withdrawals | casino-access
+  const [mainTab, setMainTab] = useState('users'); // users | reports | channels | casino-withdrawals | casino-access | casino-logs
   const [selectedReport, setSelectedReport] = useState(null);
   const [reportAction, setReportAction] = useState('banned'); // banned | forgiven
   const [adminComment, setAdminComment] = useState('');
@@ -51,7 +52,7 @@ export default function AdminPanel() {
         setAdminAccess(data);
 
         const requestedSection = new URLSearchParams(location.search).get('section');
-        const allowedSections = data.isAdmin ? ['users', 'reports', 'channels', 'casino-withdrawals', 'casino-access'] : ['reports'];
+        const allowedSections = data.isAdmin ? ['users', 'reports', 'channels', 'casino-withdrawals', 'casino-access', 'casino-logs'] : ['reports'];
 
         if (requestedSection && allowedSections.includes(requestedSection)) {
           setMainTab(requestedSection);
@@ -336,6 +337,12 @@ export default function AdminPanel() {
             onClick={() => { setMainTab('casino-access'); setSelectedUser(null); setSelectedReport(null); }}
             style={{ flex: 1, padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'casino-access' ? '2px solid #0088cc' : 'none', color: mainTab === 'casino-access' ? '#0088cc' : '#aaa' }}
           >🎰 Доступ</div>
+        )}
+        {adminAccess.isAdmin && (
+          <div
+            onClick={() => { setMainTab('casino-logs'); setSelectedUser(null); setSelectedReport(null); }}
+            style={{ flex: 1, padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'casino-logs' ? '2px solid #0088cc' : 'none', color: mainTab === 'casino-logs' ? '#0088cc' : '#aaa' }}
+          >📋 Логи</div>
         )}
       </div>
 
@@ -671,6 +678,9 @@ export default function AdminPanel() {
 
       {mainTab === 'casino-access' && (
         <CasinoAccessAdmin />
+      )}
+      {mainTab === 'casino-logs' && (
+        <CasinoWebhookLogs />
       )}
     </div>
   );
