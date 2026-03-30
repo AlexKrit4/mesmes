@@ -330,7 +330,7 @@ router.post('/withdrawal', auth, hasSlotAccess, (req, res) => {
     const { amount, bank, phone } = req.body;
 
     const validBanks = ['сбер', 'тинькофф', 'яндекс', 'альфа', 'втб'];
-    if (!amount || amount < 50 || !bank || !validBanks.includes(bank.toLowerCase()) || !phone) {
+    if (!amount || amount < 10 || !bank || !validBanks.includes(bank.toLowerCase()) || !phone) {
       return res.status(400).json({ error: 'Invalid withdrawal data' });
     }
 

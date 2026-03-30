@@ -3,6 +3,38 @@ import api from '../api';
 import './CasinoSlotGame.css';
 
 const SYMBOLS = ['🍎', '🍊', '🍋', '🍌', '🍇', '💎', '⭐', '👑'];
+const PAYOUTS = {
+  3: {
+    '🍎': 0.38,
+    '🍊': 0.38,
+    '🍋': 0.44,
+    '🍌': 0.44,
+    '🍇': 0.52,
+    '💎': 0.70,
+    '⭐': 1.00,
+    '👑': 1.30,
+  },
+  4: {
+    '🍎': 1.60,
+    '🍊': 1.60,
+    '🍋': 2.60,
+    '🍌': 2.60,
+    '🍇': 3.30,
+    '💎': 6.50,
+    '⭐': 10.00,
+    '👑': 16.00,
+  },
+  5: {
+    '🍎': 8.00,
+    '🍊': 8.00,
+    '🍋': 16.00,
+    '🍌': 16.00,
+    '🍇': 24.00,
+    '💎': 80.00,
+    '⭐': 160.00,
+    '👑': 400.00,
+  },
+};
 const PAYLINES_MAP = [
   [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]],
   [[1, 0], [1, 1], [1, 2], [1, 3], [1, 4]],
@@ -38,6 +70,7 @@ function updateColumn(grid, col, columnValues) {
 }
 
 export default function CasinoSlotGame({ onSpinComplete, balance }) {
+  const [activeTab, setActiveTab] = useState('game');
   const [grid, setGrid] = useState(null);
   const [spinning, setSpinning] = useState(false);
   const [betAmount, setBetAmount] = useState(0.20);
@@ -166,74 +199,156 @@ export default function CasinoSlotGame({ onSpinComplete, balance }) {
 
   const winningCellSet = getWinningCellSet();
 
-  return (
-    <div className="casino-game-container">
-      <div className="casino-reels">
-        {grid.map((row, rowIdx) => (
-          <div key={rowIdx} className="reel-row">
-            {row.map((symbol, colIdx) => (
-              <div
-                key={`${rowIdx}-${colIdx}`}
-                className={`reel-cell ${reelSpinning[colIdx] ? 'spinning' : ''} ${
-                  winningCellSet.has(`${rowIdx}-${colIdx}`) ? 'winning' : ''
-                }`}
+  const formatX = (value) => `${Number(value).toString()}x`;
+
+  const renderLinePreview = (path) => {
+    const marked = new Set(path.map(([row, col]) => `${row}-${col}`));
+    return (
+      <div className="payline-mini-grid">
+        {[0, 1, 2].map((row) => (
+          <div key={`r-${row}`} className="payline-mini-row">
+            {[0, 1, 2, 3, 4].map((col) => (
+              <span
+                key={`c-${row}-${col}`}
+                className={`payline-dot ${marked.has(`${row}-${col}`) ? 'active' : ''}`}
               >
-                <span className="symbol">{symbol}</span>
-              </div>
+                {marked.has(`${row}-${col}`) ? '●' : '·'}
+              </span>
             ))}
           </div>
         ))}
       </div>
+    );
+  };
 
-      <div className="casino-controls">
-        <div className="bet-control">
-          <label>Ставка (₽):</label>
-          <input
-            type="number"
-            min="0.20"
-            max="100"
-            step="0.10"
-            value={betAmount}
-            onChange={(e) => setBetAmount(parseFloat(e.target.value))}
-            disabled={spinning}
-          />
-        </div>
-
-        <div className="round-balance">
-          Баланс в раунде: <span>{Number(previewBalance || 0).toFixed(2)} ₽</span>
-        </div>
-
+  return (
+    <div className="casino-game-container">
+      <div className="slot-tabs">
         <button
-          className={`btn-spin ${spinning ? 'disabled' : ''}`}
-          onClick={handleSpin}
-          disabled={spinning}
+          className={`slot-tab-btn ${activeTab === 'game' ? 'active' : ''}`}
+          onClick={() => setActiveTab('game')}
         >
-          {spinning ? 'КРУТИТСЯ...' : 'КРУТИТЬ'}
+          Игра
         </button>
-
-        {message && (
-          <div className={`message ${winnings > 0 ? 'success' : ''}`}>
-            {message}
-          </div>
-        )}
-
-        {winnings > 0 && (
-          <div className="winnings-display">
-            Выигрыш: <span className="amount">{winnings.toFixed(2)} ₽</span>
-          </div>
-        )}
-
-        {winningLines.length > 0 && (
-          <div className="winning-lines-display">
-            Линии: {winningLines.map((wl) => `#${wl.line + 1}`).join(', ')}
-          </div>
-        )}
+        <button
+          className={`slot-tab-btn ${activeTab === 'paytable' ? 'active' : ''}`}
+          onClick={() => setActiveTab('paytable')}
+        >
+          Таблица выплат
+        </button>
       </div>
 
-      <div className="paylines-info">
-        <h3>Выигрышные линии (20)</h3>
-        <p className="info-text">Минимум 3 совпадающих символа для выигрыша</p>
-      </div>
+      {activeTab === 'game' && (
+        <>
+          <div className="casino-reels">
+            {grid.map((row, rowIdx) => (
+              <div key={rowIdx} className="reel-row">
+                {row.map((symbol, colIdx) => (
+                  <div
+                    key={`${rowIdx}-${colIdx}`}
+                    className={`reel-cell ${reelSpinning[colIdx] ? 'spinning' : ''} ${
+                      winningCellSet.has(`${rowIdx}-${colIdx}`) ? 'winning' : ''
+                    }`}
+                  >
+                    <span className="symbol">{symbol}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          <div className="casino-controls">
+            <div className="bet-control">
+              <label>Ставка (₽):</label>
+              <input
+                type="number"
+                min="0.20"
+                max="100"
+                step="0.10"
+                value={betAmount}
+                onChange={(e) => setBetAmount(parseFloat(e.target.value))}
+                disabled={spinning}
+              />
+            </div>
+
+            <div className="round-balance">
+              Баланс в раунде: <span>{Number(previewBalance || 0).toFixed(2)} ₽</span>
+            </div>
+
+            <button
+              className={`btn-spin ${spinning ? 'disabled' : ''}`}
+              onClick={handleSpin}
+              disabled={spinning}
+            >
+              {spinning ? 'КРУТИТСЯ...' : 'КРУТИТЬ'}
+            </button>
+
+            {message && (
+              <div className={`message ${winnings > 0 ? 'success' : ''}`}>
+                {message}
+              </div>
+            )}
+
+            {winnings > 0 && (
+              <div className="winnings-display">
+                Выигрыш: <span className="amount">{winnings.toFixed(2)} ₽</span>
+              </div>
+            )}
+
+            {winningLines.length > 0 && (
+              <div className="winning-lines-display">
+                Линии: {winningLines.map((wl) => `#${wl.line + 1}`).join(', ')}
+              </div>
+            )}
+          </div>
+
+          <div className="paylines-info">
+            <h3>Выигрышные линии (20)</h3>
+            <p className="info-text">Минимум 3 совпадающих символа для выигрыша</p>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'paytable' && (
+        <div className="paytable-wrap">
+          <div className="paytable-card">
+            <h3>Символы и множители</h3>
+            <table className="paytable-table">
+              <thead>
+                <tr>
+                  <th>Символ</th>
+                  <th>3 в ряд</th>
+                  <th>4 в ряд</th>
+                  <th>5 в ряд</th>
+                </tr>
+              </thead>
+              <tbody>
+                {SYMBOLS.map((symbol) => (
+                  <tr key={symbol}>
+                    <td className="symbol-cell">{symbol}</td>
+                    <td>{formatX(PAYOUTS[3][symbol])}</td>
+                    <td>{formatX(PAYOUTS[4][symbol])}</td>
+                    <td>{formatX(PAYOUTS[5][symbol])}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="paytable-note">Выплата = ставка × множитель по комбинации.</p>
+          </div>
+
+          <div className="paytable-card">
+            <h3>Линии выплат (20)</h3>
+            <div className="payline-list">
+              {PAYLINES_MAP.map((line, idx) => (
+                <div key={idx} className="payline-item">
+                  <span className="payline-index">#{idx + 1}</span>
+                  {renderLinePreview(line)}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

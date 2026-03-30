@@ -20,8 +20,8 @@ export default function WithdrawalModal({ onClose, balance, onSuccess }) {
   const [success, setSuccess] = useState(false);
 
   const handleWithdraw = async () => {
-    if (!amount || parseFloat(amount) < 50) {
-      setError('Минимальная сумма вывода: 50 ₽');
+    if (!amount || parseFloat(amount) < 10) {
+      setError('Минимальная сумма вывода: 10 ₽');
       return;
     }
 
@@ -79,7 +79,7 @@ export default function WithdrawalModal({ onClose, balance, onSuccess }) {
               <label>Сумма (₽):</label>
               <input
                 type="number"
-                min="50"
+                min="10"
                 max={balance}
                 step="10"
                 value={amount}

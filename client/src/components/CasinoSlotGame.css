@@ -8,6 +8,29 @@
   gap: 20px;
 }
 
+.slot-tabs {
+  width: 100%;
+  max-width: 460px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.slot-tab-btn {
+  border: 1px solid rgba(255, 215, 0, 0.35);
+  background: rgba(255, 215, 0, 0.08);
+  color: #ffed9a;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.slot-tab-btn.active {
+  background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+  color: #101010;
+}
+
 .casino-reels {
   display: flex;
   flex-direction: column;
@@ -239,6 +262,101 @@
   border-radius: 6px;
 }
 
+.paytable-wrap {
+  width: 100%;
+  max-width: 580px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.paytable-card {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 215, 0, 0.25);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.paytable-card h3 {
+  margin: 0 0 10px 0;
+  color: #ffd700;
+  font-size: 15px;
+}
+
+.paytable-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.paytable-table th,
+.paytable-table td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 7px 4px;
+  text-align: center;
+}
+
+.paytable-table th {
+  color: #ffc74a;
+  font-weight: 700;
+}
+
+.symbol-cell {
+  font-size: 20px;
+}
+
+.paytable-note {
+  margin: 10px 0 0 0;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.payline-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.payline-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 7px;
+}
+
+.payline-index {
+  width: 34px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffd86b;
+}
+
+.payline-mini-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.payline-mini-row {
+  display: flex;
+  gap: 3px;
+}
+
+.payline-dot {
+  width: 10px;
+  text-align: center;
+  font-size: 10px;
+  color: rgba(186, 204, 255, 0.5);
+}
+
+.payline-dot.active {
+  color: #40e2a8;
+  text-shadow: 0 0 8px rgba(64, 226, 168, 0.7);
+}
+
 .paylines-info h3 {
   margin: 0 0 4px 0;
   font-size: 14px;
@@ -261,5 +379,9 @@
   .btn-spin {
     width: 160px;
     font-size: 14px;
+  }
+
+  .payline-list {
+    grid-template-columns: 1fr;
   }
 }
