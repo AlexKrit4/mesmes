@@ -194,7 +194,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     return { rect, cellSize };
   };
 
-  const onBoardMouseMove = (e) => {
+  const handleBoardMove = (clientX, clientY) => {
     if (!selectedPieceId) {
       setPreviewPos(null);
       setHoverRow(null);
@@ -202,13 +202,13 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
       return;
     }
 
-    const boardEl = e.currentTarget;
+    const boardEl = document.querySelector('.block-blast-board');
     const boardData = getBoardRect(boardEl);
     if (!boardData) return;
 
     const { rect, cellSize } = boardData;
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
 
     const col = Math.floor(x / (cellSize + 4));
     const row = Math.floor(y / (cellSize + 4));
@@ -223,6 +223,28 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
       }
     }
     setPreviewPos(null);
+  };
+
+  const onBoardTouchMove = (e) => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      handleBoardMove(touch.clientX, touch.clientY);
+    }
+  };
+
+  const onBoardTouchEnd = () => {
+    if (selectedPieceId && previewPos) {
+      const piece = pieces.find((p) => p?.id === selectedPieceId);
+      placePieceAt(piece, previewPos.row, previewPos.col);
+    }
+    setPreviewPos(null);
+    setHoverRow(null);
+    setHoverCol(null);
+  };
+
+  const onBoardMouseMove = (e) => {
+    handleBoardMove(e.clientX, e.clientY);
   };
 
   const onBoardMouseLeave = () => {
@@ -263,11 +285,10 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
         </button>
       </div>
 
-      <div className="block-blast-board" onMouseMove={onBoardMouseMove} onMouseLeave={onBoardMouseLeave}>
+      <div className="block-blast-board" onMouseMove={onBoardMouseMove} onMouseLeave={onBoardMouseLeave} onTouchMove={onBoardTouchMove} onTouchEnd={onBoardTouchEnd}>
         {board.map((row, rIdx) =>
           row.map((cell, cIdx) => {
             const piece = pieces.find((p) => p?.id === selectedPieceId);
-            const isPreviewCell = previewPos && previewPos.row === rIdx && previewPos.col === cIdx;
             let previewColor = null;
             
             if (previewPos && piece) {
@@ -286,7 +307,6 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
                   background: cell ? cell : (previewColor ? `${previewColor}60` : 'rgba(255,255,255,0.06)'),
                   transition: previewColor ? 'background 0.05s' : 'background 0.15s',
                 }}
-                title={selectedPieceId ? 'Выбери позицию и кликни' : 'Выбери фигуру'}
               />
             );
           })
