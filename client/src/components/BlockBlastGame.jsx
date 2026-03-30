@@ -110,6 +110,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   const [savingResult, setSavingResult] = useState(false);
   const [draggingPieceId, setDraggingPieceId] = useState(null);
   const [previewPos, setPreviewPos] = useState(null);
+  const [dragPointer, setDragPointer] = useState(null);
   const boardRef = useRef(null);
   const draggingPieceIdRef = useRef(null);
   const previewPosRef = useRef(null);
@@ -132,6 +133,8 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     boardStateRef.current = board;
   }, [board]);
 
+  const draggingPiece = pieces.find((p) => p?.id === draggingPieceId) || null;
+
   const submitScore = async (value) => {
     if (savingResult) return;
     setSavingResult(true);
@@ -153,6 +156,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     setMessage('');
     setPreviewPos(null);
     setDraggingPieceId(null);
+    setDragPointer(null);
   };
 
   const tryFinishIfNoMoves = async (nextBoard, nextPieces, nextScore) => {
@@ -186,6 +190,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     setPieces(finalPieces);
     setDraggingPieceId(null);
     setPreviewPos(null);
+    setDragPointer(null);
 
     await tryFinishIfNoMoves(afterClear.board, finalPieces, nextScore);
   };
@@ -200,6 +205,8 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   const handleMove = (clientX, clientY) => {
     const activePieceId = draggingPieceIdRef.current;
     if (!activePieceId) return;
+
+    setDragPointer({ x: clientX, y: clientY });
 
     const boardEl = boardRef.current;
     const boardData = getBoardRect(boardEl);
@@ -232,6 +239,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     } else {
       setDraggingPieceId(null);
       setPreviewPos(null);
+      setDragPointer(null);
     }
   };
 
@@ -263,6 +271,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     if (gameOver) return;
     setDraggingPieceId(pieceId);
     draggingPieceIdRef.current = pieceId;
+    setDragPointer({ x: e.clientX, y: e.clientY });
     handleMove(e.clientX, e.clientY);
   };
 
@@ -367,6 +376,38 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
           })}
         </div>
       </div>
+
+      {draggingPiece && dragPointer ? (
+        <div
+          className="block-blast-drag-ghost"
+          style={{
+            left: dragPointer.x,
+            top: dragPointer.y,
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <div
+            className="block-blast-piece-grid"
+            style={{
+              gridTemplateColumns: `repeat(${getPieceSize(draggingPiece.cells).width}, 16px)`,
+              gridTemplateRows: `repeat(${getPieceSize(draggingPiece.cells).height}, 16px)`,
+            }}
+          >
+            {Array.from({ length: getPieceSize(draggingPiece.cells).width * getPieceSize(draggingPiece.cells).height }).map((_, i) => {
+              const rr = Math.floor(i / getPieceSize(draggingPiece.cells).width);
+              const cc = i % getPieceSize(draggingPiece.cells).width;
+              const filled = draggingPiece.cells.some(([r, c]) => r === rr && c === cc);
+              return (
+                <span
+                  key={`ghost-${draggingPiece.id}-${i}`}
+                  className="block-blast-piece-dot"
+                  style={{ background: filled ? draggingPiece.color : 'transparent' }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {message ? <div className="settings-msg" style={{ color: gameOver ? 'var(--accent)' : 'var(--red)' }}>{message}</div> : null}
     </div>
