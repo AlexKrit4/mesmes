@@ -17,7 +17,7 @@ export default function CasinoWithdrawalsAdmin() {
 
   const fetchWithdrawals = async () => {
     try {
-      const response = await api.get('/casino/admin/withdrawals?status=pending');
+      const response = await api.get('/casino/admin/withdrawals');
       setWithdrawals(response.data.withdrawals);
       setLoading(false);
     } catch (error) {
@@ -128,6 +128,23 @@ export default function CasinoWithdrawalsAdmin() {
               </span>
             </div>
 
+            <div className="info-row">
+              <span className="label">Статус:</span>
+              <span className="value" style={{
+                color: selectedWithdrawal.status === 'pending' ? '#ffed4e' : (selectedWithdrawal.status === 'approved' ? '#28d9aa' : '#ff6b6b'),
+                fontWeight: 'bold'
+              }}>
+                {selectedWithdrawal.status === 'pending' ? '⏳ В ожидании' : (selectedWithdrawal.status === 'approved' ? '✅ Одобрена' : '❌ Отклонена')}
+              </span>
+            </div>
+
+            {selectedWithdrawal.admin_comment && (
+              <div className="info-row">
+                <span className="label">Комментарий администратора:</span>
+                <span className="value">{selectedWithdrawal.admin_comment}</span>
+              </div>
+            )}
+
             <div className="form-group">
               <label>Комментарий администратора:</label>
               <textarea
@@ -135,7 +152,7 @@ export default function CasinoWithdrawalsAdmin() {
                 onChange={(e) => setAdminComment(e.target.value)}
                 placeholder="Оставьте комментарий (опционально)"
                 rows="4"
-                disabled={processing}
+                disabled={processing || selectedWithdrawal.status !== 'pending'}
               />
             </div>
 
@@ -145,22 +162,37 @@ export default function CasinoWithdrawalsAdmin() {
               </div>
             )}
 
-            <div className="action-buttons">
-              <button
-                className="btn-approve"
-                onClick={handleApprove}
-                disabled={processing}
-              >
-                {processing ? 'Обработка...' : '✅ Одобрить'}
-              </button>
-              <button
-                className="btn-reject"
-                onClick={handleReject}
-                disabled={processing}
-              >
-                {processing ? 'Обработка...' : '❌ Отклонить'}
-              </button>
-            </div>
+            {selectedWithdrawal.status === 'pending' && (
+              <div className="action-buttons">
+                <button
+                  className="btn-approve"
+                  onClick={handleApprove}
+                  disabled={processing}
+                >
+                  {processing ? 'Обработка...' : '✅ Одобрить'}
+                </button>
+                <button
+                  className="btn-reject"
+                  onClick={handleReject}
+                  disabled={processing}
+                >
+                  {processing ? 'Обработка...' : '❌ Отклонить'}
+                </button>
+              </div>
+            )}
+            {selectedWithdrawal.status !== 'pending' && (
+              <div style={{
+                padding: '12px',
+                background: 'rgba(255, 215, 0, 0.1)',
+                border: '1px solid rgba(255, 215, 0, 0.3)',
+                borderRadius: '4px',
+                color: '#ffed4e',
+                textAlign: 'center',
+                fontSize: '14px'
+              }}>
+                Заявка рассмотрена. Дальнейшие действия недоступны.
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -179,6 +211,7 @@ export default function CasinoWithdrawalsAdmin() {
                   <th>Банк</th>
                   <th>Телефон</th>
                   <th>Дата</th>
+                  <th>Статус</th>
                   <th>Действие</th>
                 </tr>
               </thead>
@@ -197,12 +230,18 @@ export default function CasinoWithdrawalsAdmin() {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}</td>
+                    <td style={{
+                      color: w.status === 'pending' ? '#ffed4e' : (w.status === 'approved' ? '#28d9aa' : '#ff6b6b'),
+                      fontWeight: 'bold'
+                    }}>
+                      {w.status === 'pending' ? '⏳ В ожидании' : (w.status === 'approved' ? '✅ Рассмотрена' : '❌ Отклонена')}
+                    </td>
                     <td>
                       <button
                         className="btn-small"
                         onClick={() => handleSelectWithdrawal(w.id)}
                       >
-                        Рассмотреть
+                        {w.status === 'pending' ? 'Рассмотреть' : 'Просмотр'}
                       </button>
                     </td>
                   </tr>
@@ -257,6 +296,10 @@ export default function CasinoWithdrawalsAdmin() {
         .info-row .label {
           font-weight: 600;
           color: var(--text2);
+        }
+
+        .info-row .value {
+          text-align: right;
         }
 
         .info-row .value {
