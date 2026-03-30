@@ -67,7 +67,7 @@
 }
 
 .reel-cell.spinning .symbol {
-  animation: symbol-scroll 0.14s linear infinite;
+  animation: symbol-scroll 0.07s linear infinite;
   filter: blur(0.6px);
 }
 

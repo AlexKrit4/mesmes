@@ -122,12 +122,12 @@ export default function CasinoSlotGame({ onSpinComplete, balance }) {
   };
 
   const startAnimatedStop = (targetGrid, winAmount, lines, finalBalance) => {
-    const stopDelays = [800, 1040, 1280, 1520, 1760];
+    const stopDelays = [400, 520, 640, 760, 880];
 
     for (let col = 0; col < 5; col += 1) {
       spinIntervalRef.current[col] = setInterval(() => {
         setGrid((prev) => updateColumn(prev, col, [randomSymbol(), randomSymbol(), randomSymbol()]));
-      }, 80);
+      }, 40);
 
       spinTimeoutRef.current[col] = setTimeout(() => {
         clearInterval(spinIntervalRef.current[col]);
@@ -149,12 +149,12 @@ export default function CasinoSlotGame({ onSpinComplete, balance }) {
       if (winAmount > 0) {
         setMessage(`🎉 Выигрыш: ${winAmount.toFixed(2)} ₽ (линий: ${lines.length})`);
       } else {
-        setMessage('Без выигрыша. Попробуйте еще раз!');
+        setMessage('');
       }
 
       setSpinning(false);
       onSpinComplete(finalBalance);
-    }, stopDelays[4] + 220);
+    }, stopDelays[4] + 120);
   };
 
   const handleSpin = async () => {
@@ -170,7 +170,7 @@ export default function CasinoSlotGame({ onSpinComplete, balance }) {
 
     clearSpinTimers();
     setSpinning(true);
-    setMessage('Ставка списана, барабаны крутятся...');
+    setMessage('');
     setWinnings(0);
     setWinningLines([]);
     setReelSpinning([true, true, true, true, true]);
@@ -283,7 +283,7 @@ export default function CasinoSlotGame({ onSpinComplete, balance }) {
               {spinning ? 'КРУТИТСЯ...' : 'КРУТИТЬ'}
             </button>
 
-            {message && (
+            {message && winnings > 0 && (
               <div className={`message ${winnings > 0 ? 'success' : ''}`}>
                 {message}
               </div>
