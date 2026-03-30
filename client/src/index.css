@@ -4059,7 +4059,7 @@ img.avatar {
 
 .block-blast-pieces {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   padding: 4px 0;
 }
 
@@ -4074,7 +4074,7 @@ img.avatar {
   align-items: center;
   justify-content: center;
   cursor: grab;
-  padding: 8px;
+  padding: 4px;
   transition: background 0.15s, transform 0.1s, opacity 0.15s;
   user-select: none;
   touch-action: none;

@@ -22,6 +22,7 @@ const SHAPES = [
 ];
 
 const PIECE_COLORS = ['#4fb3ff', '#8bd450', '#ffa647', '#ff6b9d', '#9d7bff', '#32d9c8'];
+const BOARD_CELL_GAP = 4;
 
 function createEmptyBoard() {
   return Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(null));
@@ -138,9 +139,10 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     const updateBoardCellSize = () => {
       const boardEl = boardRef.current;
       if (!boardEl) return;
-      const data = getBoardRect(boardEl);
-      if (!data) return;
-      setBoardCellSize(Math.max(12, Math.floor(data.cellSize)));
+      const firstCell = boardEl.querySelector('.block-blast-cell');
+      if (!firstCell) return;
+      const cellRect = firstCell.getBoundingClientRect();
+      setBoardCellSize(Math.max(12, Math.round(cellRect.width)));
     };
 
     updateBoardCellSize();
@@ -213,7 +215,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   const getBoardRect = (boardEl) => {
     if (!boardEl) return null;
     const rect = boardEl.getBoundingClientRect();
-    const cellSize = (rect.width - 28) / 8; // 8 клеток, padding 8px * 2, gap 4px * 7
+    const cellSize = (rect.width - 16 - BOARD_CELL_GAP * 7) / 8;
     return { rect, cellSize };
   };
 
@@ -231,24 +233,23 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
-    const col = Math.floor(x / (cellSize + 4));
-    const row = Math.floor(y / (cellSize + 4));
+    const step = cellSize + BOARD_CELL_GAP;
+    const pointerCol = (x - cellSize / 2) / step;
+    const pointerRow = (y - cellSize / 2) / step;
 
-    if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+    if (pointerRow >= -0.5 && pointerRow <= BOARD_SIZE - 0.5 && pointerCol >= -0.5 && pointerCol <= BOARD_SIZE - 0.5) {
       const piece = piecesRef.current.find((p) => p?.id === activePieceId);
       if (piece) {
         const { width, height } = getPieceSize(piece.cells);
-        const targetRow = row - Math.floor(height / 2);
-        const targetCol = col - Math.floor(width / 2);
+        const centerColOffset = (width - 1) / 2;
+        const centerRowOffset = (height - 1) / 2;
+        const targetCol = Math.round(pointerCol - centerColOffset);
+        const targetRow = Math.round(pointerRow - centerRowOffset);
 
         if (canPlace(boardStateRef.current, piece, targetRow, targetCol)) {
           setPreviewPos({ row: targetRow, col: targetCol });
           return;
         }
-      }
-      if (piece && canPlace(boardStateRef.current, piece, row, col)) {
-        setPreviewPos({ row, col });
-        return;
       }
     }
     setPreviewPos(null);
@@ -383,7 +384,11 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
               >
                 <div
                   className="block-blast-piece-grid"
-                  style={{ gridTemplateColumns: `repeat(${width}, ${boardCellSize}px)`, gridTemplateRows: `repeat(${height}, ${boardCellSize}px)` }}
+                  style={{
+                    gap: `${BOARD_CELL_GAP}px`,
+                    gridTemplateColumns: `repeat(${width}, ${boardCellSize}px)`,
+                    gridTemplateRows: `repeat(${height}, ${boardCellSize}px)`,
+                  }}
                 >
                   {Array.from({ length: width * height }).map((_, i) => {
                     const rr = Math.floor(i / width);
@@ -421,6 +426,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
           <div
             className="block-blast-piece-grid"
             style={{
+              gap: `${BOARD_CELL_GAP}px`,
               gridTemplateColumns: `repeat(${draggingPieceSize.width}, ${boardCellSize}px)`,
               gridTemplateRows: `repeat(${draggingPieceSize.height}, ${boardCellSize}px)`,
             }}
