@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../../api';
 import '../CasinoModals.css';
 
@@ -8,9 +8,40 @@ export default function DepositModal({ onClose, onSuccess }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState('');
+  const [depositId, setDepositId] = useState(null);
+  const [reconcileLoading, setReconcileLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
 
   const commission = parseFloat(amount) * 0.03;
   const total = parseFloat(amount) + commission;
+
+  useEffect(() => {
+    let timer = null;
+
+    async function autoCheck() {
+      if (!success || !depositId || reconcileLoading) return;
+      try {
+        setReconcileLoading(true);
+        const response = await api.post('/casino/deposit-yoomoney/reconcile', { depositId });
+        if (response.data?.credited) {
+          setStatusMessage('Платеж подтвержден. Баланс обновлен.');
+          onSuccess();
+        }
+      } catch {
+        // Ignore background check errors to avoid noisy UI.
+      } finally {
+        setReconcileLoading(false);
+      }
+    }
+
+    if (success && depositId) {
+      timer = setInterval(autoCheck, 7000);
+    }
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [success, depositId, reconcileLoading, onSuccess]);
 
   const handleDeposit = async () => {
     if (!amount || parseFloat(amount) < 50) {
@@ -27,20 +58,36 @@ export default function DepositModal({ onClose, onSuccess }) {
       });
 
       setPaymentUrl(response.data.paymentUrl);
+      setDepositId(response.data.depositId);
       setSuccess(true);
+      setStatusMessage('Ожидаем оплату. После оплаты нажми "Проверить оплату".');
 
       // Open payment URL in new window
       window.open(response.data.paymentUrl, '_blank');
-
-      // Close modal after 2 seconds since user is redirected to payment
-      setTimeout(() => {
-        onClose();
-        onSuccess();
-      }, 2000);
     } catch (err) {
       setError(err.response?.data?.error || 'Ошибка при создании платежа');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReconcile = async () => {
+    if (!depositId) return;
+
+    setReconcileLoading(true);
+    setError('');
+    try {
+      const response = await api.post('/casino/deposit-yoomoney/reconcile', { depositId });
+      if (response.data?.credited) {
+        setStatusMessage('Платеж подтвержден. Баланс обновлен.');
+        onSuccess();
+      } else {
+        setStatusMessage('Оплата пока не подтверждена. Подожди 10-20 секунд и нажми еще раз.');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Не удалось проверить оплату');
+    } finally {
+      setReconcileLoading(false);
     }
   };
 
@@ -99,8 +146,21 @@ export default function DepositModal({ onClose, onSuccess }) {
         ) : (
           <div className="success-message">
             <div className="success-icon">✅</div>
-            <p>Платеж обработан</p>
-            <p className="small">Баланс обновится автоматически</p>
+            <p>Ссылка на оплату открыта</p>
+            <p className="small">{statusMessage || 'После оплаты вернись и проверь платеж'}</p>
+            <div className="modal-buttons" style={{ marginTop: 16 }}>
+              <button className="btn-primary" onClick={handleReconcile} disabled={reconcileLoading}>
+                {reconcileLoading ? 'Проверяем...' : 'Проверить оплату'}
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => window.open(paymentUrl, '_blank')}
+                disabled={!paymentUrl}
+              >
+                Открыть оплату снова
+              </button>
+            </div>
+            {error && <div className="error-message" style={{ marginTop: 10 }}>{error}</div>}
           </div>
         )}
       </div>

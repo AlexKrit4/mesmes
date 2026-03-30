@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Путь к файлу логов
-const logsDir = path.join(__dirname, '..', 'logs');
+const logsDir = path.join(__dirname, 'logs');
 const logsFile = path.join(logsDir, 'casino-webhook.log');
 
 // Создаем директорию если не существует

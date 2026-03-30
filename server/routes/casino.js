@@ -131,6 +131,15 @@ router.post('/deposit-yoomoney', auth, hasSlotAccess, (req, res) => {
       SELECT id FROM casino_deposits WHERE yoomoney_label = ?
     `).get(label);
 
+    logWebhook('deposit created', {
+      depositId: deposit?.id,
+      userId: req.userId,
+      amount,
+      commission,
+      total,
+      label,
+    });
+
     res.json({
       depositId: deposit.id,
       amount,
@@ -143,6 +152,137 @@ router.post('/deposit-yoomoney', auth, hasSlotAccess, (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /casino/deposit-yoomoney/reconcile - Fallback verification via YooMoney API
+router.post('/deposit-yoomoney/reconcile', auth, hasSlotAccess, async (req, res) => {
+  try {
+    const { depositId } = req.body || {};
+    if (!depositId) {
+      return res.status(400).json({ error: 'depositId required' });
+    }
+
+    const deposit = db.prepare(`
+      SELECT * FROM casino_deposits
+      WHERE id = ? AND user_id = ?
+    `).get(depositId, req.userId);
+
+    if (!deposit) {
+      return res.status(404).json({ error: 'Deposit not found' });
+    }
+
+    if (deposit.status === 'paid') {
+      const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.userId);
+      return res.json({
+        status: 'paid',
+        credited: true,
+        balance: user?.casino_balance || 0,
+      });
+    }
+
+    const apiToken = process.env.YOOMONEY_API_TOKEN || '';
+    if (!apiToken) {
+      logWebhook('reconcile skipped: api token missing', { depositId, label: deposit.yoomoney_label });
+      return res.json({
+        status: deposit.status,
+        credited: false,
+        reason: 'api-token-missing',
+      });
+    }
+
+    const payload = new URLSearchParams({
+      label: String(deposit.yoomoney_label),
+      records: '30',
+      type: 'deposition',
+    });
+
+    const ymResponse = await fetch('https://yoomoney.ru/api/operation-history', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: payload.toString(),
+    });
+
+    const raw = await ymResponse.text();
+    let ymData = null;
+    try {
+      ymData = JSON.parse(raw);
+    } catch {
+      ymData = null;
+    }
+
+    if (!ymResponse.ok || !ymData) {
+      logWebhook('reconcile yoomoney api error', {
+        depositId,
+        status: ymResponse.status,
+        body: raw,
+      });
+      return res.status(502).json({ error: 'YooMoney API request failed' });
+    }
+
+    const operations = Array.isArray(ymData.operations) ? ymData.operations : [];
+    const matched = operations.find((op) => (
+      String(op.label || '') === String(deposit.yoomoney_label)
+      && String(op.status || '').toLowerCase() === 'success'
+      && Number(op.amount || 0) >= (Number(deposit.total_charged || 0) - 0.01)
+    ));
+
+    if (!matched) {
+      logWebhook('reconcile no successful operation yet', {
+        depositId,
+        label: deposit.yoomoney_label,
+        operationsCount: operations.length,
+      });
+      return res.json({ status: 'pending', credited: false });
+    }
+
+    try {
+      db.exec('BEGIN IMMEDIATE');
+
+      const fresh = db.prepare('SELECT * FROM casino_deposits WHERE id = ?').get(deposit.id);
+      if (!fresh) {
+        db.exec('ROLLBACK');
+        return res.status(404).json({ error: 'Deposit not found' });
+      }
+
+      if (fresh.status !== 'paid') {
+        db.prepare(`
+          UPDATE casino_deposits
+          SET status = 'paid', yoomoney_operation_id = ?, paid_at = ?
+          WHERE id = ?
+        `).run(matched.operation_id || null, matched.datetime || new Date().toISOString(), fresh.id);
+
+        db.prepare('UPDATE users SET casino_balance = casino_balance + ? WHERE id = ?').run(fresh.amount, fresh.user_id);
+      }
+
+      db.exec('COMMIT');
+    } catch (txError) {
+      try { db.exec('ROLLBACK'); } catch {}
+      throw txError;
+    }
+
+    const user = db.prepare('SELECT casino_balance FROM users WHERE id = ?').get(req.userId);
+
+    logWebhook('reconcile credited successfully', {
+      depositId: deposit.id,
+      userId: req.userId,
+      amount: deposit.amount,
+      operationId: matched.operation_id,
+      balance: user?.casino_balance || 0,
+    });
+
+    return res.json({
+      status: 'paid',
+      credited: true,
+      balance: user?.casino_balance || 0,
+      operationId: matched.operation_id || null,
+    });
+  } catch (error) {
+    logWebhook('reconcile error', { message: error.message, stack: error.stack });
+    return res.status(500).json({ error: 'Reconcile failed' });
   }
 });
 
