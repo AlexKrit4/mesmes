@@ -4077,6 +4077,7 @@ img.avatar {
   padding: 8px;
   transition: background 0.15s, transform 0.1s, opacity 0.15s;
   user-select: none;
+  touch-action: none;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
 }

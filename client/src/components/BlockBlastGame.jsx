@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import api from '../api.js';
 
 const BOARD_SIZE = 8;
@@ -110,6 +110,27 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   const [savingResult, setSavingResult] = useState(false);
   const [draggingPieceId, setDraggingPieceId] = useState(null);
   const [previewPos, setPreviewPos] = useState(null);
+  const boardRef = useRef(null);
+  const draggingPieceIdRef = useRef(null);
+  const previewPosRef = useRef(null);
+  const piecesRef = useRef(pieces);
+  const boardStateRef = useRef(board);
+
+  useEffect(() => {
+    draggingPieceIdRef.current = draggingPieceId;
+  }, [draggingPieceId]);
+
+  useEffect(() => {
+    previewPosRef.current = previewPos;
+  }, [previewPos]);
+
+  useEffect(() => {
+    piecesRef.current = pieces;
+  }, [pieces]);
+
+  useEffect(() => {
+    boardStateRef.current = board;
+  }, [board]);
 
   const submitScore = async (value) => {
     if (savingResult) return;
@@ -177,9 +198,10 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   };
 
   const handleMove = (clientX, clientY) => {
-    if (!draggingPieceId) return;
+    const activePieceId = draggingPieceIdRef.current;
+    if (!activePieceId) return;
 
-    const boardEl = document.querySelector('.block-blast-board');
+    const boardEl = boardRef.current;
     const boardData = getBoardRect(boardEl);
     if (!boardData) return;
 
@@ -191,8 +213,8 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
     const row = Math.floor(y / (cellSize + 4));
 
     if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
-      const piece = pieces.find((p) => p?.id === draggingPieceId);
-      if (piece && canPlace(board, piece, row, col)) {
+      const piece = piecesRef.current.find((p) => p?.id === activePieceId);
+      if (piece && canPlace(boardStateRef.current, piece, row, col)) {
         setPreviewPos({ row, col });
         return;
       }
@@ -201,47 +223,47 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
   };
 
   const handleMoveEnd = () => {
-    if (draggingPieceId && previewPos) {
-      const piece = pieces.find((p) => p?.id === draggingPieceId);
-      placePieceAt(piece, previewPos.row, previewPos.col);
+    const activePieceId = draggingPieceIdRef.current;
+    const activePreviewPos = previewPosRef.current;
+
+    if (activePieceId && activePreviewPos) {
+      const piece = piecesRef.current.find((p) => p?.id === activePieceId);
+      placePieceAt(piece, activePreviewPos.row, activePreviewPos.col);
     } else {
       setDraggingPieceId(null);
       setPreviewPos(null);
     }
   };
 
-  const onBoardMouseMove = (e) => {
-    handleMove(e.clientX, e.clientY);
-  };
-
-  const onBoardMouseUp = () => {
-    handleMoveEnd();
-  };
-
-  const onBoardMouseLeave = () => {
+  useEffect(() => {
     if (!draggingPieceId) return;
-    setPreviewPos(null);
-  };
 
-  const onBoardTouchMove = (e) => {
-    if (!draggingPieceId) return;
+    const onPointerMove = (e) => {
+      if (e.pointerType === 'touch') e.preventDefault();
+      handleMove(e.clientX, e.clientY);
+    };
+
+    const onPointerUp = () => {
+      handleMoveEnd();
+    };
+
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [draggingPieceId]);
+
+  const onPiecePointerDown = (pieceId, e) => {
     e.preventDefault();
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      handleMove(touch.clientX, touch.clientY);
-    }
-  };
-
-  const onBoardTouchEnd = () => {
-    handleMoveEnd();
-  };
-
-  const onPieceMouseDown = (pieceId) => {
+    if (gameOver) return;
     setDraggingPieceId(pieceId);
-  };
-
-  const onPieceTouchStart = (pieceId) => {
-    setDraggingPieceId(pieceId);
+    draggingPieceIdRef.current = pieceId;
+    handleMove(e.clientX, e.clientY);
   };
 
   if (!canPlay) {
@@ -276,7 +298,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
         </button>
       </div>
 
-      <div className="block-blast-board" onMouseMove={onBoardMouseMove} onMouseLeave={onBoardMouseLeave} onMouseUp={onBoardMouseUp} onTouchMove={onBoardTouchMove} onTouchEnd={onBoardTouchEnd}>
+      <div className="block-blast-board" ref={boardRef}>
         {board.map((row, rIdx) =>
           row.map((cell, cIdx) => {
             const piece = pieces.find((p) => p?.id === draggingPieceId);
@@ -321,8 +343,7 @@ export default function BlockBlastGame({ canPlay, onScoreSubmit }) {
               <div
                 key={piece.id}
                 className={`block-blast-piece-card ${isDragging ? 'dragging' : ''}`}
-                onMouseDown={() => onPieceMouseDown(piece.id)}
-                onTouchStart={() => onPieceTouchStart(piece.id)}
+                onPointerDown={(e) => onPiecePointerDown(piece.id, e)}
               >
                 <div
                   className="block-blast-piece-grid"
