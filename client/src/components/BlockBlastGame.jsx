@@ -100,7 +100,7 @@ function clearCompleted(board) {
   return { board: nextBoard, cleared: rowsToClear.length + colsToClear.length };
 }
 
-export default function BlockBlastGame({ canPlay }) {
+export default function BlockBlastGame({ canPlay, showRecords = true }) {
   const [board, setBoard] = useState(createEmptyBoard());
   const [pieces, setPieces] = useState([randomPiece(), randomPiece(), randomPiece()]);
   const [selectedPieceId, setSelectedPieceId] = useState(null);
@@ -277,35 +277,39 @@ export default function BlockBlastGame({ canPlay }) {
 
       {message ? <div className="settings-msg" style={{ color: gameOver ? 'var(--accent)' : 'var(--red)' }}>{message}</div> : null}
 
-      <div className="block-blast-leaderboard">
-        <div className="block-blast-leaderboard-title">Рейтинг лучших рекордов</div>
-        {leaderboard.length === 0 ? (
-          <div className="settings-msg" style={{ color: 'var(--text2)' }}>Пока нет результатов</div>
-        ) : (
-          leaderboard.map((entry, index) => (
-            <div key={`${entry.id}-${entry.best_score}`} className="block-blast-leader-row">
-              <span>#{index + 1}</span>
-              <span>{entry.username} (@{entry.public_id})</span>
-              <strong>{entry.best_score}</strong>
-            </div>
-          ))
-        )}
-      </div>
+      {showRecords ? (
+        <>
+          <div className="block-blast-leaderboard">
+            <div className="block-blast-leaderboard-title">Рейтинг лучших рекордов</div>
+            {leaderboard.length === 0 ? (
+              <div className="settings-msg" style={{ color: 'var(--text2)' }}>Пока нет результатов</div>
+            ) : (
+              leaderboard.map((entry, index) => (
+                <div key={`${entry.id}-${entry.best_score}`} className="block-blast-leader-row">
+                  <span>#{index + 1}</span>
+                  <span>{entry.username} (@{entry.public_id})</span>
+                  <strong>{entry.best_score}</strong>
+                </div>
+              ))
+            )}
+          </div>
 
-      <div className="block-blast-leaderboard" style={{ marginTop: 10 }}>
-        <div className="block-blast-leaderboard-title">Мои последние результаты</div>
-        {myRecent.length === 0 ? (
-          <div className="settings-msg" style={{ color: 'var(--text2)' }}>Пока нет сыгранных партий</div>
-        ) : (
-          myRecent.map((entry, index) => (
-            <div key={`${entry.created_at}-${index}`} className="block-blast-leader-row">
-              <span>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</span>
-              <span>{new Date(entry.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
-              <strong>{entry.score}</strong>
-            </div>
-          ))
-        )}
-      </div>
+          <div className="block-blast-leaderboard" style={{ marginTop: 10 }}>
+            <div className="block-blast-leaderboard-title">Мои последние результаты</div>
+            {myRecent.length === 0 ? (
+              <div className="settings-msg" style={{ color: 'var(--text2)' }}>Пока нет сыгранных партий</div>
+            ) : (
+              myRecent.map((entry, index) => (
+                <div key={`${entry.created_at}-${index}`} className="block-blast-leader-row">
+                  <span>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</span>
+                  <span>{new Date(entry.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+                  <strong>{entry.score}</strong>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

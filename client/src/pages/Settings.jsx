@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { disconnectSocket } from '../socket.js';
-import BlockBlastGame from '../components/BlockBlastGame.jsx';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -22,7 +21,6 @@ export default function Settings() {
   const [twoFAEnableCode, setTwoFAEnableCode] = useState('');
   const [twoFADisableCode, setTwoFADisableCode] = useState('');
   const [twoFADisablePassword, setTwoFADisablePassword] = useState('');
-  const [blockBlastAccess, setBlockBlastAccess] = useState(false);
 
   // Fetch fresh me data
   useEffect(() => {
@@ -40,9 +38,6 @@ export default function Settings() {
       setTwoFAEnabled(!!data.enabled);
     }).catch(() => {});
 
-    api.get('/users/block-blast/access').then(({ data }) => {
-      setBlockBlastAccess(!!data.can_play);
-    }).catch(() => {});
   }, []);
 
   const terminateSession = async (id) => {
@@ -266,7 +261,10 @@ export default function Settings() {
 
         <div className="settings-divider" />
 
-        <BlockBlastGame canPlay={blockBlastAccess} />
+        <button className="settings-action-btn" onClick={() => navigate('/block-blast')}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3h8v3h3v8h-3v3H8v-3H5V6h3z"/></svg>
+          Block Blast
+        </button>
 
         <div className="settings-divider" />
 
