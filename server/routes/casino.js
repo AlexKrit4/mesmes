@@ -181,7 +181,7 @@ router.post('/deposit-yoomoney/reconcile', auth, hasSlotAccess, async (req, res)
       });
     }
 
-    const apiToken = process.env.YOOMONEY_API_TOKEN || '';
+    const apiToken = process.env.YOOMONEY_API_TOKEN || process.env.YOOMONEY_TOKEN || '';
     if (!apiToken) {
       logWebhook('reconcile skipped: api token missing', { depositId, label: deposit.yoomoney_label });
       return res.json({

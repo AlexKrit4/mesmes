@@ -23,6 +23,12 @@ export default function DepositModal({ onClose, onSuccess }) {
       try {
         setReconcileLoading(true);
         const response = await api.post('/casino/deposit-yoomoney/reconcile', { depositId });
+        if (response.data?.reason === 'api-token-missing') {
+          setError('На сервере не настроен YOOMONEY_API_TOKEN. Передай администратору.');
+          setStatusMessage('Автопроверка отключена: сервер платежей не настроен.');
+          if (timer) clearInterval(timer);
+          return;
+        }
         if (response.data?.credited) {
           setStatusMessage('Платеж подтвержден. Баланс обновлен.');
           onSuccess();
@@ -78,6 +84,11 @@ export default function DepositModal({ onClose, onSuccess }) {
     setError('');
     try {
       const response = await api.post('/casino/deposit-yoomoney/reconcile', { depositId });
+      if (response.data?.reason === 'api-token-missing') {
+        setError('На сервере не настроен YOOMONEY_API_TOKEN. Без него платеж не подтвердить.');
+        setStatusMessage('Нужна настройка сервера: YOOMONEY_API_TOKEN.');
+        return;
+      }
       if (response.data?.credited) {
         setStatusMessage('Платеж подтвержден. Баланс обновлен.');
         onSuccess();
