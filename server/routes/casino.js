@@ -17,6 +17,20 @@ function getMinAcceptedCreditedAmount(depositAmount) {
   return Number(depositAmount || 0) - delta;
 }
 
+// Ensure date is in ISO format with Z (UTC)
+function ensureISODate(dateStr) {
+  if (!dateStr) return dateStr;
+  // If already in ISO format with Z or timezone offset, return as is
+  if (dateStr.includes('Z') || dateStr.includes('+') || /\-\d{2}:\d{2}$/.test(dateStr)) {
+    return dateStr;
+  }
+  // If it's a plain SQLite datetime string (YYYY-MM-DD HH:MM:SS), treat it as UTC and add Z
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(dateStr)) {
+    return dateStr.replace(' ', 'T') + 'Z';
+  }
+  return dateStr;
+}
+
 // Middleware
 function isAdmin(req, res, next) {
   const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.userId);
@@ -348,7 +362,14 @@ router.get('/deposit-history', auth, hasSlotAccess, (req, res) => {
       LIMIT 50
     `).all(req.userId);
 
-    res.json({ deposits });
+    // Convert datetime fields to ISO 8601 format with UTC indicator
+    const formattedDeposits = deposits.map(d => ({
+      ...d,
+      created_at: ensureISODate(d.created_at),
+      paid_at: ensureISODate(d.paid_at)
+    }));
+
+    res.json({ deposits: formattedDeposits });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -426,7 +447,15 @@ router.get('/withdrawal-history', auth, hasSlotAccess, (req, res) => {
       LIMIT 50
     `).all(req.userId);
 
-    res.json({ withdrawals });
+    // Convert datetime fields to ISO 8601 format with UTC indicator
+    const formattedWithdrawals = withdrawals.map(w => ({
+      ...w,
+      created_at: ensureISODate(w.created_at),
+      reviewed_at: ensureISODate(w.reviewed_at),
+      canceled_at: ensureISODate(w.canceled_at)
+    }));
+
+    res.json({ withdrawals: formattedWithdrawals });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -448,7 +477,7 @@ router.patch('/withdrawal/:id/cancel', auth, hasSlotAccess, (req, res) => {
     }
 
     // Check if created within last minute
-    const createdAt = new Date(withdrawal.created_at);
+    const createdAt = new Date(ensureISODate(withdrawal.created_at));
     const now = new Date();
     const minutesPassed = (now - createdAt) / (1000 * 60);
 
@@ -538,7 +567,15 @@ router.get('/admin/withdrawals', auth, isAdmin, (req, res) => {
       ORDER BY w.created_at DESC
     `).all(status);
 
-    res.json({ withdrawals });
+    // Convert datetime fields to ISO 8601 format with UTC indicator
+    const formattedWithdrawals = withdrawals.map(w => ({
+      ...w,
+      created_at: ensureISODate(w.created_at),
+      reviewed_at: ensureISODate(w.reviewed_at),
+      canceled_at: ensureISODate(w.canceled_at)
+    }));
+
+    res.json({ withdrawals: formattedWithdrawals });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -573,7 +610,15 @@ router.get('/admin/withdrawal/:id', auth, isAdmin, (req, res) => {
       return res.status(404).json({ error: 'Not found' });
     }
 
-    res.json({ withdrawal });
+    // Convert datetime fields to ISO 8601 format with UTC indicator
+    const formattedWithdrawal = {
+      ...withdrawal,
+      created_at: ensureISODate(withdrawal.created_at),
+      reviewed_at: ensureISODate(withdrawal.reviewed_at),
+      canceled_at: ensureISODate(withdrawal.canceled_at)
+    };
+
+    res.json({ withdrawal: formattedWithdrawal });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -652,7 +697,13 @@ router.get('/admin/spins/:userId', auth, isAdmin, (req, res) => {
       LIMIT 1000
     `).all(req.params.userId);
 
-    res.json({ spins: spins || [] });
+    // Convert datetime to ISO 8601 format with UTC indicator
+    const formattedSpins = spins.map(s => ({
+      ...s,
+      created_at: ensureISODate(s.created_at)
+    }));
+
+    res.json({ spins: formattedSpins || [] });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

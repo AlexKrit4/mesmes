@@ -139,7 +139,14 @@ export default function HistoryModal({ onClose, onWithdrawalCanceled }) {
               ) : (
                 withdrawals.map((withdrawal) => {
                   const isActive = withdrawal.status === 'pending' && !withdrawal.canceled_at;
-                  const createdAt = new Date(withdrawal.created_at);
+                  
+                  // Parse date correctly - ensure UTC interpretation
+                  let dateStr = withdrawal.created_at;
+                  if (!dateStr.includes('Z') && !dateStr.includes('+') && !dateStr.includes('-').slice(-6)) {
+                    dateStr = dateStr + 'Z'; // Add Z to indicate UTC if not present
+                  }
+                  
+                  const createdAt = new Date(dateStr);
                   const now = new Date();
                   const secPassed = (now - createdAt) / 1000;
                   const secondsRemaining = Math.max(0, 60 - secPassed);
