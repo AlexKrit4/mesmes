@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
+import { getSocket } from '../socket';
 
 export default function CasinoSpinsAdmin({ selectedUserId }) {
   const [spins, setSpins] = useState([]);
@@ -12,6 +13,30 @@ export default function CasinoSpinsAdmin({ selectedUserId }) {
     if (selectedUserId) {
       fetchSpins();
     }
+  }, [selectedUserId]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleNewSpin = (spinData) => {
+      // If the new spin is for the currently selected user, add it to the list
+      if (spinData.user_id === selectedUserId) {
+        setSpins((prev) => [
+          {
+            id: Date.now(), // Temporary ID until we fetch the actual one
+            ...spinData,
+          },
+          ...prev,
+        ]);
+      }
+    };
+
+    socket.on('casino_new_spin', handleNewSpin);
+
+    return () => {
+      socket.off('casino_new_spin', handleNewSpin);
+    };
   }, [selectedUserId]);
 
   const fetchSpins = async () => {

@@ -56,34 +56,34 @@ const PAYLINES_MAP = [
 // Calibrated and tested through 1M+ spin simulations to achieve 96% RTP
 const PAYOUTS = {
   3: { // 3 matching symbols (most common)
-    '🍎': 0.48,   // 2.4x bet
-    '🍊': 0.48,   // 2.4x bet
-    '🍋': 0.57,   // 2.85x bet
-    '🍌': 0.57,   // 2.85x bet
-    '🍇': 0.66,   // 3.3x bet
-    '💎': 0.87,   // 4.35x bet
-    '⭐': 1.27,   // 6.35x bet
-    '👑': 1.64,   // 8.2x bet
+    '🍎': 0.4,   // 2.4x bet
+    '🍊': 0.4,   // 2.4x bet
+    '🍋': 0.5,   // 2.85x bet
+    '🍌': 0.5,   // 2.85x bet
+    '🍇': 0.6,   // 3.3x bet
+    '💎': 0.8,   // 4.35x bet
+    '⭐': 1.2,   // 6.35x bet
+    '👑': 1.6,   // 8.2x bet
   },
   4: { // 4 matching symbols (rare)
-    '🍎': 2.02,   // 10.1x bet
-    '🍊': 2.02,   // 10.1x bet
-    '🍋': 3.28,   // 16.4x bet
-    '🍌': 3.28,   // 16.4x bet
-    '🍇': 4.17,   // 20.85x bet
-    '💎': 8.22,   // 41.1x bet
-    '⭐': 12.62,  // 63.1x bet
-    '👑': 20.21,  // 101.05x bet
+    '🍎': 2,   // 10.1x bet
+    '🍊': 2,   // 10.1x bet
+    '🍋': 3,   // 16.4x bet
+    '🍌': 3,   // 16.4x bet
+    '🍇': 4,   // 20.85x bet
+    '💎': 8,   // 41.1x bet
+    '⭐': 12,  // 63.1x bet
+    '👑': 20,  // 101.05x bet
   },
   5: { // 5 matching symbols (very rare)
-    '🍎': 10.10,  // 50.5x bet
-    '🍊': 10.10,  // 50.5x bet
-    '🍋': 20.20,  // 101x bet
-    '🍌': 20.20,  // 101x bet
-    '🍇': 30.32,  // 151.6x bet
-    '💎': 101.00, // 505x bet
-    '⭐': 202.00, // 1010x bet
-    '👑': 505.00, // 2525x bet
+    '🍎': 10,  // 50.5x bet
+    '🍊': 10,  // 50.5x bet
+    '🍋': 20,  // 101x bet
+    '🍌': 20,  // 101x bet
+    '🍇': 30,  // 151.6x bet
+    '💎': 100, // 505x bet
+    '⭐': 200, // 1010x bet
+    '👑': 500, // 2525x bet
   },
 };
 

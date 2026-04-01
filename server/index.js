@@ -82,7 +82,7 @@ app.use('/api/users', usersRouter);
 app.use('/api/admin', adminRoutes);
 app.use('/api/channels', channelRoutes);
 app.use('/api/payments', paymentsRoutes);
-app.use('/api/casino', casinoRoutes);
+app.use('/api/casino', casinoRoutes(io));
 app.use('/api/block-blast', blockBlastRoutes);
 
 // Serve React build in production

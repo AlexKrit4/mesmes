@@ -108,6 +108,7 @@ export default function Home() {
   const [showPremiumGrantedPrompt, setShowPremiumGrantedPrompt] = useState(() => localStorage.getItem('premiumGrantedAtRegistration') === '1');
   const [adminAccess, setAdminAccess] = useState({ isAdmin: false, isModerator: false, canAccessAdminPanel: false });
   const [openReportsCount, setOpenReportsCount] = useState(0);
+  const [pendingWithdrawalsCount, setPendingWithdrawalsCount] = useState(0);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
   const [showAddPanel, setShowAddPanel] = useState(false);
@@ -183,6 +184,8 @@ export default function Home() {
           try {
             const unread = await api.get('/admin/reports/unread-count');
             setOpenReportsCount(Number(unread.data?.count || 0));
+            const withdrawals = await api.get('/casino/admin/withdrawals/unread-count');
+            setPendingWithdrawalsCount(Number(withdrawals.data?.count || 0));
           } catch {
             // ignore admin badge errors
           }
@@ -205,6 +208,8 @@ export default function Home() {
     try {
       const { data } = await api.get('/admin/reports/unread-count');
       setOpenReportsCount(Number(data?.count || 0));
+      const withdrawals = await api.get('/casino/admin/withdrawals/unread-count');
+      setPendingWithdrawalsCount(Number(withdrawals.data?.count || 0));
     } catch {
       // ignore admin badge errors
     }
@@ -502,7 +507,7 @@ export default function Home() {
             <div style={{ position: 'relative' }}>
               <button className="topbar-btn" onClick={() => setShowAdminMenu((v) => !v)} title="Админ-панель" style={{ position: 'relative' }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                {openReportsCount > 0 && <span className="topbar-badge">{openReportsCount > 99 ? '99+' : openReportsCount}</span>}
+                {(openReportsCount + pendingWithdrawalsCount) > 0 && <span className="topbar-badge">{(openReportsCount + pendingWithdrawalsCount) > 99 ? '99+' : (openReportsCount + pendingWithdrawalsCount)}</span>}
               </button>
 
               {showAdminMenu && (
@@ -513,11 +518,16 @@ export default function Home() {
                     </button>
                   )}
                   <button className="topbar-btn" style={{ width: '100%', justifyContent: 'flex-start', borderRadius: 0, height: '40px' }} onClick={() => { setShowAdminMenu(false); navigate('/admin?section=reports'); }}>
-                    Репорты
+                    Репорты {openReportsCount > 0 && <span style={{ marginLeft: 'auto' }}>({openReportsCount})</span>}
                   </button>
                   {adminAccess.isAdmin && (
                     <button className="topbar-btn" style={{ width: '100%', justifyContent: 'flex-start', borderRadius: 0, height: '40px' }} onClick={() => { setShowAdminMenu(false); navigate('/admin?section=channels'); }}>
                       Каналы
+                    </button>
+                  )}
+                  {adminAccess.isAdmin && (
+                    <button className="topbar-btn" style={{ width: '100%', justifyContent: 'flex-start', borderRadius: 0, height: '40px' }} onClick={() => { setShowAdminMenu(false); navigate('/admin?section=casino-withdrawals'); }}>
+                      💸 Выводы {pendingWithdrawalsCount > 0 && <span style={{ marginLeft: 'auto' }}>({pendingWithdrawalsCount})</span>}
                     </button>
                   )}
                 </div>

@@ -5,7 +5,11 @@ const { auth } = require('./users');
 const slot = require('../slotMath');
 const { logWebhook, getRecentLogs } = require('../webhookLogger');
 
-const router = express.Router();
+let io = null;
+
+function createRouter(socketIo) {
+  io = socketIo;
+  const router = express.Router();
 
 function getMinAcceptedCreditedAmount(depositAmount) {
   const deltaRaw = Number(process.env.CASINO_DEPOSIT_ACCEPT_DELTA_RUB || 0.1);
@@ -78,10 +82,21 @@ router.post('/spin', auth, hasSlotAccess, (req, res) => {
     // Save spin to history
     const multiplier = totalWinnings / betAmount;
     const gridJson = JSON.stringify(grid);
-    db.prepare(`
+    const spinRecord = db.prepare(`
       INSERT INTO casino_spins (user_id, bet_amount, multiplier, winnings, grid)
       VALUES (?, ?, ?, ?, ?)
     `).run(req.userId, betAmount, multiplier, totalWinnings, gridJson);
+
+    // Emit socket event for admins to see new spin
+    if (io) {
+      io.emit('casino_new_spin', {
+        user_id: req.userId,
+        bet_amount: betAmount,
+        multiplier: multiplier.toFixed(2),
+        winnings: totalWinnings,
+        created_at: new Date().toISOString(),
+      });
+    }
 
     res.json({
       grid,
@@ -499,6 +514,21 @@ router.get('/admin/withdrawals', auth, isAdmin, (req, res) => {
   }
 });
 
+// GET /casino/admin/withdrawals/unread-count - Get count of pending withdrawals
+router.get('/admin/withdrawals/unread-count', auth, isAdmin, (req, res) => {
+  try {
+    const result = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM casino_withdrawals
+      WHERE status = 'pending'
+    `).get();
+
+    res.json({ count: result.count || 0 });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /casino/admin/withdrawal/:id - Get withdrawal details
 router.get('/admin/withdrawal/:id', auth, isAdmin, (req, res) => {
   try {
@@ -716,4 +746,7 @@ router.get('/admin/webhook-logs', auth, isAdmin, (req, res) => {
   }
 });
 
-module.exports = router;
+  return router;
+}
+
+module.exports = createRouter;
