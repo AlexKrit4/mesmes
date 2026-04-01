@@ -17,25 +17,56 @@ export default function CasinoSpinsAdmin({ selectedUserId }) {
 
   useEffect(() => {
     const socket = getSocket();
-    if (!socket) return;
+    if (!socket?.connected || !selectedUserId) {
+      console.log('[CasinoSpinsAdmin] Socket not ready or userId not selected');
+      return;
+    }
+
+    console.log('[CasinoSpinsAdmin] Setting up socket listener for user:', selectedUserId);
 
     const handleNewSpin = (spinData) => {
-      // If the new spin is for the currently selected user, add it to the list
-      if (spinData.user_id === selectedUserId) {
-        setSpins((prev) => [
-          {
-            id: Date.now(), // Temporary ID until we fetch the actual one
-            ...spinData,
-          },
-          ...prev,
-        ]);
+      try {
+        if (!spinData) {
+          console.warn('[CasinoSpinsAdmin] Received empty spin data');
+          return;
+        }
+
+        // If the new spin is for the currently selected user, add it to the list
+        if (Number(spinData.user_id) === Number(selectedUserId)) {
+          console.log('[CasinoSpinsAdmin] Received new spin for selected user:', spinData);
+          setSpins((prev) => [
+            {
+              id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              bet_amount: parseFloat(spinData.bet_amount),
+              multiplier: parseFloat(spinData.multiplier),
+              winnings: parseFloat(spinData.winnings),
+              created_at: spinData.created_at || new Date().toISOString(),
+              grid: '[]',
+            },
+            ...prev,
+          ]);
+        }
+      } catch (error) {
+        console.error('[CasinoSpinsAdmin] Error handling new spin event:', error);
       }
     };
 
+    const handleSocketConnect = () => {
+      console.log('[CasinoSpinsAdmin] Socket connected');
+    };
+
+    const handleSocketDisconnect = () => {
+      console.warn('[CasinoSpinsAdmin] Socket disconnected');
+    };
+
     socket.on('casino_new_spin', handleNewSpin);
+    socket.on('connect', handleSocketConnect);
+    socket.on('disconnect', handleSocketDisconnect);
 
     return () => {
       socket.off('casino_new_spin', handleNewSpin);
+      socket.off('connect', handleSocketConnect);
+      socket.off('disconnect', handleSocketDisconnect);
     };
   }, [selectedUserId]);
 

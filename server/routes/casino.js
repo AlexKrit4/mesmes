@@ -87,14 +87,21 @@ router.post('/spin', auth, hasSlotAccess, (req, res) => {
       VALUES (?, ?, ?, ?, ?)
     `).run(req.userId, betAmount, multiplier, totalWinnings, gridJson);
 
-    // Emit socket event for admins to see new spin
+    // Emit socket event for admins to see new spin (async, non-blocking)
     if (io) {
-      io.emit('casino_new_spin', {
-        user_id: req.userId,
-        bet_amount: betAmount,
-        multiplier: multiplier.toFixed(2),
-        winnings: totalWinnings,
-        created_at: new Date().toISOString(),
+      setImmediate(() => {
+        try {
+          io.emit('casino_new_spin', {
+            user_id: req.userId,
+            bet_amount: parseFloat(betAmount),
+            multiplier: parseFloat(multiplier.toFixed(2)),
+            winnings: parseFloat(totalWinnings),
+            created_at: new Date().toISOString(),
+          });
+        } catch (socketError) {
+          console.error('[Socket Error] Failed to emit casino_new_spin:', socketError);
+          // Don't fail the request if socket emit fails
+        }
       });
     }
 
