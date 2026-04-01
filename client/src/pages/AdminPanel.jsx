@@ -683,17 +683,18 @@ export default function AdminPanel() {
       )}
 
       {mainTab === 'casino-spins' && (
-        <div>
-          <div style={{ marginBottom: '20px' }}>
-            <label>Выберите пользователя для просмотра спинов:</label>
+        <div style={{ display: 'flex', gap: '20px', height: 'calc(100vh - 200px)' }}>
+          {/* Левая колонка - список пользователей */}
+          <div style={{ width: '30%', display: 'flex', flexDirection: 'column', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '20px' }}>
+            <label style={{ marginBottom: '10px', fontWeight: 'bold', color: '#ffd700' }}>Выберите пользователя:</label>
             <input
               type="text"
               placeholder="Поиск по имени или ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ width: '100%', padding: '10px', marginTop: '10px', borderRadius: '6px', backgroundColor: '#1a1a2e', color: '#fff', border: '1px solid #ffd700' }}
+              style={{ width: '100%', padding: '10px', marginBottom: '15px', borderRadius: '6px', backgroundColor: '#1a1a2e', color: '#fff', border: '1px solid #ffd700' }}
             />
-            <div style={{ marginTop: '10px', maxHeight: '400px', overflowY: 'auto', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '6px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: '6px', border: '1px solid rgba(255,215,0,0.2)' }}>
               {users.filter(u => 
                 u.username.toLowerCase().includes(search.toLowerCase()) || 
                 u.id.toString().includes(search)
@@ -702,11 +703,14 @@ export default function AdminPanel() {
                   key={u.id}
                   onClick={() => setSelectedUser(u)}
                   style={{
-                    padding: '10px',
+                    padding: '12px',
                     cursor: 'pointer',
                     background: selectedUser?.id === u.id ? '#ffd700' : 'transparent',
                     color: selectedUser?.id === u.id ? '#000' : '#fff',
-                    borderBottom: '1px solid rgba(255,215,0,0.2)'
+                    borderBottom: '1px solid rgba(255,215,0,0.2)',
+                    transition: 'all 0.2s ease',
+                    fontWeight: selectedUser?.id === u.id ? 'bold' : 'normal',
+                    userSelect: 'none'
                   }}
                 >
                   {u.username} (ID: {u.id})
@@ -714,9 +718,17 @@ export default function AdminPanel() {
               ))}
             </div>
           </div>
-          {selectedUser && (
-            <CasinoSpinsAdmin selectedUserId={selectedUser.id} />
-          )}
+
+          {/* Правая колонка - спины */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {selectedUser ? (
+              <CasinoSpinsAdmin selectedUserId={selectedUser.id} />
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#999', fontSize: '18px' }}>
+                Выберите пользователя для просмотра спинов
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
