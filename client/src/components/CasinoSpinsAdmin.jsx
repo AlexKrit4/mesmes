@@ -80,6 +80,31 @@ export default function CasinoSpinsAdmin({ selectedUserId }) {
 
   const sortedSpins = getSortedSpins();
 
+  // Расчет статистики
+  const calculateStats = () => {
+    if (spins.length === 0) {
+      return {
+        totalBets: 0,
+        totalSpent: 0,
+        totalWinnings: 0,
+        balance: 0,
+      };
+    }
+
+    const totalSpent = spins.reduce((sum, spin) => sum + spin.bet_amount, 0);
+    const totalWinnings = spins.reduce((sum, spin) => sum + spin.winnings, 0);
+    const balance = totalWinnings - totalSpent;
+
+    return {
+      totalBets: spins.length,
+      totalSpent,
+      totalWinnings,
+      balance,
+    };
+  };
+
+  const stats = calculateStats();
+
   return (
     <div className="admin-section">
       <h2>🎰 Спины казино</h2>
@@ -89,7 +114,76 @@ export default function CasinoSpinsAdmin({ selectedUserId }) {
       ) : spins.length === 0 ? (
         <div>Нет спинов для отображения</div>
       ) : (
-        <div className="spins-list">
+        <>
+          {/* Статистика */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 1fr 1fr 1fr', 
+            gap: '15px',
+            marginBottom: '25px'
+          }}>
+            <div style={{
+              backgroundColor: 'rgba(25, 95, 150, 0.3)',
+              border: '2px solid rgba(100, 200, 255, 0.5)',
+              borderRadius: '8px',
+              padding: '20px',
+              textAlign: 'center'
+            }}>
+              <div style={{ color: '#64c8ff', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>ВСЕГО СТАВОК</div>
+              <div style={{ color: '#fff', fontSize: '24px', fontWeight: 'bold' }}>{stats.totalBets}</div>
+            </div>
+
+            <div style={{
+              backgroundColor: 'rgba(150, 50, 50, 0.3)',
+              border: '2px solid rgba(255, 100, 100, 0.5)',
+              borderRadius: '8px',
+              padding: '20px',
+              textAlign: 'center'
+            }}>
+              <div style={{ color: '#ff6464', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>ПОТРАЧЕНО</div>
+              <div style={{ color: '#fff', fontSize: '24px', fontWeight: 'bold' }}>{stats.totalSpent.toFixed(2)} ₽</div>
+            </div>
+
+            <div style={{
+              backgroundColor: 'rgba(50, 150, 50, 0.3)',
+              border: '2px solid rgba(100, 255, 100, 0.5)',
+              borderRadius: '8px',
+              padding: '20px',
+              textAlign: 'center'
+            }}>
+              <div style={{ color: '#64ff64', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>ВЫИГРАНО</div>
+              <div style={{ color: '#fff', fontSize: '24px', fontWeight: 'bold' }}>{stats.totalWinnings.toFixed(2)} ₽</div>
+            </div>
+
+            <div style={{
+              backgroundColor: stats.balance >= 0 
+                ? 'rgba(50, 150, 50, 0.3)' 
+                : 'rgba(150, 50, 50, 0.3)',
+              border: stats.balance >= 0 
+                ? '2px solid rgba(100, 255, 100, 0.5)' 
+                : '2px solid rgba(255, 100, 100, 0.5)',
+              borderRadius: '8px',
+              padding: '20px',
+              textAlign: 'center'
+            }}>
+              <div style={{ 
+                color: stats.balance >= 0 ? '#64ff64' : '#ff6464', 
+                fontSize: '12px', 
+                fontWeight: 'bold', 
+                marginBottom: '8px' 
+              }}>БАЛАНС</div>
+              <div style={{ 
+                color: stats.balance >= 0 ? '#64ff64' : '#ff6464', 
+                fontSize: '24px', 
+                fontWeight: 'bold' 
+              }}>
+                {stats.balance >= 0 ? '+' : ''}{stats.balance.toFixed(2)} ₽
+              </div>
+            </div>
+          </div>
+
+          {/* Таблица спинов */}
+          <div className="spins-list">
           <div className="spins-table">
             <div className="spins-header">
               <div
@@ -136,7 +230,8 @@ export default function CasinoSpinsAdmin({ selectedUserId }) {
               </div>
             ))}
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       {selectedSpin && (
