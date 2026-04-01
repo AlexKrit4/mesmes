@@ -52,7 +52,15 @@ export default function WithdrawalModal({ onClose, balance, onSuccess }) {
         onSuccess();
       }, 2000);
     } catch (err) {
-      setError(err.response?.data?.error || 'Ошибка при создании заявки');
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Ошибка при создании заявки';
+      const isPlaythroughError = err.response?.data?.error === 'Playthrough requirement not met';
+      
+      setError(errorMsg);
+      
+      // If playthrough error, show error state instead of success
+      if (isPlaythroughError) {
+        setSuccess(false);
+      }
     } finally {
       setLoading(false);
     }

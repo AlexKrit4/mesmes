@@ -369,6 +369,29 @@ router.post('/withdrawal', auth, hasSlotAccess, (req, res) => {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
 
+    // Check playthrough requirement - must have wagered 1.5x of last deposit
+    const lastDeposit = db.prepare(`
+      SELECT amount FROM casino_deposits 
+      WHERE user_id = ? AND status = 'credited'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(req.userId);
+
+    if (lastDeposit) {
+      const requiredWager = lastDeposit.amount * 1.5;
+      const totalBets = db.prepare(`
+        SELECT COALESCE(SUM(bet_amount), 0) as total FROM casino_spins WHERE user_id = ?
+      `).get(req.userId).total;
+
+      if (totalBets < requiredWager) {
+        const remaining = requiredWager - totalBets;
+        return res.status(400).json({ 
+          error: 'Playthrough requirement not met',
+          message: `Для вывода Вы должны отыграть сумму в 1.5х от совершенного депозита. Осталось: ${remaining.toFixed(2)} ₽`
+        });
+      }
+    }
+
     // Create withdrawal request
     const result = db.prepare(`
       INSERT INTO casino_withdrawals (user_id, amount, bank, phone)

@@ -112,6 +112,8 @@ export default function Home() {
   const [showAdminMenu, setShowAdminMenu] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
   const [showAddPanel, setShowAddPanel] = useState(false);
+  const [showGamesMenu, setShowGamesMenu] = useState(false);
+  const [gamesAccess, setGamesAccess] = useState({ blockBlast: false, casino: false });
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [chName, setChName] = useState('');
   const [chDesc, setChDesc] = useState('');
@@ -191,6 +193,18 @@ export default function Home() {
           }
         }
       } catch { /* not admin */ }
+
+      // Check games access
+      try {
+        const casinoAccess = await api.get('/casino/check-access');
+        setGamesAccess((prev) => ({ ...prev, casino: casinoAccess.data.hasAccess }));
+      } catch { /* */ }
+
+      try {
+        const blockBlastAccess = await api.get('/block-blast/check-access');
+        setGamesAccess((prev) => ({ ...prev, blockBlast: blockBlastAccess.data.hasAccess }));
+      } catch { /* */ }
+
       try {
         const { data } = await api.get('/users/me');
         localStorage.setItem('me', JSON.stringify(data));
@@ -538,6 +552,27 @@ export default function Home() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
             {requests.length > 0 && <span className="topbar-badge">{requests.length}</span>}
           </button>
+          {(gamesAccess.blockBlast || gamesAccess.casino) && (
+            <div style={{ position: 'relative' }}>
+              <button className="topbar-btn" onClick={() => setShowGamesMenu((v) => !v)} title="Игры">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="2" width="12" height="20" rx="1"/><path d="M9 9h6M9 7a1 1 0 1 0 0-2 1 1 0 0 0 0 2M15 7a1 1 0 1 0 0-2 1 1 0 0 0 0 2"/></svg>
+              </button>
+              {showGamesMenu && (
+                <div style={{ position: 'absolute', top: '42px', right: '140px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: '10px', minWidth: '150px', zIndex: 60, overflow: 'hidden' }}>
+                  {gamesAccess.casino && (
+                    <button className="topbar-btn" style={{ width: '100%', justifyContent: 'flex-start', borderRadius: 0, height: '40px' }} onClick={() => { setShowGamesMenu(false); navigate('/casino'); }}>
+                      🎰 Казино
+                    </button>
+                  )}
+                  {gamesAccess.blockBlast && (
+                    <button className="topbar-btn" style={{ width: '100%', justifyContent: 'flex-start', borderRadius: 0, height: '40px' }} onClick={() => { setShowGamesMenu(false); navigate('/block-blast'); }}>
+                      🧱 Block Blast
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <button className="topbar-btn" onClick={() => navigate('/settings')} title="Настройки">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>

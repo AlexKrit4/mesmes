@@ -9,6 +9,15 @@ export default function HistoryModal({ onClose, onWithdrawalCanceled }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [cancelingId, setCancelingId] = useState(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    // Refresh timer display every second to update countdown
+    const interval = setInterval(() => {
+      setRefreshTrigger(t => t + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     fetchHistory();
@@ -132,8 +141,9 @@ export default function HistoryModal({ onClose, onWithdrawalCanceled }) {
                   const isActive = withdrawal.status === 'pending' && !withdrawal.canceled_at;
                   const createdAt = new Date(withdrawal.created_at);
                   const now = new Date();
-                  const minutesPassed = (now - createdAt) / (1000 * 60);
-                  const canCancel = isActive && minutesPassed <= 1;
+                  const secPassed = (now - createdAt) / 1000;
+                  const secondsRemaining = Math.max(0, 60 - secPassed);
+                  const canCancel = isActive && secondsRemaining > 0;
 
                   return (
                     <div key={withdrawal.id} className="history-item withdrawal-item">
@@ -174,13 +184,15 @@ export default function HistoryModal({ onClose, onWithdrawalCanceled }) {
                           onClick={() => handleCancelWithdrawal(withdrawal.id)}
                           disabled={cancelingId === withdrawal.id}
                         >
-                          {cancelingId === withdrawal.id ? 'Отмена...' : 'Отменить'}
+                          {cancelingId === withdrawal.id 
+                            ? 'Отмена...' 
+                            : `Отменить (${Math.ceil(secondsRemaining)}с)`}
                         </button>
                       )}
 
-                      {isActive && !canCancel && minutesPassed > 1 && (
+                      {isActive && !canCancel && (
                         <p className="info-small">
-                          Отменить можно только в течение 1 минуты после создания
+                          Отмена больше не доступна (прошло более 1 минуты)
                         </p>
                       )}
                     </div>
