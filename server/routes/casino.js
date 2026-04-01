@@ -75,6 +75,14 @@ router.post('/spin', auth, hasSlotAccess, (req, res) => {
     const newBalance = (user?.casino_balance || 0) - betAmount + totalWinnings;
     db.prepare('UPDATE users SET casino_balance = ? WHERE id = ?').run(newBalance, req.userId);
 
+    // Save spin to history
+    const multiplier = totalWinnings / betAmount;
+    const gridJson = JSON.stringify(grid);
+    db.prepare(`
+      INSERT INTO casino_spins (user_id, bet_amount, multiplier, winnings, grid)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(req.userId, betAmount, multiplier, totalWinnings, gridJson);
+
     res.json({
       grid,
       betAmount,
@@ -568,6 +576,23 @@ router.patch('/admin/withdrawal/:id/reject', auth, isAdmin, (req, res) => {
     `).run(adminComment, req.params.id);
 
     res.json({ status: 'rejected' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /casino/admin/spins/:userId - Get all spins for a user
+router.get('/admin/spins/:userId', auth, isAdmin, (req, res) => {
+  try {
+    const spins = db.prepare(`
+      SELECT id, bet_amount, multiplier, winnings, grid, created_at
+      FROM casino_spins
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT 1000
+    `).all(req.params.userId);
+
+    res.json({ spins: spins || [] });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

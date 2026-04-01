@@ -67,7 +67,7 @@
 }
 
 .reel-cell.spinning .symbol {
-  animation: symbol-scroll 0.07s linear infinite;
+  animation: symbol-scroll 0.06s linear infinite;
   filter: blur(0.6px);
 }
 
@@ -190,13 +190,11 @@
   padding: 10px 20px;
   border-radius: 6px;
   background: rgba(255, 99, 71, 0.2);
-  border: 1px solid #ff6347;
   animation: message-fade 0.5s ease-out;
 }
 
 .message.success {
   background: rgba(32, 201, 151, 0.2);
-  border: 1px solid #20c997;
   color: #28d9aa;
 }
 

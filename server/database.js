@@ -544,4 +544,20 @@ try {
     `);
   } catch (e) {}
 
+  // Migration: casino spins history
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS casino_spins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        bet_amount REAL NOT NULL,
+        multiplier REAL NOT NULL,
+        winnings REAL NOT NULL,
+        grid TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+  } catch (e) {}
+
   module.exports = db;

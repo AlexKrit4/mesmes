@@ -4,6 +4,7 @@ import api from '../api.js';
 import CasinoWithdrawalsAdmin from '../components/CasinoWithdrawalsAdmin.jsx';
 import CasinoAccessAdmin from '../components/CasinoAccessAdmin.jsx';
 import CasinoWebhookLogs from '../components/CasinoWebhookLogs.jsx';
+import CasinoSpinsAdmin from '../components/CasinoSpinsAdmin.jsx';
 
 function formatDate(d) {
   if (!d) return '—';
@@ -30,7 +31,7 @@ export default function AdminPanel() {
   // Reports
   const [reports, setReports] = useState([]);
   const [unreadReports, setUnreadReports] = useState(0);
-  const [mainTab, setMainTab] = useState('users'); // users | reports | channels | casino-withdrawals | casino-access
+  const [mainTab, setMainTab] = useState('users'); // users | reports | channels | casino-withdrawals | casino-access | casino-spins
   const [selectedReport, setSelectedReport] = useState(null);
   const [reportAction, setReportAction] = useState('banned'); // banned | forgiven
   const [adminComment, setAdminComment] = useState('');
@@ -52,7 +53,7 @@ export default function AdminPanel() {
         setAdminAccess(data);
 
         const requestedSection = new URLSearchParams(location.search).get('section');
-        const allowedSections = data.isAdmin ? ['users', 'reports', 'channels', 'casino-withdrawals', 'casino-access'] : ['reports'];
+        const allowedSections = data.isAdmin ? ['users', 'reports', 'channels', 'casino-withdrawals', 'casino-access', 'casino-spins'] : ['reports'];
 
         if (requestedSection && allowedSections.includes(requestedSection)) {
           setMainTab(requestedSection);
@@ -337,6 +338,12 @@ export default function AdminPanel() {
             onClick={() => { setMainTab('casino-access'); setSelectedUser(null); setSelectedReport(null); }}
             style={{ flex: '0 0 auto', minWidth: '120px', padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'casino-access' ? '2px solid #0088cc' : 'none', color: mainTab === 'casino-access' ? '#0088cc' : '#aaa', whiteSpace: 'nowrap' }}
           >🎰 Доступ</div>
+        )}
+        {adminAccess.isAdmin && (
+          <div
+            onClick={() => { setMainTab('casino-spins'); setSelectedUser(null); setSelectedReport(null); }}
+            style={{ flex: '0 0 auto', minWidth: '120px', padding: '15px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', borderBottom: mainTab === 'casino-spins' ? '2px solid #0088cc' : 'none', color: mainTab === 'casino-spins' ? '#0088cc' : '#aaa', whiteSpace: 'nowrap' }}
+          >📊 Спины</div>
         )}
 
       </div>
@@ -673,6 +680,44 @@ export default function AdminPanel() {
 
       {mainTab === 'casino-access' && (
         <CasinoAccessAdmin />
+      )}
+
+      {mainTab === 'casino-spins' && (
+        <div>
+          <div style={{ marginBottom: '20px' }}>
+            <label>Выберите пользователя для просмотра спинов:</label>
+            <input
+              type="text"
+              placeholder="Поиск по имени или ID..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ width: '100%', padding: '10px', marginTop: '10px', borderRadius: '6px', backgroundColor: '#1a1a2e', color: '#fff', border: '1px solid #ffd700' }}
+            />
+            <div style={{ marginTop: '10px', maxHeight: '400px', overflowY: 'auto', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '6px' }}>
+              {users.filter(u => 
+                u.username.toLowerCase().includes(search.toLowerCase()) || 
+                u.id.toString().includes(search)
+              ).map(u => (
+                <div
+                  key={u.id}
+                  onClick={() => setSelectedUser(u)}
+                  style={{
+                    padding: '10px',
+                    cursor: 'pointer',
+                    background: selectedUser?.id === u.id ? '#ffd700' : 'transparent',
+                    color: selectedUser?.id === u.id ? '#000' : '#fff',
+                    borderBottom: '1px solid rgba(255,215,0,0.2)'
+                  }}
+                >
+                  {u.username} (ID: {u.id})
+                </div>
+              ))}
+            </div>
+          </div>
+          {selectedUser && (
+            <CasinoSpinsAdmin selectedUserId={selectedUser.id} />
+          )}
+        </div>
       )}
     </div>
   );
